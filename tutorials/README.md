@@ -20,9 +20,9 @@ The exact same-model example should recover the rates. A second observation set 
 
 ## Canyon
 
-The finite boxes have height 1 m, length 10 m and W/H of 1 or 2. Winds from 270 and 225 degrees produce perpendicular and oblique scenarios. The source is a fixed total line emission; receptors stay in fluid cells.
+The finite boxes have height 1 m, length 10 m and W/H of 1 or 2. Winds from 270 and 225 degrees produce perpendicular and oblique scenarios. The source is a fixed total line emission; receptors stay in fluid cells. The tracer has a molecular diffusivity, so nu_t/Sc_t does the turbulent mixing.
 
-Coarse smoke results answer a numerical workflow question. They are intentionally under-resolved for general near-wall physical interpretation. Read the geometry warnings, independent audit, equation residuals and model card. The data inventory records why an empirical CODASC comparison is currently blocked.
+Coarse smoke results answer a numerical workflow question. On the tutorial grid (18x16x12 cells of 1 m x 1 m x 0.5 m) each building is one cell wide and two cells high, and the W/H = 1 street is a single column of cells: no canyon vortex can be resolved. The domain is also smaller than the COST 732 recommendations (`check` reports CFD-W001, W002 and W003). The committed cases in cases/canyon use this grid. The study preset of canyon_study.py attempts 36x32x24 and 54x48x36 cells, which do not converge within their 300-second budgets with the current solver. Read the geometry warnings, independent audit, equation residuals and model card. The data inventory records why an empirical CODASC comparison is currently blocked.
 
 ## Optimization
 

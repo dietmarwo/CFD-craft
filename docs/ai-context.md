@@ -3,7 +3,7 @@
 CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.
 
 1. Build with cargo build --release --locked. Inspect cfd-craft describe.
-2. Choose a canonical case. Run check before allocating a larger simulation.
+2. Choose a canonical case. Run check before allocating a larger simulation. Each diagnostic names its element and field (for example `geometry[1]` or `sources[0].rate_kg_s_m`); [diagnostics](diagnostics.md) lists the codes. Invalid input exits 1 from both check and run, with the report on stdout.
 3. Set an available thread/memory allowance, an iteration limit and a wall-time limit. Use a new output directory.
 4. Read summary.json and its checks. Inspect the termination, assessment, scope, numerical interventions and experimental-validation label.
 5. Verify the manifest with report. If full fields were retained, use validation/check_fields.py for independent mass/continuity checks.
@@ -13,7 +13,11 @@ Successful assessments are steady_discrete_solution or transient_interval_comple
 
 Local coordinates are east/north/up, in meters. Meteorological wind is direction **from**, clockwise from north. A wind from 270 degrees travels in positive x. Stored pressure is kinematic pressure; RANS isotropic turbulent pressure is absorbed into it.
 
+Give a trace gas its molecular diffusivity (of order 1e-5 m2/s). In RANS cases the turbulent diffusivity nu_t/Sc_t then does the mixing; a large constant would hide the effect of the turbulent Schmidt number.
+
 Sources declare mass per second, per line length, or per source volume. The code integrates represented support and rejects masked-solid intersections. Point receptors interpolate from cell centers and reject stencils through a wall; near the external boundary they use the nearest available cell center. Volume receptors integrate exact Cartesian overlap.
+
+summary.json stores receptor values by ID, in sorted order (R10 before R2). Look them up by ID; do not rely on their position.
 
 Use linear_upwind for an exact source-response matrix. The MUSCL limiter makes the discrete transport map nonlinear. Keep model mismatch experiments separate from exact same-model recovery. An inverse optimizer's solutions or archive are not a calibrated posterior.
 

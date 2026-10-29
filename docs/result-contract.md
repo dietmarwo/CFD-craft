@@ -22,18 +22,20 @@ A failed step is not committed. The saved state is the last accepted state and t
 
 - case.json: normalized consumed case.
 - summary.json: actual stopping reason, checks, physical scales, work and receptor values.
-- geometry.json: cell counts, connected components and mask hash.
+- geometry.json: cell counts, connected components, mask hash and the cells of each box.
 - probes.csv: final receptor values in kg/m3.
 - fields.json: optional state archive including native face velocities.
 - checkpoint.json: optional restart wrapper with payload checksum and physics identity.
-- manifest.json: file hashes, source/executable/build identity, initial-state hash and platform/thread scope.
+- manifest.json: file hashes, artifacts omitted for the output budget, the input case file hash, source/executable/build identity, initial-state hash and platform/thread scope.
 - complete.json: manifest checksum, written last.
 
 The manifest identifies the actual initial state as well as the case. Two restarts of the same case from different accepted states therefore remain distinguishable. Keep parent checkpoints when their initial states must be reproduced.
 
 Checkpoint compatibility excludes the name, output policy and run budgets from the physics hash. Changing the requested endpoint can change the last clipped timestep; exact step-for-step restart comparisons interrupt a run by its work budget while preserving the same physical endpoint. Reject checkpoints beyond the new requested horizon.
 
-Files use atomic temporary-write/rename publication and refuse occupied run directories. Complete files can describe a numerically incomplete run. Removing a completion marker or altering a hashed artifact makes report reject the archive.
+The run directory is created before the solve: a missing parent or an existing destination fails at once. Files use atomic temporary-write/rename publication. If fields or the checkpoint would exceed the output budget, they are omitted and listed in the manifest under `omitted`; the small artifacts are still written and the run exits 2. Complete files can describe a numerically incomplete run.
+
+`report` rejects an archive when the completion marker or manifest is missing or altered, a listed artifact changed, an entry is not listed, a file is not a regular file, an artifact the case requested is missing without being listed as omitted, summary.json does not describe case.json, or the manifest and summary disagree on the source or initial state. Unkeyed hashes do not stop someone from rewriting and rehashing an archive on purpose; validation/check_fields.py recomputes the physics checks for that reason.
 
 ## Numerical check scope
 

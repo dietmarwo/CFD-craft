@@ -12,7 +12,7 @@
       "needed": ["finite geometry and exact line sources", "measured inlet and tunnel dimensions", "wall concentration files", "normalization, uncertainty and quantification metadata", "usage terms"],
       "development_case": "W/H=1, perpendicular",
       "heldout_cases": ["W/H=2, perpendicular", "W/H=1, oblique"],
-      "code_case_status": "illustrative full-scale boxes, not an exact CODASC reconstruction"
+      "code_case_status": "illustrative 1 m boxes on coarse grids, not an exact CODASC reconstruction"
     },
     {
       "id": "cedval-les-es1006",

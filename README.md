@@ -17,7 +17,7 @@ target/release/cfd-craft run cases/verification/periodic-tracer.json --output ru
 target/release/cfd-craft report runs/tracer
 ~~~
 
-The output directory must be new. Exit 0 means the requested numerical assessment passed; exit 2 means a completed execution with incomplete/failed numerical evidence; exit 1 means invalid input or an execution/I/O error. A timeout or cancelled solve retains a report when output can be written.
+The output directory must be new, and its parent must exist; both are checked before the solve starts. Exit 0 means the request succeeded (a valid case, a passed numerical assessment or a verified archive); exit 2 means a completed execution with incomplete/failed numerical evidence; exit 1 means invalid input or an execution/I/O error. For invalid input, check and run both print the check report on stdout: every diagnostic carries a code and the path of the offending field ([diagnostics](docs/diagnostics.md)). A timeout or cancelled solve retains a report.
 
 Python is optional for the solver. Install the analysis dependencies to reproduce tutorials, independent checks and figures:
 
@@ -42,7 +42,7 @@ Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid c
 - Strict case/result schemas through describe; JSON/CSV evidence; VTK conversion.
 - Synthetic source inversion, finite-canyon wind/Schmidt/domain studies, and a scalar fcmaes application worker.
 
-The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, multigrid and GPU execution are later work.
+The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/roadmap.md) maps the initial plan's iterations to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, multigrid and GPU execution are later work.
 
 ## Verification
 
@@ -50,6 +50,7 @@ The RANS coefficients, wall treatment and supported assumptions are documented i
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --release --workspace --locked
+ruff format --check . && ruff check .
 python validation/test_cli.py -v
 python -O validation/test_cli.py -v
 python validation/run_suite.py --preset smoke --output runs/verification
@@ -58,7 +59,7 @@ python validation/cavity.py --output runs/cavity
 python validation/scipy_reference.py --output runs/scipy-reference
 ~~~
 
-The independent Python checker tests archived mass, emission-rate/time accounting, positivity and current face-flux continuity. It does not independently reconstruct the full time history or establish turbulence-model validity.
+The independent Python checker tests archived mass, emission-rate/time accounting, positivity, current face-flux continuity and open-boundary scalar rates. It also recomputes every receptor value from the concentration field, the geometry mask from the case boxes, and the finiteness and signs of the stored fields. It does not independently reconstruct the full time history or establish turbulence-model validity.
 
 The study preset adds a larger transport grid series or a canyon resolution series. Study reports include failed rows. A failed refinement run does not become an accepted grid-convergence result.
 

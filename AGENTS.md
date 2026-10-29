@@ -2,7 +2,9 @@
 
 Read README.md, docs/ai-context.md and the model card for the component being changed.
 
-Run relevant tests with --locked. Required core checks are cargo fmt, clippy -D warnings, and cargo test --release --workspace --locked. Python evidence checks use explicit exceptions and must retain their behavior under python -O.
+Run relevant tests with --locked. Required core checks are cargo fmt, clippy -D warnings, and cargo test --release --workspace --locked. Python code passes `ruff format --check .` and `ruff check .` (ruff.toml). Python evidence checks use explicit exceptions and must retain their behavior under python -O; zip over records that must correspond uses strict=True.
+
+Every new diagnostic gets a code listed in docs/diagnostics.md and the path of the offending field. A fix comes with a test that fails without it.
 
 Keep native termination, numerical assessment and experimental validation separate. Do not weaken tolerances after seeing a failure. Preserve failed runs in reports. Claims must refer to the actual returned fields, consumed case, initial state and implementation.
 

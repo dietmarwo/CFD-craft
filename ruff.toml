@@ -1,0 +1,6 @@
+# Python tooling for the validation scripts, tutorials and integrations.
+target-version = "py310"
+
+[lint]
+# Pyflakes, plus zip() without strict=, which can silently drop records.
+select = ["F", "B905"]

@@ -1,0 +1,23 @@
+[workspace]
+members = ["crates/cfd-craft", "crates/cfd-craft-cli"]
+exclude = ["integrations/fcmaes-cfd-worker"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/dietmarwo/CFD-craft"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+schemars = "0.8"
+sha2 = "0.10"
+rayon = "1"
+signal-hook = "0.3"
+
+[profile.release]
+debug = 1
+lto = "thin"

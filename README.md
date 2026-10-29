@@ -1,0 +1,69 @@
+# CFD-craft
+
+Rust CPU research solver for incompressible flow and conservative passive-gas dispersion. Cases are strict JSON data; every run reports numerical checks, stopping reason, model scope and reproducible input/build identity.
+
+Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These are recorded release gates, rather than a claim of general urban-model validation. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
+
+## Start
+
+Rust 1.88 or newer is required. The normal workspace has two crates and no native scientific-library dependency.
+
+~~~sh
+cargo build --release --locked
+target/release/cfd-craft describe
+target/release/cfd-craft check cases/verification/periodic-tracer.json
+mkdir -p runs
+target/release/cfd-craft run cases/verification/periodic-tracer.json --output runs/tracer
+target/release/cfd-craft report runs/tracer
+~~~
+
+The output directory must be new. Exit 0 means the requested numerical assessment passed; exit 2 means a completed execution with incomplete/failed numerical evidence; exit 1 means invalid input or an execution/I/O error. A timeout or cancelled solve retains a report when output can be written.
+
+Python is optional for the solver. Install the analysis dependencies to reproduce tutorials, independent checks and figures:
+
+~~~sh
+python -m pip install -r requirements-validation.txt
+python validation/check_fields.py runs/tracer
+python tutorials/source_inference.py --output runs/inference
+python tutorials/canyon_study.py --preset smoke --output runs/canyons
+python validation/export_vtk.py --run runs/tracer --output runs/tracer.vtr
+~~~
+
+Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid cells. The default field archive also contains native face velocities, allowing continuity to be recomputed without relying on reconstructed cell velocities.
+
+## What is implemented
+
+- Uniform Cartesian finite volumes; staggered face velocities; deterministic box masks and fluid-component discovery.
+- Matrix-free pressure projection, one gauge per unanchored fluid component, cached IC(0) preconditioning and an independent residual check.
+- Laminar flow, moving tangential walls, donor-cell momentum advection and SSPRK2 stepping.
+- One neutral equilibrium k–epsilon package with rough-wall stress, k-based wall dissipation and a matching upper-boundary treatment.
+- Passive gas with linear upwind or bounded MUSCL/MC transport, diffusion, point/line/volume sources, and point or volume-average receptors.
+- Explicit work/time/memory/output budgets, cooperative cancellation, checksummed restart and immutable output-directory behavior.
+- Strict case/result schemas through describe; JSON/CSV evidence; VTK conversion.
+- Synthetic source inversion, finite-canyon wind/Schmidt/domain studies, and a scalar fcmaes application worker.
+
+The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, multigrid and GPU execution are later work.
+
+## Verification
+
+~~~sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --release --workspace --locked
+python validation/test_cli.py -v
+python -O validation/test_cli.py -v
+python validation/run_suite.py --preset smoke --output runs/verification
+python validation/flow_accuracy.py --output runs/flow-accuracy
+python validation/cavity.py --output runs/cavity
+python validation/scipy_reference.py --output runs/scipy-reference
+~~~
+
+The independent Python checker tests archived mass, emission-rate/time accounting, positivity and current face-flux continuity. It does not independently reconstruct the full time history or establish turbulence-model validity.
+
+The study preset adds a larger transport grid series or a canyon resolution series. Study reports include failed rows. A failed refinement run does not become an accepted grid-convergence result.
+
+## Ecosystem
+
+[optimization-jobs](https://github.com/dietmarwo/optimization-jobs) runs the CLI through a trusted command; CFD evidence stays in a separate CFD result artifact. The optional [fcmaes adapter](integrations/README.md) uses fallible, cancellable scalar simulations with hashed case inputs and existing evaluate/retry/surrogate profiles. [experiment-craft](https://github.com/dietmarwo/experiment-craft) can schedule those same command or optimizer envelopes.
+
+Agents should start with [ai-context](docs/ai-context.md). The [tutorial guide](tutorials/README.md) supplies concrete tasks, budgets and interpretation rules. No release tag or package publication is implied by this source version.

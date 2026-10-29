@@ -1,0 +1,60 @@
+{
+  "schema_version": "cfd-craft.case/0.1",
+  "name": "empty-abl",
+  "domain": {
+    "size_m": [
+      18.0,
+      16.0,
+      6.0
+    ]
+  },
+  "grid": {
+    "cells": [
+      16,
+      4,
+      48
+    ]
+  },
+  "boundaries": {
+    "x": "open",
+    "y": "open",
+    "z": "ground_open_top"
+  },
+  "flow": {
+    "kind": "neutral_rans",
+    "speed_m_s": 2.0,
+    "reference_height_m": 1.0,
+    "roughness_m": 0.01,
+    "direction_deg_from": 270.0,
+    "viscosity_m2_s": 1.5e-05,
+    "turbulent_schmidt": 0.7
+  },
+  "geometry": [],
+  "constituents": [],
+  "initial_conditions": [],
+  "sources": [],
+  "receptors": [],
+  "numerics": {
+    "transport": "linear_upwind",
+    "max_time_step_s": 0.1,
+    "advective_cfl_max": 0.4,
+    "pressure_relative_tolerance": 1e-10,
+    "pressure_max_iterations": 1200,
+    "steady_residual_tolerance": 1e-05,
+    "steady_monitor_tolerance": 0.001,
+    "monitor_window": 40
+  },
+  "run": {
+    "mode": "transient",
+    "end_time_s": 8.0,
+    "max_steps": 10000,
+    "wall_time_limit_s": 240.0,
+    "threads": 4,
+    "memory_limit_mib": 1024
+  },
+  "output": {
+    "fields": true,
+    "checkpoint": true,
+    "max_total_mib": 64
+  }
+}

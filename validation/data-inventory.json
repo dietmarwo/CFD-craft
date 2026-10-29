@@ -1,0 +1,27 @@
+{
+  "schema_version": "cfd-craft.data-inventory/0.1",
+  "checked_date": "2026-10-29",
+  "datasets": [
+    {
+      "id": "codasc",
+      "status": "data_unavailable",
+      "paper": "https://www.harmo.org/Conferences/Proceedings/_Madrid/publishedSections/H15-142.pdf",
+      "attempted_endpoints": ["https://www.codasc.de/", "https://www.ifh.uni-karlsruhe.de/science/aerodyn/CODASC.htm", "https://www.iwu.kit.edu/efm/CODASC.htm"],
+      "result": "Timeout or inaccessible legacy endpoint; no raw concentration files acquired.",
+      "redistribution": "not established; no raw data bundled",
+      "needed": ["finite geometry and exact line sources", "measured inlet and tunnel dimensions", "wall concentration files", "normalization, uncertainty and quantification metadata", "usage terms"],
+      "development_case": "W/H=1, perpendicular",
+      "heldout_cases": ["W/H=2, perpendicular", "W/H=1, oblique"],
+      "code_case_status": "illustrative full-scale boxes, not an exact CODASC reconstruction"
+    },
+    {
+      "id": "cedval-les-es1006",
+      "status": "access_required",
+      "url": "https://www.mi.uni-hamburg.de/en/arbeitsgruppen/windkanallabor/data-sets.html",
+      "result": "Owner describes password-protected archives; ES1006 requires its data agreement.",
+      "redistribution": "not established; no raw data bundled"
+    }
+  ],
+  "experimental_release_gate": "blocked_data",
+  "automatic_contact": false
+}

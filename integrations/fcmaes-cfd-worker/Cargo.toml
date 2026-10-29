@@ -1,0 +1,15 @@
+[package]
+name = "fcmaes-cfd-worker"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+
+[workspace]
+
+[dependencies]
+cfd-craft = { path = "../../crates/cfd-craft" }
+fcmaes-job-worker = { git = "https://github.com/dietmarwo/fcmaes-rust", rev = "583f33a9a815ede0e1115c8ddd69029a874593f9" }
+optimization-job-api = { git = "https://github.com/dietmarwo/optimization-jobs", rev = "602d31afacf8bd2ecb0b0e941d18bd8e2821c1e3" }
+serde_json = "1"

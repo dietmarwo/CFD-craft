@@ -1,0 +1,23 @@
+[package]
+name = "cfd-craft-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "cfd-craft"
+path = "src/main.rs"
+
+[dependencies]
+cfd-craft = { path = "../cfd-craft" }
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+sha2.workspace = true
+signal-hook.workspace = true
+rayon.workspace = true
+
+[build-dependencies]
+sha2.workspace = true

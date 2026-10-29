@@ -42,25 +42,31 @@ pub fn checkpoint_bytes(c: &Case, s: &State) -> Result<Vec<u8>> {
     .map_err(|e| e.to_string())
 }
 pub fn read_checkpoint(c: &Case, path: &Path) -> Result<State> {
-    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let unreadable = |e: String| format!("CFD-E065: checkpoint {}: {e}", path.display());
+    let bytes = fs::read(path).map_err(|e| unreadable(e.to_string()))?;
     if bytes.len() > c.run.memory_limit_mib.saturating_mul(1048576) / 2 {
-        return Err("checkpoint exceeds import budget".into());
+        return Err(unreadable(
+            "larger than half of run.memory_limit_mib, the import budget".into(),
+        ));
     }
-    let v: Checkpoint = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let v: Checkpoint = serde_json::from_slice(&bytes).map_err(|e| unreadable(e.to_string()))?;
     if v.schema_version != "cfd-craft.checkpoint/0.1"
         || v.physics_sha256 != c.physics_hash()
         || hash_bytes(v.payload.as_bytes()) != v.payload_sha256
     {
         return Err("CFD-E060: checkpoint identity or checksum mismatch".into());
     }
-    let s: State = serde_json::from_str(&v.payload).map_err(|e| e.to_string())?;
+    let s: State = serde_json::from_str(&v.payload).map_err(|e| unreadable(e.to_string()))?;
     let g = Grid::build(c)?;
     validate_state(c, &g, &s)?;
     if s.steps > c.run.max_steps
         || (c.run.mode == crate::case::Mode::Transient
             && s.time_s > c.run.end_time_s * (1.0 + 1e-12))
     {
-        return Err("checkpoint lies beyond requested work/physical horizon".into());
+        return Err(
+            "CFD-E066: the checkpoint lies beyond run.max_steps or run.end_time_s of the case"
+                .into(),
+        );
     }
     Ok(s)
 }
@@ -68,14 +74,14 @@ pub fn read_checkpoint(c: &Case, path: &Path) -> Result<State> {
 /// dangling symlink) is an error, so the solve never starts without a place for its results.
 pub fn create_run_dir(out: &Path) -> Result<()> {
     if fs::symlink_metadata(out).is_ok() {
-        return Err(format!("output {} already exists", out.display()));
+        return Err(format!("CFD-E062: output {} already exists", out.display()));
     }
     fs::create_dir(out).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => format!(
-            "the parent directory of output {} does not exist",
+            "CFD-E063: the parent directory of output {} does not exist",
             out.display()
         ),
-        _ => format!("cannot create output {}: {e}", out.display()),
+        _ => format!("CFD-E063: cannot create output {}: {e}", out.display()),
     })
 }
 
@@ -177,7 +183,14 @@ fn read_regular(path: &Path) -> Result<Vec<u8>> {
 /// Verifies a run directory: completion marker, manifest, every listed artifact, no
 /// unlisted entries, the artifacts the case requested, and the identities that the
 /// summary, case and manifest share.
-pub fn read_verified(out: &Path) -> Result<Summary> {
+/// A verified archive: its summary and the artifacts the manifest lists as omitted.
+pub struct Verified {
+    pub summary: Summary,
+    pub omitted: Vec<String>,
+}
+
+/// Verifies a run directory. Errors are not coded here; the CLI reports them as CFD-E064.
+pub fn read_verified(out: &Path) -> Result<Verified> {
     let marker: serde_json::Value =
         serde_json::from_slice(&read_regular(&out.join("complete.json"))?)
             .map_err(|e| format!("complete.json: {e}"))?;
@@ -240,5 +253,8 @@ pub fn read_verified(out: &Path) -> Result<Summary> {
     {
         return Err("manifest.json and summary.json disagree on identity".into());
     }
-    Ok(summary)
+    Ok(Verified {
+        summary,
+        omitted: omitted.keys().cloned().collect(),
+    })
 }

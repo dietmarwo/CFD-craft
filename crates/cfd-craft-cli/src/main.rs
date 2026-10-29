@@ -2,7 +2,7 @@
 use cfd_craft::{
     Result,
     case::{Case, CheckReport, Diagnostic, hash_bytes},
-    grid::Grid,
+    grid::{GeometryEvidence, Grid},
     output,
     solver::{Control, Summary},
 };
@@ -88,8 +88,10 @@ fn available_mib() -> Option<f64> {
 }
 
 /// Case checks plus the grid, source and receptor checks that need the built grid.
-/// Every source and receptor is checked, so all problems are reported at once.
-fn full_check(c: &Case) -> (CheckReport, Option<serde_json::Value>) {
+/// Every source and receptor is checked, so all problems are reported at once. When the
+/// estimated peak does not fit this host (CFD-W070), the grid is not built and its checks
+/// are skipped, so a check never allocates what the host cannot hold.
+fn full_check(c: &Case) -> (CheckReport, Option<GeometryEvidence>) {
     let mut report = c.check();
     if let Some(mib) = available_mib()
         && report.estimated_peak_mib > 0.8 * mib
@@ -99,10 +101,11 @@ fn full_check(c: &Case) -> (CheckReport, Option<serde_json::Value>) {
             severity: "warning".into(),
             path: "run.memory_limit_mib".into(),
             message: format!(
-                "The estimated peak of {:.0} MiB exceeds 80 % of the {mib:.0} MiB this host has available; run refuses it here.",
+                "The estimated peak of {:.0} MiB exceeds 80 % of the {mib:.0} MiB this host has available; run refuses it here. The grid, source and receptor checks were skipped.",
                 report.estimated_peak_mib
             ),
         });
+        return (report, None);
     }
     if !report.valid {
         return (report, None);
@@ -111,11 +114,13 @@ fn full_check(c: &Case) -> (CheckReport, Option<serde_json::Value>) {
         Ok(g) => g,
         Err(e) => {
             let (code, message) = coded(&e, "CFD-E030");
-            let path = c
-                .geometry
-                .iter()
-                .position(|b| message.contains(&format!("box {} ", b.id)))
-                .map_or("geometry".to_string(), |i| format!("geometry[{i}]"));
+            // Box errors start with the element path, for example "geometry[3] (box b) ...".
+            let path = message
+                .split_once(' ')
+                .map(|(p, _)| p)
+                .filter(|p| p.starts_with("geometry["))
+                .unwrap_or("geometry")
+                .to_string();
             report.valid = false;
             report.diagnostics.push(diagnostic(&code, &path, message));
             return (report, None);
@@ -141,8 +146,16 @@ fn full_check(c: &Case) -> (CheckReport, Option<serde_json::Value>) {
                 .push(diagnostic(&code, &format!("receptors[{i}]"), message));
         }
     }
-    let geometry = serde_json::to_value(g.evidence()).ok();
-    (report, geometry)
+    (report, Some(g.evidence()))
+}
+
+/// `run` refuses what `check` only warns about: a peak that does not fit this host.
+fn refuse_host_memory(report: &mut CheckReport) {
+    if let Some(w) = report.diagnostics.iter_mut().find(|d| d.code == "CFD-W070") {
+        w.code = "CFD-E070".into();
+        w.severity = "error".into();
+        report.valid = false;
+    }
 }
 
 /// Prints JSON to stdout. A closed stdout (for example `| head`) is not an error.
@@ -190,7 +203,14 @@ fn execute(args: &[String]) -> Result<Outcome> {
         if args.len() != 2 {
             return Err("report accepts one directory".into());
         }
-        print(&output::read_verified(Path::new(p))?)?;
+        let verified = output::read_verified(Path::new(p)).map_err(|e| format!("CFD-E064: {e}"))?;
+        print(&verified.summary)?;
+        if !verified.omitted.is_empty() {
+            eprintln!(
+                "{}",
+                serde_json::json!({"warning":"CFD-E061: the run omitted artifacts because the output budget was exceeded","omitted":verified.omitted})
+            );
+        }
         return Ok(Outcome::Success);
     }
     if !matches!(command, "check" | "verify" | "run" | "preview") {
@@ -248,17 +268,24 @@ fn execute(args: &[String]) -> Result<Outcome> {
         }
         i += 2;
     }
-    if command == "preview" {
+    let original = if command == "preview" {
         if factor < 2 {
             return Err("preview factor must be at least 2".into());
         }
-        c = preview_case(&c, factor)?;
-    }
-    let (mut report, _) = full_check(&c);
-    if let Some(w) = report.diagnostics.iter_mut().find(|d| d.code == "CFD-W070") {
-        w.code = "CFD-E070".into();
-        w.severity = "error".into();
+        let original = c;
+        c = coarsened(&original, factor);
+        Some(original)
+    } else {
+        None
+    };
+    // A preview is checked as the coarse case it runs, then compared with the original.
+    let (mut report, geometry) = full_check(&c);
+    refuse_host_memory(&mut report);
+    if let (Some(original), Some(geometry), true) = (&original, &geometry, report.valid)
+        && let Some(d) = preview_mismatch(original, geometry, factor)
+    {
         report.valid = false;
+        report.diagnostics.push(d);
     }
     if !report.valid {
         print(&serde_json::json!({ "check": report }))?;
@@ -322,60 +349,73 @@ fn solve(
     Ok(result)
 }
 
-/// The same case on a grid coarsened by `factor`. The coarse case is checked before
-/// the original grid is built, and the original is only built when it fits its budget.
-fn preview_case(c: &Case, factor: usize) -> Result<Case> {
+/// The same case on a grid coarsened by `factor`, with at least 2 cells per axis.
+fn coarsened(c: &Case, factor: usize) -> Case {
     let mut coarse = c.clone();
     coarse.name = format!("{}-preview", c.name);
     for a in 0..3 {
         coarse.grid.cells[a] = (c.grid.cells[a] / factor).max(2);
     }
-    let derived = Grid::build(&coarse)?.evidence();
-    if c.geometry.is_empty() {
-        return Ok(coarse);
-    }
-    let original_solid = solid_volume(c);
-    let volume_change =
-        (derived.solid_volume_m3 - original_solid).abs() / original_solid.max(1e-30);
-    let topology_changed = c.check().valid
-        && Grid::build(c).map(|g| g.evidence().fluid_components)? != derived.fluid_components;
-    if volume_change > 0.2 || topology_changed {
-        return Err(
-            "preview changes solid volume by >20% or fluid topology; refine explicitly".into(),
-        );
-    }
-    Ok(coarse)
+    coarse
 }
 
-/// Solid volume of the full-resolution grid, counted without allocating it.
-fn solid_volume(c: &Case) -> f64 {
-    let n = c.grid.cells;
-    let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
-    let mut solid = 0usize;
-    for k in 0..n[2] {
-        let z = (k as f64 + 0.5) * dx[2];
-        let layer: Vec<_> = c
-            .geometry
-            .iter()
-            .filter(|b| z >= b.min_m[2] && z < b.max_m[2])
-            .collect();
-        if layer.is_empty() {
-            continue;
-        }
-        for j in 0..n[1] {
-            let y = (j as f64 + 0.5) * dx[1];
-            for i in 0..n[0] {
-                let x = (i as f64 + 0.5) * dx[0];
-                if layer
-                    .iter()
-                    .any(|b| x >= b.min_m[0] && x < b.max_m[0] && y >= b.min_m[1] && y < b.max_m[1])
-                {
-                    solid += 1;
-                }
-            }
-        }
+/// Compares a preview grid with the original's cell mask, counted without building the
+/// original grid. CFD-E072: the preview changes the solid volume by more than 20 % or the
+/// number of fluid components. CFD-E073: the original mask cannot be counted here.
+fn preview_mismatch(
+    original: &Case,
+    coarse: &GeometryEvidence,
+    factor: usize,
+) -> Option<Diagnostic> {
+    if original.geometry.is_empty() {
+        return None;
     }
-    solid as f64 * dx.iter().product::<f64>()
+    let mask_mib = 4.0
+        * original
+            .grid
+            .cells
+            .iter()
+            .map(|v| *v as f64)
+            .product::<f64>()
+        / 1048576.0;
+    if let Some(mib) = available_mib()
+        && mask_mib > 0.8 * mib
+    {
+        return Some(diagnostic(
+            "CFD-E073",
+            "grid.cells",
+            format!(
+                "Counting the original cell mask needs about {mask_mib:.0} MiB, more than 80 % of the {mib:.0} MiB this host has available, so the preview cannot be compared with it."
+            ),
+        ));
+    }
+    let full = match Grid::mask_topology(original) {
+        Ok(t) => t,
+        Err(e) => {
+            return Some(diagnostic(
+                "CFD-E073",
+                "grid.cells",
+                format!(
+                    "The original cell mask cannot be counted, so the preview cannot be compared with it: {e}."
+                ),
+            ));
+        }
+    };
+    let change =
+        (coarse.solid_volume_m3 - full.solid_volume_m3).abs() / full.solid_volume_m3.max(1e-30);
+    if change > 0.2 || coarse.fluid_components != full.fluid_components {
+        return Some(diagnostic(
+            "CFD-E072",
+            "grid.cells",
+            format!(
+                "Coarsening by {factor} changes the solid volume by {:.1} % and the fluid components from {} to {}; a preview keeps the volume within 20 % and the topology. Use a smaller factor or refine the case explicitly.",
+                100.0 * change,
+                full.fluid_components,
+                coarse.fluid_components
+            ),
+        ));
+    }
+    None
 }
 
 fn main() -> ExitCode {

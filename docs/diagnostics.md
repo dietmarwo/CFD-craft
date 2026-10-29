@@ -5,7 +5,13 @@ diagnostic has a code, a severity, a JSON path into the case (for example
 `geometry[1]`, `sources[0].rate_kg_s_m`, `numerics.advective_cfl_max`) and a
 message. Errors make the case invalid; warnings do not. `run` and `preview`
 print the same report and exit 1 when the case is invalid, before any output
-directory is created.
+directory is created. `preview` checks the coarsened case it runs, then compares
+it with the original's cell mask, which it counts without building the original
+grid.
+
+The grid, source and receptor checks need the built grid. When the estimated peak
+does not fit this host (CFD-W070), they are skipped, so a check never allocates
+more than the host can hold.
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -37,20 +43,22 @@ directory is created.
 | CFD-E025 | error | Negative or nonfinite initial concentration |
 | CFD-E026 | error | Invalid periodic Gaussian initial condition |
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
-| CFD-E028 | error | A box contains no cell center, so the grid would not represent it |
+| CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
 | CFD-E030 | error | The geometry leaves no fluid cells |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
 | CFD-E043 | error | A steady source in a fluid component without an outlet |
 | CFD-E044 | error | The represented source density is not finite |
-| CFD-E070 | error | `run` only: the estimated peak exceeds 80 % of this host's available memory |
+| CFD-E070 | error | `run` and `preview`: the estimated peak exceeds 80 % of this host's available memory |
+| CFD-E072 | error | `preview` only: coarsening changes the solid volume by more than 20 % or the number of fluid components |
+| CFD-E073 | error | `preview` only: the original cell mask cannot be counted (more than 1e8 cells, or its 4 bytes per cell do not fit this host), so the preview cannot be compared with it |
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
 | CFD-W002 | warning | RANS blockage ratio above the COST 732 recommendation of 3 % |
-| CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream) |
-| CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory |
+| CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
+| CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
-Codes from a run, reported in `summary.json` `error` or on stderr:
+Codes from a run, a restart or `report`, reported in `summary.json` `error` or on stderr:
 
 | Code | Meaning |
 |---|---|
@@ -58,9 +66,15 @@ Codes from a run, reported in `summary.json` `error` or on stderr:
 | CFD-E032 | Pressure CG lost positive definiteness |
 | CFD-E033 | Pressure iteration limit reached |
 | CFD-E050 | Checkpoint dimensions do not match the case |
-| CFD-E051 | Nonfinite or invalid state |
+| CFD-E051 | Nonfinite or invalid state, including concentration in a solid cell |
 | CFD-E052 | Velocity divergence |
 | CFD-E053 | Negative concentration beyond round-off; no clipping is applied |
 | CFD-E054 | Eddy viscosity outside the declared numerical regime |
+| CFD-E055 | The time step is not finite and positive |
 | CFD-E060 | Checkpoint identity or checksum mismatch |
-| CFD-E061 | Fields or checkpoint omitted because they would exceed the output budget; the manifest lists them under `omitted` and the run exits 2 |
+| CFD-E061 | Fields or checkpoint omitted because they would exceed the output budget; the manifest lists them under `omitted` and the run exits 2. `report` repeats the code on stderr for such an archive and exits 0 |
+| CFD-E062 | The output directory already exists |
+| CFD-E063 | The output directory cannot be created, for example because its parent does not exist |
+| CFD-E064 | `report` rejects the archive; the message names the failed check |
+| CFD-E065 | The restart checkpoint cannot be read or parsed, or is larger than half of `run.memory_limit_mib` |
+| CFD-E066 | The restart checkpoint lies beyond `run.max_steps` or `run.end_time_s` of the case |

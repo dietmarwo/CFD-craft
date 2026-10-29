@@ -21,9 +21,15 @@ def receptor_values(record, case):
     return [stored[r["id"]] for r in case["receptors"]]
 
 
+def sidecar(destination, suffix):
+    """The file next to a run directory named after the whole run name."""
+    return destination.with_name(destination.name + suffix)
+
+
 def run_case(binary, case, destination, restart=None):
     destination = Path(destination)
-    p = destination.with_suffix(".case.json")
+    # Sidecars append to the run name, so "schmidt-0.5" and "schmidt-0.9" stay distinct.
+    p = sidecar(destination, ".case.json")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(case, indent=2) + "\n")
     start = time.monotonic()
@@ -36,8 +42,8 @@ def run_case(binary, case, destination, restart=None):
         text=True,
         timeout=case["run"]["wall_time_limit_s"] + 20,
     )
-    destination.with_suffix(".stdout.log").write_text(completed.stdout)
-    destination.with_suffix(".stderr.log").write_text(completed.stderr)
+    sidecar(destination, ".stdout.log").write_text(completed.stdout)
+    sidecar(destination, ".stderr.log").write_text(completed.stderr)
     summary_path = destination / "summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.is_file() else None
     audit = None

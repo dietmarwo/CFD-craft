@@ -48,6 +48,13 @@ pub struct GeometryEvidence {
     /// Cells whose center lies inside each box, by box ID; overlapping boxes share cells.
     pub box_cells: BTreeMap<String, usize>,
 }
+/// Topology of a case's cell mask, from [`Grid::mask_topology`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MaskTopology {
+    pub fluid_components: usize,
+    pub solid_cells: usize,
+    pub solid_volume_m3: f64,
+}
 impl Grid {
     pub fn count(&self) -> usize {
         self.fluid.len()
@@ -97,10 +104,10 @@ impl Grid {
                 }
             }
         }
-        for (b, n) in c.geometry.iter().zip(&box_cells) {
+        for (i, (b, n)) in c.geometry.iter().zip(&box_cells).enumerate() {
             if *n == 0 {
                 return Err(format!(
-                    "CFD-E028: box {} contains no cell center, so the grid does not represent it; enlarge it or refine the grid",
+                    "CFD-E028: geometry[{i}] (box {}) contains no cell center, so the grid does not represent it; enlarge it or refine the grid",
                     b.id
                 ));
             }
@@ -237,6 +244,74 @@ impl Grid {
             g.anchored.push(anchored);
         }
         Ok(g)
+    }
+    /// Fluid-component and solid-cell counts of the case's grid, computed from the cell
+    /// mask with a union-find over 4 bytes per cell, without building faces or the pressure
+    /// operator. Cells connect through shared faces, including periodic wraps, as in
+    /// [`Grid::build`]. Needs only valid axes (2..4096 cells, at most 1e8 in total).
+    pub fn mask_topology(c: &Case) -> Result<MaskTopology> {
+        let n = c.grid.cells;
+        let count = n.iter().try_fold(1usize, |p, v| p.checked_mul(*v));
+        let count = match count {
+            Some(v) if n.iter().all(|v| (2..=4096).contains(v)) && v <= 100_000_000 => v,
+            _ => return Err("the grid needs 2..4096 cells per axis and at most 1e8 cells".into()),
+        };
+        const SOLID: u32 = u32::MAX;
+        let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
+        let mut parent: Vec<u32> = (0..count as u32).collect();
+        let mut solid_cells = 0usize;
+        for (i, p) in parent.iter_mut().enumerate() {
+            let q = [i % n[0], i / n[0] % n[1], i / (n[0] * n[1])];
+            let x: [f64; 3] = std::array::from_fn(|a| (q[a] as f64 + 0.5) * dx[a]);
+            if c.geometry
+                .iter()
+                .any(|b| (0..3).all(|a| x[a] >= b.min_m[a] && x[a] < b.max_m[a]))
+            {
+                *p = SOLID;
+                solid_cells += 1;
+            }
+        }
+        fn root(parent: &mut [u32], mut i: u32) -> u32 {
+            while parent[i as usize] != i {
+                let up = parent[parent[i as usize] as usize];
+                parent[i as usize] = up;
+                i = up;
+            }
+            i
+        }
+        for i in 0..count {
+            if parent[i] == SOLID {
+                continue;
+            }
+            let q = [i % n[0], i / n[0] % n[1], i / (n[0] * n[1])];
+            for a in 0..3 {
+                let lo = if q[a] > 0 {
+                    q[a] - 1
+                } else if c.boundaries.at(a) == Boundary::Periodic {
+                    n[a] - 1
+                } else {
+                    continue;
+                };
+                let mut p = q;
+                p[a] = lo;
+                let j = Self::index(n, p);
+                if parent[j] == SOLID {
+                    continue;
+                }
+                let (ri, rj) = (root(&mut parent, i as u32), root(&mut parent, j as u32));
+                if ri != rj {
+                    parent[ri.max(rj) as usize] = ri.min(rj);
+                }
+            }
+        }
+        let fluid_components = (0..count)
+            .filter(|i| parent[*i] != SOLID && root(&mut parent, *i as u32) == *i as u32)
+            .count();
+        Ok(MaskTopology {
+            fluid_components,
+            solid_cells,
+            solid_volume_m3: solid_cells as f64 * dx.iter().product::<f64>(),
+        })
     }
     pub fn evidence(&self) -> GeometryEvidence {
         let fluid_cells = self.fluid.iter().filter(|v| **v).count();

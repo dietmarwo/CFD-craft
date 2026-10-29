@@ -372,19 +372,59 @@ impl Case {
         } else {
             8.0 * cells as f64
         };
-        let peak =
-            ((cells as f64) * (768.0 + 96.0 * species) * 1.25 + receptor_bytes + source_bytes)
-                / 1048576.0
-                + 16.0;
+        // The state keeps one monitor row per step for the last three windows: the flow
+        // norm, each constituent's mass and receptor values, and mean k and epsilon.
+        let monitor_rows = self
+            .numerics
+            .monitor_window
+            .saturating_mul(3)
+            .min(self.run.max_steps) as f64;
+        let monitor_values = monitor_rows * (3.0 + species * (1.0 + self.receptors.len() as f64));
+        let monitor_bytes = 8.0 * monitor_values + 32.0 * monitor_rows;
+        let peak = ((cells as f64) * (768.0 + 96.0 * species) * 1.25
+            + receptor_bytes
+            + source_bytes
+            + monitor_bytes)
+            / 1048576.0
+            // Process baseline (measured near 19 MiB) and the worker threads' stacks.
+            + 24.0
+            + self.run.threads as f64;
         // JSON text of f64 values is at most about 24 bytes; fields hold six flow arrays
-        // (three face-velocity sets, pressure, k, epsilon) plus one array per constituent.
-        let output = (cells as f64)
-            * (if self.output.fields {
-                24.0 * (6.0 + species) + 4.0
+        // (three face-velocity sets, pressure, k, epsilon) plus one array per constituent,
+        // and both fields and checkpoint carry the monitor history.
+        let output_fields = (cells as f64) * (24.0 * (6.0 + species) + 4.0) + 26.0 * monitor_values;
+        let output_checkpoint =
+            (cells as f64) * (26.0 * (6.0 + species) + 4.0) + 27.0 * monitor_values;
+        // case.json, summary.json, geometry.json and probes.csv list every receptor, box
+        // and source as pretty-printed text, receptor values once per constituent in
+        // summary.json and probes.csv; identifiers count twice for JSON escaping.
+        let ids: f64 = self.constituents.iter().map(|x| x.id.len() as f64).sum();
+        let element_text: f64 = self
+            .receptors
+            .iter()
+            .map(|r| {
+                let id = r.id().len() as f64;
+                400.0 + 2.0 * id + species * (100.0 + 4.0 * id) + 2.0 * ids
+            })
+            .chain(
+                self.geometry
+                    .iter()
+                    .map(|b| 500.0 + 4.0 * b.id.len() as f64),
+            )
+            .chain(
+                self.sources
+                    .iter()
+                    .map(|x| 600.0 + 2.0 * x.id().len() as f64),
+            )
+            .sum();
+        let output = (element_text
+            + if self.output.fields {
+                output_fields
             } else {
                 0.0
-            } + if self.output.checkpoint {
-                26.0 * (6.0 + species) + 4.0
+            }
+            + if self.output.checkpoint {
+                output_checkpoint
             } else {
                 0.0
             })
@@ -891,31 +931,38 @@ impl Case {
             std::array::from_fn(|a| boxes.iter().map(|b| b.max_m[a]).fold(0.0, f64::max));
         let wind = self.flow.vector(h.max(1e-9));
         let speed = wind[0].hypot(wind[1]).max(1e-300);
+        // Periodic sides repeat the buildings, so clearance does not apply to them; open,
+        // slip and wall sides all need it.
         for (a, name) in [(0, "x"), (1, "y")] {
-            if self.boundaries.at(a) != Boundary::Open {
+            if self.boundaries.at(a) == Boundary::Periodic {
                 continue;
             }
             let along = wind[a] / speed;
-            let (upstream, downstream) = if along >= 0.0 {
-                (lo[a], self.domain.size_m[a] - hi[a])
+            let (low, high) = (lo[a], self.domain.size_m[a] - hi[a]);
+            let message = if along.abs() > 0.1 {
+                let (upstream, downstream) = if along > 0.0 {
+                    (low, high)
+                } else {
+                    (high, low)
+                };
+                (upstream < 5.0 * h || downstream < 15.0 * h).then(|| format!(
+                    "Along {name} the buildings have {:.1} H_max of clearance upstream and {:.1} H_max downstream; the COST 732 guideline recommends about 5 H_max and 15 H_max.",
+                    upstream / h,
+                    downstream / h
+                ))
             } else {
-                (self.domain.size_m[a] - hi[a], lo[a])
+                (low.min(high) < 5.0 * h).then(|| format!(
+                    "Across the wind, along {name}, the buildings have {:.1} H_max and {:.1} H_max of lateral clearance; the COST 732 guideline recommends about 5 H_max on each side.",
+                    low / h,
+                    high / h
+                ))
             };
-            let (need_up, need_down) = if along.abs() > 0.1 {
-                (5.0, 15.0)
-            } else {
-                (5.0, 5.0)
-            };
-            if upstream < need_up * h || downstream < need_down * h {
+            if let Some(message) = message {
                 add(
                     "CFD-W003",
                     "warning",
-                    "domain.size_m",
-                    &format!(
-                        "Along {name} the buildings have {:.1} H_max upstream and {:.1} H_max downstream of clearance; the COST 732 guideline recommends about {need_up} H_max and {need_down} H_max.",
-                        upstream / h,
-                        downstream / h
-                    ),
+                    &format!("domain.size_m[{a}]"),
+                    &message,
                 );
             }
         }

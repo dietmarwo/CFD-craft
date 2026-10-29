@@ -193,6 +193,11 @@ def check(path):
             len(values) == n and all(math.isfinite(v) for v in values),
             "scalar dimensions/finiteness",
         )
+        # Transport never changes a solid cell, so mass there cannot come from the solver.
+        require(
+            all(v == 0.0 for v, f in zip(values, fluid, strict=True) if not f),
+            f"{sp['id']} has nonzero concentration in a solid cell",
+        )
         require(
             set(record["receptors_kg_m3"]) == set(weights),
             f"receptor set of {sp['id']} differs from the case",
@@ -204,7 +209,7 @@ def check(path):
                 abs(reported - value) <= 1e-12 * max(abs(value), 1e-300) + 1e-300,
                 f"receptor {rid} of {sp['id']} differs from its field value",
             )
-        mass = math.fsum(values) * volume
+        mass = math.fsum(v for v, f in zip(values, fluid, strict=True) if f) * volume
         scale = max(
             budget["initial_kg"]
             + budget["emitted_kg"]

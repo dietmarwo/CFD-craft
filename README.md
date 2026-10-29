@@ -17,7 +17,7 @@ target/release/cfd-craft run cases/verification/periodic-tracer.json --output ru
 target/release/cfd-craft report runs/tracer
 ~~~
 
-The output directory must be new, and its parent must exist; both are checked before the solve starts. Exit 0 means the request succeeded (a valid case, a passed numerical assessment or a verified archive); exit 2 means a completed execution with incomplete/failed numerical evidence; exit 1 means invalid input or an execution/I/O error. For invalid input, check and run both print the check report on stdout: every diagnostic carries a code and the path of the offending field ([diagnostics](docs/diagnostics.md)). A timeout or cancelled solve retains a report.
+The output directory must be new, and its parent must exist; both are checked before the solve starts. Exit 0 means the request succeeded (a valid case, a passed numerical assessment or a verified archive); exit 2 means a completed execution with incomplete/failed numerical evidence; exit 1 means invalid input or an execution/I/O error. For invalid input, check, run and preview print the check report on stdout: every diagnostic carries a code and the path of the offending field ([diagnostics](docs/diagnostics.md)). `preview CASE --output NEW_DIR [--factor N]` runs the case on a grid coarsened by N (default 2) and refuses a coarsening that changes the solid volume by more than 20 % or the fluid topology. A timeout or cancelled solve retains a report.
 
 Python is optional for the solver. Install the analysis dependencies to reproduce tutorials, independent checks and figures:
 

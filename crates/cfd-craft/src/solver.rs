@@ -209,6 +209,13 @@ pub fn validate_state(c: &Case, g: &Grid, s: &State) -> Result<()> {
     {
         return Err("CFD-E051: nonfinite or invalid state".into());
     }
+    // Transport never changes a solid cell, so a state with mass there is not one it produced.
+    if s.concentrations
+        .iter()
+        .any(|v| v.iter().zip(&g.fluid).any(|(x, fluid)| !fluid && *x != 0.0))
+    {
+        return Err("CFD-E051: nonzero concentration in a solid cell".into());
+    }
     Ok(())
 }
 fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
@@ -664,7 +671,7 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         }
         if dt <= 0.0 || !dt.is_finite() {
             termination = "diverged".into();
-            error = Some("invalid timestep".into());
+            error = Some("CFD-E055: the time step is not finite and positive".into());
             break;
         }
         if let Err(e) = step(c, &g, &mut state, &sources, dt, control) {

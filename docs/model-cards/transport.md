@@ -12,7 +12,7 @@ Point receptors use multilinear cell-center interpolation, clamped to the neares
 
 Stored evidence separates initial, emitted, boundary-in, boundary-out and remaining mass. The final difference is audited without treating numerical correction as a physical sink. Negative concentrations beyond round-off stop the run; concentrations are never clipped to conceal failure.
 
-The archived-field checker recomputes every receptor value from the stored concentration field with these weights.
+The archived-field checker recomputes every receptor value from the stored concentration field with these weights. Transport never changes a solid cell, so its concentration stays exactly zero; the checker requires that, and a restart checkpoint with mass in a solid cell is rejected (CFD-E051).
 
 For exact response matrices, use fixed flow/diffusivity and linear_upwind. A nonlinear limiter invalidates exact superposition. The source-inference tutorial verifies combined versus separate sources, holds out receptors, includes an unidentifiable matrix and repeats observations with changed inflow/grid.
 

@@ -17,15 +17,23 @@ import subprocess
 import sys
 
 solver = Path(sys.argv[1]).resolve()
-child = subprocess.Popen([str(solver), "run", "case.json", "--output", "simulation"])
+child = None
+pending = []
 
 
 def forward(signum, _frame):
-    child.send_signal(signum)
+    # A signal that arrives before the solver exists is delivered once it starts.
+    if child is None:
+        pending.append(signum)
+    else:
+        child.send_signal(signum)
 
 
 for signum in (signal.SIGTERM, signal.SIGINT):
     signal.signal(signum, forward)
+child = subprocess.Popen([str(solver), "run", "case.json", "--output", "simulation"])
+for signum in pending:
+    child.send_signal(signum)
 returncode = child.wait()
 summary = Path("simulation/summary.json")
 if summary.is_file():

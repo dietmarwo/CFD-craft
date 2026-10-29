@@ -1,0 +1,13 @@
+{
+  "schema_version": "cfd-craft.experimental-protocol/0.1",
+  "status": "blocked_data",
+  "dataset": "codasc",
+  "pairing": "wall taps paired in space, not arc maxima",
+  "quantity": "c_plus",
+  "normalization": "c * U_H * H / Q_l, after confirming downloaded source/unit convention",
+  "observation_sha256": null,
+  "required_sample_ids": [],
+  "thresholds": null,
+  "missing": ["raw data and terms", "exact measurement positions and uncertainty", "pre-registered numeric thresholds with a physical justification"],
+  "claims_forbidden": ["general urban model validation", "PM deposition validation", "annual exposure"]
+}

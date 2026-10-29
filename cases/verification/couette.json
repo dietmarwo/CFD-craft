@@ -1,0 +1,76 @@
+{
+  "schema_version": "cfd-craft.case/0.1",
+  "name": "couette",
+  "domain": {
+    "size_m": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "grid": {
+    "cells": [
+      4,
+      4,
+      16
+    ]
+  },
+  "boundaries": {
+    "x": "periodic",
+    "y": "periodic",
+    "z": "wall"
+  },
+  "flow": {
+    "kind": "laminar",
+    "initial_velocity_m_s": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "viscosity_m2_s": 0.1,
+    "acceleration_m_s2": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "geometry": [],
+  "constituents": [],
+  "initial_conditions": [],
+  "sources": [],
+  "receptors": [],
+  "numerics": {
+    "transport": "muscl",
+    "max_time_step_s": 0.1,
+    "advective_cfl_max": 0.4,
+    "pressure_relative_tolerance": 1e-10,
+    "pressure_max_iterations": 1200,
+    "steady_residual_tolerance": 1e-05,
+    "steady_monitor_tolerance": 0.001,
+    "monitor_window": 30
+  },
+  "run": {
+    "mode": "transient",
+    "end_time_s": 15.0,
+    "max_steps": 20000,
+    "wall_time_limit_s": 120.0,
+    "threads": 2,
+    "memory_limit_mib": 1024
+  },
+  "output": {
+    "fields": true,
+    "checkpoint": true,
+    "max_total_mib": 64
+  },
+  "moving_walls": [
+    {
+      "axis": 2,
+      "upper": true,
+      "velocity_m_s": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}

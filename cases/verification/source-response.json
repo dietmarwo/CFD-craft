@@ -1,0 +1,198 @@
+{
+  "schema_version": "cfd-craft.case/0.1",
+  "name": "source-response",
+  "domain": {
+    "size_m": [
+      16.0,
+      6.0,
+      6.0
+    ]
+  },
+  "grid": {
+    "cells": [
+      32,
+      12,
+      12
+    ]
+  },
+  "boundaries": {
+    "x": "open",
+    "y": "periodic",
+    "z": "periodic"
+  },
+  "flow": {
+    "kind": "prescribed_uniform",
+    "velocity_m_s": [
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  "geometry": [],
+  "constituents": [
+    {
+      "id": "tracer",
+      "diffusivity_m2_s": 0.08
+    }
+  ],
+  "initial_conditions": [],
+  "sources": [
+    {
+      "kind": "volume",
+      "id": "S0",
+      "constituent": "tracer",
+      "min_m": [
+        2.0,
+        1.1,
+        2.6
+      ],
+      "max_m": [
+        3.0,
+        1.9,
+        3.4
+      ],
+      "rate_kg_s_m3": 1e-07
+    },
+    {
+      "kind": "volume",
+      "id": "S1",
+      "constituent": "tracer",
+      "min_m": [
+        2.0,
+        2.6,
+        2.6
+      ],
+      "max_m": [
+        3.0,
+        3.4,
+        3.4
+      ],
+      "rate_kg_s_m3": 1e-07
+    },
+    {
+      "kind": "volume",
+      "id": "S2",
+      "constituent": "tracer",
+      "min_m": [
+        2.0,
+        4.1,
+        2.6
+      ],
+      "max_m": [
+        3.0,
+        4.9,
+        3.4
+      ],
+      "rate_kg_s_m3": 1e-07
+    }
+  ],
+  "receptors": [
+    {
+      "kind": "volume_average",
+      "id": "R0",
+      "min_m": [
+        6.75,
+        1.25,
+        2.75
+      ],
+      "max_m": [
+        7.25,
+        1.75,
+        3.25
+      ]
+    },
+    {
+      "kind": "volume_average",
+      "id": "R1",
+      "min_m": [
+        6.75,
+        2.75,
+        2.75
+      ],
+      "max_m": [
+        7.25,
+        3.25,
+        3.25
+      ]
+    },
+    {
+      "kind": "volume_average",
+      "id": "R2",
+      "min_m": [
+        6.75,
+        4.25,
+        2.75
+      ],
+      "max_m": [
+        7.25,
+        4.75,
+        3.25
+      ]
+    },
+    {
+      "kind": "volume_average",
+      "id": "R3",
+      "min_m": [
+        11.75,
+        1.25,
+        2.75
+      ],
+      "max_m": [
+        12.25,
+        1.75,
+        3.25
+      ]
+    },
+    {
+      "kind": "volume_average",
+      "id": "R4",
+      "min_m": [
+        11.75,
+        2.75,
+        2.75
+      ],
+      "max_m": [
+        12.25,
+        3.25,
+        3.25
+      ]
+    },
+    {
+      "kind": "volume_average",
+      "id": "R5",
+      "min_m": [
+        11.75,
+        4.25,
+        2.75
+      ],
+      "max_m": [
+        12.25,
+        4.75,
+        3.25
+      ]
+    }
+  ],
+  "numerics": {
+    "transport": "linear_upwind",
+    "max_time_step_s": 0.1,
+    "advective_cfl_max": 0.4,
+    "pressure_relative_tolerance": 1e-10,
+    "pressure_max_iterations": 1200,
+    "steady_residual_tolerance": 1e-05,
+    "steady_monitor_tolerance": 0.001,
+    "monitor_window": 30
+  },
+  "run": {
+    "mode": "steady",
+    "end_time_s": 2.0,
+    "max_steps": 6000,
+    "wall_time_limit_s": 120.0,
+    "threads": 2,
+    "memory_limit_mib": 1024
+  },
+  "output": {
+    "fields": true,
+    "checkpoint": true,
+    "max_total_mib": 64
+  }
+}

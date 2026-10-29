@@ -1,6 +1,6 @@
 # Recorded verification results
 
-These numbers were produced by the commands given with each table, from the source fingerprint `cfc443292d5030baa9b6ba444cbbadadeb4bc266eaa843e4d75c6cbc9bb2a6ff` (`cfd-craft describe`), built with rustc 1.97.0 on Linux x86_64 with two cores, Python 3.12, NumPy 2.5.4 and SciPy 1.18.1. Rerun the commands and read the reports rather than treating these values as targets; wall times depend on the machine.
+These numbers were produced by the commands given with each table, from the source fingerprint `cf389faa8b2127e2e1716df0b9fc718b5f46df6e398f5500c9b942397774dc5e` (`cfd-craft describe`), built with rustc 1.97.0 on Linux x86_64 with two cores, Python 3.12, NumPy 2.5.4 and SciPy 1.18.1. Rerun the commands and read the reports rather than treating these values as targets; wall times depend on the machine.
 
 This is a tested research prototype. Experimental urban validation is blocked by data access, and the canyon resolution study does not finish within its budgets (see the last section).
 
@@ -8,8 +8,8 @@ This is a tested research prototype. Experimental urban validation is blocked by
 
 | Check | Result | Command |
 |---|---|---|
-| Rust regressions | 25 passed (rustc 1.97 here; CI runs 1.88.0 and stable) | `cargo test --release --workspace --locked` |
-| CLI and independent-checker boundaries | 25 passed, also under `python -O` | `python validation/test_cli.py` |
+| Rust regressions | 30 passed (rustc 1.97 here; CI runs 1.88.0 and stable) | `cargo test --release --workspace --locked` |
+| CLI, launcher and independent-checker boundaries | 34 passed, also under `python -O` | `python validation/test_cli.py` |
 | Periodic shear spatial / temporal order | 1.9972 / 2.0102 | `python validation/flow_accuracy.py` |
 | 3D Gaussian transport, relative L2 errors at 24, 36, 48 cells | 0.0595233, 0.0265493, 0.0136076; order 2.32 for the finest pair (gate: at least 1.8) | `python validation/run_suite.py` |
 | The same at 48, 72, 96 cells | 0.0136076, 0.0054900, 0.0030418; order 2.05 | `python validation/run_suite.py --preset study` |
@@ -48,12 +48,12 @@ The baseline objective was 1.8682465; the selected BiteOpt and GP values were 1.
 
 ## Open gates
 
-`python tutorials/canyon_study.py --preset study` adds the W/H = 1 case on finer grids. Neither finished within its 300-second budget, so there is no grid-convergence result or GCI:
+`python tutorials/canyon_study.py --preset study` adds the W/H = 1 case on finer grids. Neither finished within its 300-second budget, so there is no grid-convergence result or GCI. The script runs two two-thread solves at a time, so on this two-core machine the two grids shared the cores; the steps reached depend on the machine:
 
 | Grid | Cells | Steps reached | Pseudo-time reached (s) | Momentum residual |
 |---|---:|---:|---:|---:|
-| 36x32x24 | 27,328 fluid | 1535 | 14.85 | 4.5e-03 |
-| 54x48x36 | 92,232 fluid | 304 | 1.42 | 0.14 |
+| 36x32x24 | 27,328 fluid | 1559 | 15.08 | 4.4e-03 |
+| 54x48x36 | 92,232 fluid | 306 | 1.43 | 0.13 |
 
 The coarse grid needed about 120 s of pseudo-time to reach a steady state. The [roadmap](../docs/roadmap.md) lists the throughput work this requires.
 

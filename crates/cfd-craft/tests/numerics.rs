@@ -155,7 +155,11 @@ fn closed_pressure_checks_the_compatible_rhs() {
             1e-12 * (2.0 * std::f64::consts::PI * g.center(i)[0] / c.domain.size_m[0]).sin() + 1e-16
         })
         .collect();
-    let (x, info) = pressure::solve(&g, &b, 1e-11, 1200, &Control::new(20.)).unwrap();
+    // The 1e-16 offset is round-off of unit-sized flux terms, so it is compatible
+    // relative to that scale (not relative to the 1e-12 signal alone).
+    let terms = vec![1.0; g.count()];
+    let (x, info) =
+        pressure::solve_scaled(&g, &b, Some(&terms), 1e-11, 1200, &Control::new(20.)).unwrap();
     assert!(info.relative_residual < 1e-10);
     let mut rhs = b.clone();
     pressure::center_nullspaces(&g, &mut rhs);

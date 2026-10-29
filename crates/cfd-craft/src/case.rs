@@ -206,6 +206,14 @@ impl Source {
             | Self::Volume { constituent, .. } => constituent,
         }
     }
+    /// The rate field as declared, with its name (per second, per meter or per cubic meter).
+    pub fn declared_rate(&self) -> (&'static str, f64) {
+        match self {
+            Self::Point { rate_kg_s, .. } => ("rate_kg_s", *rate_kg_s),
+            Self::Line { rate_kg_s_m, .. } => ("rate_kg_s_m", *rate_kg_s_m),
+            Self::Volume { rate_kg_s_m3, .. } => ("rate_kg_s_m3", *rate_kg_s_m3),
+        }
+    }
     pub fn rate(&self) -> f64 {
         match self {
             Self::Point { rate_kg_s, .. } => *rate_kg_s,
@@ -346,16 +354,40 @@ impl Case {
             .iter()
             .try_fold(1usize, |x, n| x.checked_mul(*n))
             .unwrap_or(usize::MAX);
-        let peak = (cells as f64) * (768.0 + 96.0 * self.constituents.len() as f64) * 1.25
-            / 1048576.0
-            + 16.0;
+        let species = self.constituents.len() as f64;
+        // Volume receptors keep sparse (cell, weight) pairs; Vec growth can double them.
+        let receptor_bytes: f64 = self
+            .receptors
+            .iter()
+            .map(|r| match r {
+                Receptor::Point { .. } => 8.0 * 16.0,
+                Receptor::VolumeAverage { min_m, max_m, .. } => {
+                    32.0 * self.covered_cells(min_m, max_m)
+                }
+            })
+            .sum();
+        // One dense weight vector exists while each source is represented.
+        let source_bytes = if self.sources.is_empty() {
+            0.0
+        } else {
+            8.0 * cells as f64
+        };
+        let peak =
+            ((cells as f64) * (768.0 + 96.0 * species) * 1.25 + receptor_bytes + source_bytes)
+                / 1048576.0
+                + 16.0;
+        // JSON text of f64 values is at most about 24 bytes; fields hold six flow arrays
+        // (three face-velocity sets, pressure, k, epsilon) plus one array per constituent.
         let output = (cells as f64)
-            * (if self.output.fields { 220.0 } else { 0.0 }
-                + if self.output.checkpoint {
-                    200.0 + 26.0 * self.constituents.len() as f64
-                } else {
-                    0.0
-                })
+            * (if self.output.fields {
+                24.0 * (6.0 + species) + 4.0
+            } else {
+                0.0
+            } + if self.output.checkpoint {
+                26.0 * (6.0 + species) + 4.0
+            } else {
+                0.0
+            })
             / 1048576.0
             + 2.0;
         let mut d = Vec::new();
@@ -386,7 +418,7 @@ impl Case {
                 add(
                     "CFD-E003",
                     "error",
-                    "domain.size_m",
+                    &format!("domain.size_m[{a}]"),
                     "Supported lengths are 1e-6..1e9 m.",
                 );
             }
@@ -394,7 +426,7 @@ impl Case {
                 add(
                     "CFD-E004",
                     "error",
-                    "grid.cells",
+                    &format!("grid.cells[{a}]"),
                     "Each axis needs 2..4096 cells.",
                 );
             }
@@ -402,7 +434,7 @@ impl Case {
                 add(
                     "CFD-E005",
                     "error",
-                    "boundaries",
+                    &format!("boundaries.{}", ["x", "y", "z"][a]),
                     "ground_open_top is supported on z only.",
                 );
             }
@@ -423,26 +455,46 @@ impl Case {
                 "Estimated artifacts exceed the output budget.",
             );
         }
-        if self.run.threads == 0
-            || self.run.threads > 64
-            || self.run.max_steps == 0
-            || self.numerics.pressure_max_iterations == 0
-            || self.numerics.monitor_window < 2
-            || self.numerics.monitor_window > 100000
-        {
+        for (path, ok, message) in [
+            (
+                "run.threads",
+                (1..=64).contains(&self.run.threads),
+                "Use 1..64 threads.",
+            ),
+            (
+                "run.max_steps",
+                self.run.max_steps > 0,
+                "Use a nonzero step budget.",
+            ),
+            (
+                "numerics.pressure_max_iterations",
+                self.numerics.pressure_max_iterations > 0,
+                "Use a nonzero pressure iteration budget.",
+            ),
+            (
+                "numerics.monitor_window",
+                (2..=100000).contains(&self.numerics.monitor_window),
+                "Use a monitor window of 2..100000 steps.",
+            ),
+        ] {
+            if !ok {
+                add("CFD-E008", "error", path, message);
+            }
+        }
+        if self.run.wall_time_limit_s > 604800.0 {
             add(
-                "CFD-E008",
+                "CFD-E022",
                 "error",
-                "run/numerics",
-                "Threads 1..64, nonzero step/pressure budgets and monitor_window 2..100000 are required.",
+                "run.wall_time_limit_s",
+                "The wall-time limit may not exceed seven days.",
             );
         }
-        if self.run.wall_time_limit_s > 604800.0 || self.run.end_time_s > 1e12 {
+        if self.run.end_time_s > 1e12 {
             add(
-                "CFD-E008",
+                "CFD-E022",
                 "error",
-                "run",
-                "Wall limit may not exceed seven days; physical horizon may not exceed 1e12 seconds.",
+                "run.end_time_s",
+                "The physical horizon may not exceed 1e12 seconds.",
             );
         }
         for (path, x) in [
@@ -466,12 +518,12 @@ impl Case {
                 add("CFD-E009", "error", path, "Must be finite and positive.");
             }
         }
-        if !(self.numerics.advective_cfl_max > 0.0 && self.numerics.advective_cfl_max <= 0.8) {
+        if !(self.numerics.advective_cfl_max > 0.0 && self.numerics.advective_cfl_max <= 0.45) {
             add(
                 "CFD-E010",
                 "error",
                 "numerics.advective_cfl_max",
-                "Use 0 < CFL <= 0.8.",
+                "Use 0 < CFL <= 0.45; the combined advective and diffusive step allowance is capped at 0.45 for positivity.",
             );
         }
         if self.flow.rans() && self.boundaries.z != Boundary::GroundOpenTop {
@@ -480,6 +532,15 @@ impl Case {
                 "error",
                 "boundaries.z",
                 "Neutral RANS requires ground_open_top.",
+            );
+        }
+        if matches!(self.flow, Flow::Laminar { .. }) && self.boundaries.z == Boundary::GroundOpenTop
+        {
+            add(
+                "CFD-E023",
+                "error",
+                "boundaries.z",
+                "ground_open_top has an open top only with the neutral RANS stress closure; for laminar flow use wall, slip or periodic.",
             );
         }
         match &self.flow {
@@ -491,23 +552,31 @@ impl Case {
                 viscosity_m2_s,
                 turbulent_schmidt,
             } => {
-                if [
-                    *speed_m_s,
-                    *reference_height_m,
-                    *roughness_m,
-                    *viscosity_m2_s,
-                    *turbulent_schmidt,
-                ]
-                .iter()
-                .any(|x| !x.is_finite() || *x <= 0.0)
-                    || !direction_deg_from.is_finite()
-                    || *reference_height_m > self.domain.size_m[2]
-                {
+                for (path, x) in [
+                    ("flow.speed_m_s", *speed_m_s),
+                    ("flow.reference_height_m", *reference_height_m),
+                    ("flow.roughness_m", *roughness_m),
+                    ("flow.viscosity_m2_s", *viscosity_m2_s),
+                    ("flow.turbulent_schmidt", *turbulent_schmidt),
+                ] {
+                    if !x.is_finite() || x <= 0.0 {
+                        add("CFD-E012", "error", path, "Must be finite and positive.");
+                    }
+                }
+                if !direction_deg_from.is_finite() {
                     add(
                         "CFD-E012",
                         "error",
-                        "flow",
-                        "Require positive finite speed, reference height, roughness, viscosity and Schmidt number, and a reference height inside the domain.",
+                        "flow.direction_deg_from",
+                        "Must be finite.",
+                    );
+                }
+                if *reference_height_m > self.domain.size_m[2] {
+                    add(
+                        "CFD-E012",
+                        "error",
+                        "flow.reference_height_m",
+                        "The reference height must lie inside the domain.",
                     );
                 }
             }
@@ -527,20 +596,25 @@ impl Case {
                         "CFD-E012",
                         "error",
                         "flow",
-                        "Laminar viscosity must be positive; vectors must be finite.",
+                        "Laminar viscosity must be positive; initial_velocity_m_s and acceleration_m_s2 must be finite.",
                     );
                 }
             }
             Flow::PrescribedUniform { velocity_m_s } => {
                 if velocity_m_s.iter().any(|x| !x.is_finite()) {
-                    add("CFD-E012", "error", "flow", "Velocity must be finite.");
+                    add(
+                        "CFD-E012",
+                        "error",
+                        "flow.velocity_m_s",
+                        "Velocity must be finite.",
+                    );
                 }
                 if !self.geometry.is_empty() {
                     add(
                         "CFD-E013",
                         "error",
                         "geometry",
-                        "Uniform prescribed flow supports no obstacles; use the projected flow solver.",
+                        "Uniform prescribed flow supports no obstacles; use laminar or neutral_rans flow.",
                     );
                 }
                 for (a, &v) in velocity_m_s.iter().enumerate() {
@@ -551,9 +625,9 @@ impl Case {
                         )
                     {
                         add(
-                            "CFD-E013",
+                            "CFD-E024",
                             "error",
-                            "boundaries",
+                            &format!("flow.velocity_m_s[{a}]"),
                             "Prescribed velocity must have zero normal component at impermeable boundaries.",
                         );
                     }
@@ -574,7 +648,7 @@ impl Case {
         };
         let mut ids = BTreeSet::new();
         let mut wall_ids = BTreeSet::new();
-        for wall in &self.moving_walls {
+        for (i, wall) in self.moving_walls.iter().enumerate() {
             if wall.axis > 2
                 || !wall_ids.insert((wall.axis, wall.upper))
                 || wall.velocity_m_s.iter().any(|v| !v.is_finite())
@@ -586,58 +660,90 @@ impl Case {
                 add(
                     "CFD-E021",
                     "error",
-                    "moving_walls",
+                    &format!("moving_walls[{i}]"),
                     "Use unique tangential moving domain walls in laminar flow only.",
                 );
             }
         }
-        for b in &self.geometry {
-            if !ids.insert(b.id.clone()) || b.id.is_empty() || !box_ok(&b.min_m, &b.max_m) {
+        for (i, b) in self.geometry.iter().enumerate() {
+            if b.id.is_empty() || !ids.insert(b.id.clone()) {
                 add(
                     "CFD-E014",
                     "error",
-                    "geometry",
-                    "Boxes need unique nonempty IDs and increasing bounds inside the domain.",
+                    &format!("geometry[{i}].id"),
+                    "Boxes need unique nonempty IDs.",
                 );
             }
-            let h = b.max_m[2] - b.min_m[2];
-            if h / (self.domain.size_m[2] / self.grid.cells[2].max(1) as f64) < 10.0 {
+            if !box_ok(&b.min_m, &b.max_m) {
+                add(
+                    "CFD-E014",
+                    "error",
+                    &format!("geometry[{i}]"),
+                    "Box bounds must increase on every axis and lie inside the domain.",
+                );
+                continue;
+            }
+            let cells_high = (b.max_m[2] - b.min_m[2])
+                / (self.domain.size_m[2] / self.grid.cells[2].max(1) as f64);
+            if cells_high < 10.0 {
                 add(
                     "CFD-W001",
                     "warning",
-                    "geometry",
-                    "Fewer than 10 vertical cells across a building; refine before physical interpretation.",
+                    &format!("geometry[{i}]"),
+                    &format!(
+                        "Box {} spans {cells_high:.1} vertical cells; fewer than 10 across a building height is too coarse for physical interpretation.",
+                        b.id
+                    ),
                 );
             }
         }
+        if self.flow.rans() {
+            self.domain_warnings(&mut add);
+        }
         let mut species = BTreeSet::new();
-        for s in &self.constituents {
-            if s.id.is_empty()
-                || !species.insert(s.id.clone())
-                || !s.diffusivity_m2_s.is_finite()
-                || s.diffusivity_m2_s < 0.0
-            {
+        for (i, s) in self.constituents.iter().enumerate() {
+            if s.id.is_empty() || !species.insert(s.id.clone()) {
                 add(
                     "CFD-E015",
                     "error",
-                    "constituents",
-                    "Use unique IDs and finite nonnegative diffusivity.",
+                    &format!("constituents[{i}].id"),
+                    "Use unique nonempty constituent IDs.",
+                );
+            }
+            if !s.diffusivity_m2_s.is_finite() || s.diffusivity_m2_s < 0.0 {
+                add(
+                    "CFD-E015",
+                    "error",
+                    &format!("constituents[{i}].diffusivity_m2_s"),
+                    "Use a finite nonnegative diffusivity.",
                 );
             }
         }
         let mut source_ids = BTreeSet::new();
-        for s in &self.sources {
-            if !source_ids.insert(s.id().to_string())
-                || s.id().is_empty()
-                || !species.contains(s.constituent())
-                || !s.rate().is_finite()
-                || s.rate() < 0.0
-            {
+        for (i, s) in self.sources.iter().enumerate() {
+            if s.id().is_empty() || !source_ids.insert(s.id().to_string()) {
                 add(
                     "CFD-E016",
                     "error",
-                    "sources",
-                    "Source IDs, species and nonnegative finite emission rates must be valid.",
+                    &format!("sources[{i}].id"),
+                    "Use unique nonempty source IDs.",
+                );
+            }
+            if !species.contains(s.constituent()) {
+                add(
+                    "CFD-E016",
+                    "error",
+                    &format!("sources[{i}].constituent"),
+                    "The source must name a declared constituent.",
+                );
+            }
+            let (rate_field, declared) = s.declared_rate();
+            if !declared.is_finite() || declared < 0.0 {
+                add(
+                    "CFD-E016",
+                    "error",
+                    &format!("sources[{i}].{rate_field}"),
+                    "Emission rates must be finite and nonnegative.",
                 );
             }
             let ok = match s {
@@ -651,20 +757,20 @@ impl Case {
                 add(
                     "CFD-E017",
                     "error",
-                    "sources",
+                    &format!("sources[{i}]"),
                     "Source support must be nondegenerate and inside the domain.",
                 );
             }
         }
         let mut initial_species = BTreeSet::new();
-        for s in &self.initial_conditions {
+        for (i, s) in self.initial_conditions.iter().enumerate() {
             if !species.contains(s.constituent())
                 || !initial_species.insert(s.constituent().to_string())
             {
                 add(
                     "CFD-E018",
                     "error",
-                    "initial_conditions",
+                    &format!("initial_conditions[{i}].constituent"),
                     "One initial condition per declared constituent is supported.",
                 );
             }
@@ -675,10 +781,10 @@ impl Case {
                 } => {
                     if !concentration_kg_m3.is_finite() || *concentration_kg_m3 < 0.0 {
                         add(
-                            "CFD-E018",
+                            "CFD-E025",
                             "error",
-                            "initial_conditions",
-                            "Initial mass must be nonnegative and finite.",
+                            &format!("initial_conditions[{i}].concentration_kg_m3"),
+                            "Initial concentration must be nonnegative and finite.",
                         );
                     }
                 }
@@ -699,9 +805,9 @@ impl Case {
                         || (0..3).any(|a| self.boundaries.at(a) != Boundary::Periodic)
                     {
                         add(
-                            "CFD-E018",
+                            "CFD-E026",
                             "error",
-                            "initial_conditions",
+                            &format!("initial_conditions[{i}]"),
                             "Periodic Gaussian needs three periodic axes, positive sigmas/mass and a center inside the domain.",
                         );
                     }
@@ -709,12 +815,12 @@ impl Case {
             }
         }
         let mut receptor_ids = BTreeSet::new();
-        for r in &self.receptors {
+        for (i, r) in self.receptors.iter().enumerate() {
             if r.id().is_empty() || !receptor_ids.insert(r.id().to_string()) {
                 add(
                     "CFD-E019",
                     "error",
-                    "receptors",
+                    &format!("receptors[{i}].id"),
                     "Use unique, nonempty receptor IDs.",
                 );
             }
@@ -724,10 +830,10 @@ impl Case {
             };
             if !ok {
                 add(
-                    "CFD-E019",
+                    "CFD-E027",
                     "error",
-                    "receptors",
-                    "Receptor support must be inside the domain.",
+                    &format!("receptors[{i}]"),
+                    "Receptor support must be nondegenerate and inside the domain.",
                 );
             }
         }
@@ -749,6 +855,118 @@ impl Case {
             estimated_peak_mib: peak,
             estimated_output_mib: output,
             diagnostics: d,
+        }
+    }
+    /// Number of cells whose control volume intersects a box (for memory estimates).
+    fn covered_cells(&self, lo: &[f64; 3], hi: &[f64; 3]) -> f64 {
+        (0..3)
+            .map(|a| {
+                let n = self.grid.cells[a] as f64;
+                let h = self.domain.size_m[a] / n.max(1.0);
+                if !(h > 0.0 && lo[a].is_finite() && hi[a].is_finite()) {
+                    return 0.0;
+                }
+                let first = (lo[a] / h).floor().clamp(0.0, n);
+                let last = (hi[a] / h).ceil().clamp(0.0, n);
+                (last - first).max(0.0)
+            })
+            .product()
+    }
+    /// Best-practice domain warnings for RANS boundary-layer cases with buildings, following
+    /// the COST 732 guideline: about 5 H_max of clearance at the inlet, sides and top, 15 H_max
+    /// behind the buildings, and a blockage ratio below 3 %.
+    fn domain_warnings(&self, add: &mut impl FnMut(&str, &str, &str, &str)) {
+        let boxes: Vec<&Block> = self
+            .geometry
+            .iter()
+            .filter(|b| (0..3).all(|a| b.max_m[a] > b.min_m[a]))
+            .collect();
+        if boxes.is_empty() {
+            return;
+        }
+        let h = boxes.iter().map(|b| b.max_m[2]).fold(0.0, f64::max);
+        let lo: [f64; 3] =
+            std::array::from_fn(|a| boxes.iter().map(|b| b.min_m[a]).fold(f64::MAX, f64::min));
+        let hi: [f64; 3] =
+            std::array::from_fn(|a| boxes.iter().map(|b| b.max_m[a]).fold(0.0, f64::max));
+        let wind = self.flow.vector(h.max(1e-9));
+        let speed = wind[0].hypot(wind[1]).max(1e-300);
+        for (a, name) in [(0, "x"), (1, "y")] {
+            if self.boundaries.at(a) != Boundary::Open {
+                continue;
+            }
+            let along = wind[a] / speed;
+            let (upstream, downstream) = if along >= 0.0 {
+                (lo[a], self.domain.size_m[a] - hi[a])
+            } else {
+                (self.domain.size_m[a] - hi[a], lo[a])
+            };
+            let (need_up, need_down) = if along.abs() > 0.1 {
+                (5.0, 15.0)
+            } else {
+                (5.0, 5.0)
+            };
+            if upstream < need_up * h || downstream < need_down * h {
+                add(
+                    "CFD-W003",
+                    "warning",
+                    "domain.size_m",
+                    &format!(
+                        "Along {name} the buildings have {:.1} H_max upstream and {:.1} H_max downstream of clearance; the COST 732 guideline recommends about {need_up} H_max and {need_down} H_max.",
+                        upstream / h,
+                        downstream / h
+                    ),
+                );
+            }
+        }
+        if self.domain.size_m[2] - h < 5.0 * h {
+            add(
+                "CFD-W003",
+                "warning",
+                "domain.size_m[2]",
+                &format!(
+                    "The domain top is {:.1} H_max above the tallest building; the COST 732 guideline recommends about 5 H_max.",
+                    (self.domain.size_m[2] - h) / h
+                ),
+            );
+        }
+        // Frontal area for wind along x (projection onto y-z) and along y (onto x-z),
+        // as the union of box shadows, weighted by the wind components.
+        let shadow = |u: usize| -> f64 {
+            let mut edges: Vec<f64> = boxes
+                .iter()
+                .flat_map(|b| [b.min_m[u], b.max_m[u]])
+                .collect();
+            edges.sort_by(f64::total_cmp);
+            edges.dedup();
+            edges
+                .windows(2)
+                .map(|w| {
+                    let mid = 0.5 * (w[0] + w[1]);
+                    let top = boxes
+                        .iter()
+                        .filter(|b| b.min_m[u] <= mid && mid < b.max_m[u])
+                        .map(|b| b.max_m[2])
+                        .fold(0.0, f64::max);
+                    (w[1] - w[0]) * top
+                })
+                .sum()
+        };
+        let (wx, wy) = ((wind[0] / speed).abs(), (wind[1] / speed).abs());
+        let frontal = wx * shadow(1) + wy * shadow(0);
+        let section =
+            (wx * self.domain.size_m[1] + wy * self.domain.size_m[0]) * self.domain.size_m[2];
+        let blockage = frontal / section.max(1e-300);
+        if blockage > 0.03 {
+            add(
+                "CFD-W002",
+                "warning",
+                "geometry",
+                &format!(
+                    "The blockage ratio is about {:.1} %; the COST 732 guideline recommends below 3 %. Enlarge the domain cross-section.",
+                    100.0 * blockage
+                ),
+            );
         }
     }
     pub fn validate(&self) -> Result<CheckReport> {

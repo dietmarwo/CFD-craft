@@ -64,29 +64,59 @@ pub fn read_checkpoint(c: &Case, path: &Path) -> Result<State> {
     }
     Ok(s)
 }
-pub fn write_run(c: &Case, r: &RunResult, out: &Path) -> Result<()> {
-    fs::create_dir(out).map_err(|e| format!("Output must be a new directory: {e}"))?;
+/// Creates the run directory. A missing parent or an existing destination (including a
+/// dangling symlink) is an error, so the solve never starts without a place for its results.
+pub fn create_run_dir(out: &Path) -> Result<()> {
+    if fs::symlink_metadata(out).is_ok() {
+        return Err(format!("output {} already exists", out.display()));
+    }
+    fs::create_dir(out).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => format!(
+            "the parent directory of output {} does not exist",
+            out.display()
+        ),
+        _ => format!("cannot create output {}: {e}", out.display()),
+    })
+}
+
+/// Writes the artifacts into the run directory made by [`create_run_dir`]. The small
+/// artifacts are always written; fields and checkpoint are omitted, and listed in the
+/// manifest, when they would exceed the output budget. Returns the omitted names.
+pub fn write_run(c: &Case, r: &RunResult, out: &Path, input_sha256: &str) -> Result<Vec<String>> {
+    let budget = c.output.max_total_mib.saturating_mul(1048576);
     let mut files = BTreeMap::new();
+    let mut omitted = BTreeMap::new();
     let mut total = 0usize;
-    let mut put = |name: &str, bytes: Vec<u8>| -> Result<()> {
-        total = total
+    let mut put = |name: &str, bytes: Vec<u8>, optional: bool| -> Result<()> {
+        let next = total
             .checked_add(bytes.len())
             .ok_or("output length overflow")?;
-        if total > c.output.max_total_mib.saturating_mul(1048576) {
-            return Err("CFD-E061: actual output exceeded budget".into());
+        if optional && next > budget {
+            omitted.insert(
+                name.to_string(),
+                format!(
+                    "CFD-E061: {} bytes would exceed the output budget of {} MiB",
+                    bytes.len(),
+                    c.output.max_total_mib
+                ),
+            );
+            return Ok(());
         }
+        total = next;
         atomic_write(&out.join(name), &bytes)?;
         files.insert(name.to_string(), hash_bytes(&bytes));
         Ok(())
     };
-    put("case.json", serde_json::to_vec_pretty(c).unwrap())?;
+    put("case.json", serde_json::to_vec_pretty(c).unwrap(), false)?;
     put(
         "summary.json",
         serde_json::to_vec_pretty(&r.summary).unwrap(),
+        false,
     )?;
     put(
         "geometry.json",
         serde_json::to_vec_pretty(&r.geometry).unwrap(),
+        false,
     )?;
     let mut probes = String::from("constituent,receptor,concentration_kg_m3\n");
     for s in &r.summary.constituents {
@@ -95,17 +125,19 @@ pub fn write_run(c: &Case, r: &RunResult, out: &Path) -> Result<()> {
             probes.push_str(&format!("{},{},{:.17e}\n", csv(&s.id), csv(name), value));
         }
     }
-    put("probes.csv", probes.into_bytes())?;
+    put("probes.csv", probes.into_bytes(), false)?;
     if c.output.fields {
-        put("fields.json", serde_json::to_vec(&r.state).unwrap())?;
+        put("fields.json", serde_json::to_vec(&r.state).unwrap(), true)?;
     }
     if c.output.checkpoint {
-        put("checkpoint.json", checkpoint_bytes(c, &r.state)?)?;
+        put("checkpoint.json", checkpoint_bytes(c, &r.state)?, true)?;
     }
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     let executable_sha256 = hash_bytes(&fs::read(executable).map_err(|e| e.to_string())?);
+    let omitted_names: Vec<String> = omitted.keys().cloned().collect();
     let manifest = serde_json::to_vec_pretty(&serde_json::json!({
-        "schema_version":"cfd-craft.manifest/0.1","files":files,
+        "schema_version":MANIFEST_SCHEMA,"files":files,"omitted":omitted,
+        "input_case_sha256":input_sha256,
         "source_sha256":r.summary.source_sha256,"version":r.summary.build_version,
         "initial_state_sha256":r.summary.initial_state_sha256,
         "executable_sha256":executable_sha256,
@@ -120,50 +152,93 @@ pub fn write_run(c: &Case, r: &RunResult, out: &Path) -> Result<()> {
     )?;
     File::open(out)
         .and_then(|f| f.sync_all())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    Ok(omitted_names)
 }
+const MANIFEST_SCHEMA: &str = "cfd-craft.manifest/0.1";
+const ARTIFACTS: [&str; 6] = [
+    "summary.json",
+    "case.json",
+    "geometry.json",
+    "probes.csv",
+    "fields.json",
+    "checkpoint.json",
+];
 fn csv(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
+fn read_regular(path: &Path) -> Result<Vec<u8>> {
+    let meta = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if !meta.file_type().is_file() {
+        return Err(format!("{}: not a regular file", path.display()));
+    }
+    fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+/// Verifies a run directory: completion marker, manifest, every listed artifact, no
+/// unlisted entries, the artifacts the case requested, and the identities that the
+/// summary, case and manifest share.
 pub fn read_verified(out: &Path) -> Result<Summary> {
     let marker: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("complete.json")).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    let m = fs::read(out.join("manifest.json")).map_err(|e| e.to_string())?;
+        serde_json::from_slice(&read_regular(&out.join("complete.json"))?)
+            .map_err(|e| format!("complete.json: {e}"))?;
+    let m = read_regular(&out.join("manifest.json"))?;
     if marker["manifest_sha256"].as_str() != Some(&hash_bytes(&m)) {
         return Err("manifest checksum mismatch".into());
     }
-    let manifest: serde_json::Value = serde_json::from_slice(&m).map_err(|e| e.to_string())?;
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&m).map_err(|e| format!("manifest.json: {e}"))?;
+    if manifest["schema_version"] != MANIFEST_SCHEMA {
+        return Err("manifest.json: unsupported schema_version".into());
+    }
     let files = manifest["files"]
         .as_object()
         .ok_or("invalid manifest files")?;
-    if !files.contains_key("summary.json") || !files.contains_key("case.json") {
-        return Err("missing required manifest records".into());
+    let omitted = manifest
+        .get("omitted")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    for name in ["summary.json", "case.json", "geometry.json", "probes.csv"] {
+        if !files.contains_key(name) {
+            return Err(format!("manifest lacks required artifact {name}"));
+        }
     }
     for (name, sha) in files {
-        if !matches!(
-            name.as_str(),
-            "summary.json"
-                | "case.json"
-                | "geometry.json"
-                | "probes.csv"
-                | "fields.json"
-                | "checkpoint.json"
-        ) {
-            return Err("unknown artifact name".into());
+        if !ARTIFACTS.contains(&name.as_str()) {
+            return Err(format!("unknown artifact name {name}"));
         }
-        let path = out.join(name);
-        if fs::symlink_metadata(&path)
-            .map_err(|e| e.to_string())?
-            .file_type()
-            .is_symlink()
-        {
-            return Err("symlink artifact rejected".into());
-        }
-        if sha.as_str() != Some(&hash_bytes(&fs::read(path).map_err(|e| e.to_string())?)) {
+        if sha.as_str() != Some(&hash_bytes(&read_regular(&out.join(name))?)) {
             return Err(format!("{name}: checksum mismatch"));
         }
     }
-    serde_json::from_slice(&fs::read(out.join("summary.json")).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
+    for entry in fs::read_dir(out).map_err(|e| e.to_string())? {
+        let name = entry.map_err(|e| e.to_string())?.file_name();
+        let name = name.to_string_lossy();
+        if name != "manifest.json" && name != "complete.json" && !files.contains_key(&*name) {
+            return Err(format!("unlisted entry {name} in the run directory"));
+        }
+    }
+    let case: Case = serde_json::from_slice(&read_regular(&out.join("case.json"))?)
+        .map_err(|e| format!("case.json: {e}"))?;
+    for (wanted, name) in [
+        (case.output.fields, "fields.json"),
+        (case.output.checkpoint, "checkpoint.json"),
+    ] {
+        if wanted && !files.contains_key(name) && !omitted.contains_key(name) {
+            return Err(format!("{name} was requested by the case but is missing"));
+        }
+    }
+    let summary: Summary = serde_json::from_slice(&read_regular(&out.join("summary.json"))?)
+        .map_err(|e| format!("summary.json: {e}"))?;
+    if summary.case_sha256 != hash_bytes(&serde_json::to_vec(&case).unwrap())
+        || summary.physics_sha256 != case.physics_hash()
+    {
+        return Err("summary.json does not describe case.json".into());
+    }
+    if manifest["initial_state_sha256"] != summary.initial_state_sha256.as_str()
+        || manifest["source_sha256"] != summary.source_sha256.as_str()
+    {
+        return Err("manifest.json and summary.json disagree on identity".into());
+    }
+    Ok(summary)
 }

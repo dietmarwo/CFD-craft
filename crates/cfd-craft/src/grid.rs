@@ -1,6 +1,6 @@
 use crate::{Result, case::*};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaceKind {
@@ -35,6 +35,7 @@ pub struct Grid {
     pub anchored: Vec<bool>,
     pub face_dims: [[usize; 3]; 3],
     offsets: [usize; 3],
+    pub box_cells: BTreeMap<String, usize>,
     pub pressure_factor: std::sync::OnceLock<crate::pressure::Factor>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -44,6 +45,8 @@ pub struct GeometryEvidence {
     pub fluid_components: usize,
     pub solid_volume_m3: f64,
     pub mask_sha256: String,
+    /// Cells whose center lies inside each box, by box ID; overlapping boxes share cells.
+    pub box_cells: BTreeMap<String, usize>,
 }
 impl Grid {
     pub fn count(&self) -> usize {
@@ -81,15 +84,33 @@ impl Grid {
             anchored: vec![],
             face_dims: [n; 3],
             offsets: [0; 3],
+            box_cells: BTreeMap::new(),
             pressure_factor: std::sync::OnceLock::new(),
         };
+        let mut box_cells = vec![0usize; c.geometry.len()];
         for i in 0..count {
             let p = g.center(i);
-            g.fluid[i] = !c
-                .geometry
-                .iter()
-                .any(|b| (0..3).all(|a| p[a] >= b.min_m[a] && p[a] < b.max_m[a]));
+            for (b, n) in c.geometry.iter().zip(box_cells.iter_mut()) {
+                if (0..3).all(|a| p[a] >= b.min_m[a] && p[a] < b.max_m[a]) {
+                    g.fluid[i] = false;
+                    *n += 1;
+                }
+            }
         }
+        for (b, n) in c.geometry.iter().zip(&box_cells) {
+            if *n == 0 {
+                return Err(format!(
+                    "CFD-E028: box {} contains no cell center, so the grid does not represent it; enlarge it or refine the grid",
+                    b.id
+                ));
+            }
+        }
+        g.box_cells = c
+            .geometry
+            .iter()
+            .map(|b| b.id.clone())
+            .zip(box_cells)
+            .collect();
         if !g.fluid.iter().any(|b| *b) {
             return Err("CFD-E030: geometry contains no fluid cells".into());
         }
@@ -225,6 +246,7 @@ impl Grid {
             fluid_components: self.components.len(),
             solid_volume_m3: (self.count() - fluid_cells) as f64 * self.volume,
             mask_sha256: hash_bytes(&self.fluid.iter().map(|v| u8::from(*v)).collect::<Vec<_>>()),
+            box_cells: self.box_cells.clone(),
         }
     }
     pub fn face_at(&self, c: &Case, a: usize, mut q: [isize; 3]) -> Option<usize> {

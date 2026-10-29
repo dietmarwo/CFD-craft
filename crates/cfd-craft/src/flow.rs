@@ -230,6 +230,9 @@ pub fn production(
                 .flat_map(|a| (0..3).map(move |d| 0.5 * (grad[a][d] + grad[d][a]).powi(2)))
                 .sum::<f64>();
         if let Flow::NeutralRans { roughness_m, .. } = &c.flow {
+            // A cell with several wall faces (a canyon floor corner) averages the wall
+            // production and dissipation over those faces, with equal weights.
+            let (mut p_sum, mut eps_sum, mut walls) = (0.0, 0.0, 0usize);
             for d in 0..3 {
                 for side in 0..2 {
                     let f = &g.faces[g.cell_faces[i][d][side]];
@@ -252,9 +255,14 @@ pub fn production(
                     // High-Re wall epsilon follows k, including stagnating wall cells.
                     // Using wall speed cubed here would collapse epsilon while k stays finite.
                     let ep = C_MU.powf(0.75) * k[i].max(1e-14).powf(1.5) / (0.4 * distance);
-                    p[i] = us * us * C_MU.powf(0.25) * k[i].max(1e-14).sqrt() / (0.4 * distance);
-                    eps_wall[i] = Some(ep.max(1e-14));
+                    p_sum += us * us * C_MU.powf(0.25) * k[i].max(1e-14).sqrt() / (0.4 * distance);
+                    eps_sum += ep.max(1e-14);
+                    walls += 1;
                 }
+            }
+            if walls > 0 {
+                p[i] = p_sum / walls as f64;
+                eps_wall[i] = Some(eps_sum / walls as f64);
             }
         }
     }

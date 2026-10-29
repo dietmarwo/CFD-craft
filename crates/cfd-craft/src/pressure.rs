@@ -120,10 +120,27 @@ pub fn solve(
     max: usize,
     control: &Control,
 ) -> Result<(Vec<f64>, LinearInfo)> {
+    solve_scaled(g, b, None, tol, max, control)
+}
+/// Solves the pressure equation. A closed fluid component must have a compatible
+/// right-hand side: its net flux must be round-off relative to `roundoff_scale` (per cell,
+/// the magnitude of the terms that formed `b`) or, without a scale, relative to `|b|`.
+/// There is no absolute floor, so a small but entirely incompatible system is rejected.
+pub fn solve_scaled(
+    g: &Grid,
+    b: &[f64],
+    roundoff_scale: Option<&[f64]>,
+    tol: f64,
+    max: usize,
+    control: &Control,
+) -> Result<(Vec<f64>, LinearInfo)> {
     for (id, m) in g.components.iter().enumerate() {
         if !g.anchored[id] {
             let sum = m.iter().map(|i| b[*i]).sum::<f64>();
-            let scale = m.iter().map(|i| b[*i].abs()).sum::<f64>().max(1.0);
+            let scale = m
+                .iter()
+                .map(|i| b[*i].abs().max(roundoff_scale.map_or(0.0, |s| s[*i])))
+                .sum::<f64>();
             if sum.abs() > 1e-9 * scale {
                 return Err("CFD-E031: incompatible flux in a closed fluid component".into());
             }
@@ -204,7 +221,22 @@ pub fn project(
     control: &Control,
 ) -> Result<LinearInfo> {
     let b: Vec<_> = g.divergence(u).iter().map(|x| -x / dt).collect();
-    let (correction, info) = solve(g, &b, tol, max, control)?;
+    // Round-off in a divergence scales with the face velocities it differences.
+    let terms: Vec<f64> = (0..g.count())
+        .map(|i| {
+            if !g.fluid[i] {
+                return 0.0;
+            }
+            (0..3)
+                .map(|a| {
+                    let [lo, hi] = g.cell_faces[i][a];
+                    (u[lo].abs() + u[hi].abs()) / g.dx[a]
+                })
+                .sum::<f64>()
+                / dt
+        })
+        .collect();
+    let (correction, info) = solve_scaled(g, &b, Some(&terms), tol, max, control)?;
     let grad = g.gradient(&correction);
     for (v, d) in u.iter_mut().zip(grad) {
         *v -= dt * d;

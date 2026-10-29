@@ -10,9 +10,9 @@
   },
   "grid": {
     "cells": [
-      36,
-      40,
-      16
+      18,
+      16,
+      12
     ]
   },
   "boundaries": {
@@ -60,7 +60,7 @@
   "constituents": [
     {
       "id": "tracer",
-      "diffusivity_m2_s": 0.05
+      "diffusivity_m2_s": 1.5e-05
     }
   ],
   "initial_conditions": [],
@@ -133,9 +133,9 @@
   "run": {
     "mode": "steady",
     "end_time_s": 100.0,
-    "max_steps": 6000,
+    "max_steps": 7000,
     "wall_time_limit_s": 240.0,
-    "threads": 4,
+    "threads": 2,
     "memory_limit_mib": 1024
   },
   "output": {

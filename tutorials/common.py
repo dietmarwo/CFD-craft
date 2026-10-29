@@ -8,7 +8,17 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "validation"))
-from check_fields import check, require
+from check_fields import check, require  # noqa: F401 (re-exported to the scripts)
+
+
+def receptor_values(record, case):
+    """Receptor values of the first constituent, in the case's receptor order.
+
+    The summary stores receptors by ID in sorted order (R10 before R2), so values
+    must be looked up by ID rather than taken in stored order.
+    """
+    stored = record["summary"]["constituents"][0]["receptors_kg_m3"]
+    return [stored[r["id"]] for r in case["receptors"]]
 
 
 def run_case(binary, case, destination, restart=None):
@@ -34,7 +44,7 @@ def run_case(binary, case, destination, restart=None):
     if (destination / "fields.json").exists():
         try:
             audit = check(destination)
-        except (ValueError, OSError, KeyError) as exc:
+        except (ValueError, OSError, KeyError, IndexError, TypeError) as exc:
             audit = dict(passed=False, error=str(exc))
     return dict(
         case=case["name"],

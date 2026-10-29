@@ -20,7 +20,9 @@ def gaussian_reference(c, t):
     u = c["flow"]["velocity_m_s"]
     diffusivity = c["constituents"][0]["diffusivity_m2_s"]
     dimensions = []
-    for a, (length, n) in enumerate(zip(c["domain"]["size_m"], c["grid"]["cells"])):
+    for a, (length, n) in enumerate(
+        zip(c["domain"]["size_m"], c["grid"]["cells"], strict=True)
+    ):
         h = length / n
         x = np.arange(n) * h
         sigma = math.sqrt(init["sigma_m"][a] ** 2 + 2 * diffusivity * t)
@@ -52,6 +54,10 @@ def main():
         base = json.loads(
             (ROOT / "cases/verification/periodic-tracer.json").read_text()
         )
+        require(
+            base["numerics"]["transport"] == "muscl",
+            "the Gaussian order gate verifies the MUSCL/SSPRK2 transport",
+        )
         errors = []
         sizes = [24, 36, 48] if args.preset == "smoke" else [48, 72, 96]
         for nx in sizes:
@@ -73,12 +79,16 @@ def main():
             "Gaussian refinement does not reduce error",
         )
         order = math.log(errors[1] / errors[2]) / math.log(sizes[2] / sizes[1])
+        # The scheme is nominally second order; 1.8 leaves room for limiter clipping
+        # and matches the flow-accuracy target.
         report["gaussian"] = dict(
             sizes=sizes,
             relative_l2_errors=errors,
             observed_order_last_pair=order,
+            order_min=1.8,
             scope="MUSCL/SSPRK2 transport on a periodic 3D Gaussian; observed order, not assumed",
         )
+        require(order >= 1.8, "Gaussian transport order below the second-order target")
         p = json.loads((ROOT / "cases/verification/poiseuille.json").read_text())
         r = run_case(args.binary, p, args.output / "poiseuille")
         records.append(r)
@@ -126,12 +136,24 @@ def main():
             float(max(abs(v[selected] / ref[selected] - 1)))
             for v, ref in [(uu, U), (kk, K), (ee, E)]
         ]
+        thresholds = [0.02, 0.05, 0.05]
+        # Below H the wall function and the central velocity gradient of the second
+        # cell shape the profile; it is reported, not gated.
+        below = z < f["reference_height_m"]
         report["empty_abl"] = dict(
             region_z_m=[f["reference_height_m"], 5 * f["reference_height_m"]],
             fetch_x_m=(nx - 1.5) * p["domain"]["size_m"][0] / nx,
             max_relative_drift_U_k_epsilon=drifts,
-            thresholds=[0.02, 0.05, 0.05],
-            passed=all(a <= b for a, b in zip(drifts, [0.02, 0.05, 0.05])),
+            thresholds=thresholds,
+            passed=all(a <= b for a, b in zip(drifts, thresholds, strict=True)),
+            below_reference_height=dict(
+                cells=int(below.sum()),
+                max_relative_drift_U_k_epsilon=[
+                    float(max(abs(v[below] / ref[below] - 1)))
+                    for v, ref in [(uu, U), (kk, K), (ee, E)]
+                ],
+                gated=False,
+            ),
         )
         require(report["empty_abl"]["passed"], "Empty ABL homogeneity gate failed")
         import matplotlib
@@ -141,7 +163,11 @@ def main():
 
         fig, axes = plt.subplots(1, 3, figsize=(10, 4))
         for ax, v, ref, label in zip(
-            axes, [uu, kk, ee], [U, K, E], ["U (m/s)", "k (m2/s2)", "epsilon (m2/s3)"]
+            axes,
+            [uu, kk, ee],
+            [U, K, E],
+            ["U (m/s)", "k (m2/s2)", "epsilon (m2/s3)"],
+            strict=True,
         ):
             ax.plot(ref, z, label="Inlet reference")
             ax.plot(v, z, "--", label="Near outlet")

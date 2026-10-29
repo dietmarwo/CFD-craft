@@ -24,7 +24,7 @@ def main():
         count * (180 + 26 * len(c["constituents"])) < args.max_mib * 1048576,
         "estimated VTK output exceeds budget",
     )
-    dx = [L / N for L, N in zip(c["domain"]["size_m"], n)]
+    dx = [L / N for L, N in zip(c["domain"]["size_m"], n, strict=True)]
     face = []
     offset = 0
     for a in range(3):
@@ -40,13 +40,15 @@ def main():
         for j in range(n[1]):
             for i in range(n[0]):
                 q = [i, j, k]
-                p = [(v + 0.5) * h for v, h in zip(q, dx)]
+                p = [(v + 0.5) * h for v, h in zip(q, dx, strict=True)]
                 mask.append(
                     int(
                         not any(
                             all(
                                 lo <= v < hi
-                                for lo, v, hi in zip(b["min_m"], p, b["max_m"])
+                                for lo, v, hi in zip(
+                                    b["min_m"], p, b["max_m"], strict=True
+                                )
                             )
                             for b in c["geometry"]
                         )
@@ -86,7 +88,7 @@ def main():
     add(data, "pressure_kinematic_m2_s2", s["pressure"])
     add(data, "k_m2_s2", s["k"])
     add(data, "epsilon_m2_s3", s["epsilon"])
-    for constituent, values in zip(c["constituents"], s["concentrations"]):
+    for constituent, values in zip(c["constituents"], s["concentrations"], strict=True):
         add(data, constituent["id"] + "_kg_m3", values)
     coordinates = ET.SubElement(piece, "Coordinates")
     for a in range(3):

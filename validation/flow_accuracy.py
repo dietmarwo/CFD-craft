@@ -50,7 +50,6 @@ def main():
             state["steps"] = 0
             state["monitor_history"] = []
             velocity = []
-            dims = [2, 2, n]
             for a in range(3):
                 for k in range(n):
                     for j in range(2):

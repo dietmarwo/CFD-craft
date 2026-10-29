@@ -8,11 +8,7 @@ import json
 from pathlib import Path
 import numpy as np
 from scipy.optimize import nnls
-from common import ROOT, run_case, accepted, write_report, require
-
-
-def values(r):
-    return np.array(list(r["summary"]["constituents"][0]["receptors_kg_m3"].values()))
+from common import ROOT, run_case, accepted, write_report, require, receptor_values
 
 
 def main():
@@ -38,17 +34,17 @@ def main():
             r = run_case(args.binary, c, args.output / f"source-{i}")
             records.append(r)
             require(accepted(r), f"unit-source {i} did not converge/pass")
-            columns.append(values(r))
+            columns.append(np.array(receptor_values(r, case)))
         G = np.array(columns).T
         rates = np.array([0.7, 1.3, 0.9])
         combined = copy.deepcopy(case)
         combined["name"] = "combined-truth"
-        for s, q in zip(combined["sources"], rates):
+        for s, q in zip(combined["sources"], rates, strict=True):
             s["rate_kg_s_m3"] *= float(q)
         r = run_case(args.binary, combined, args.output / "combined")
         records.append(r)
         require(accepted(r), "combined solve")
-        y = values(r)
+        y = np.array(receptor_values(r, case))
         defect = float(np.linalg.norm(G @ rates - y) / np.linalg.norm(y))
         require(
             defect < 1e-4, "source superposition beyond declared steady-solve error"
@@ -106,7 +102,7 @@ def main():
         r = run_case(args.binary, mismatch, args.output / "mismatch")
         records.append(r)
         require(accepted(r), "mismatch solve")
-        noisy = values(r)
+        noisy = np.array(receptor_values(r, case))
         altered_fit, _ = nnls(G[train], noisy[train])
         report["model_mismatch"] = dict(
             fitted_rate_multipliers=altered_fit.tolist(),

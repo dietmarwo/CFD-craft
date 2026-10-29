@@ -55,15 +55,19 @@ def evaluate(protocol, observations, predictions):
             mean_o > 0 and mean_p > 0, "zero-mean group cannot support these metrics"
         )
         fb = 2 * (mean_o - mean_p) / (mean_o + mean_p)
-        nmse = math.fsum((x - y) ** 2 for x, y in zip(a, b)) / n / (mean_o * mean_p)
+        nmse = (
+            math.fsum((x - y) ** 2 for x, y in zip(a, b, strict=True))
+            / n
+            / (mean_o * mean_p)
+        )
         # Zero observations are counted separately, never divided by zero.
-        positive = [(x, y) for x, y in zip(a, b) if x > 0]
+        positive = [(x, y) for x, y in zip(a, b, strict=True) if x > 0]
         fac2 = (
             math.fsum(0.5 <= y / x <= 2 for x, y in positive) / len(positive)
             if positive
             else None
         )
-        nmae = math.fsum(abs(x - y) for x, y in zip(a, b)) / math.fsum(a)
+        nmae = math.fsum(abs(x - y) for x, y in zip(a, b, strict=True)) / math.fsum(a)
         passed = (
             abs(fb) <= t["abs_fb_max"]
             and nmse <= t["nmse_max"]

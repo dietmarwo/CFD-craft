@@ -177,11 +177,10 @@ def main():
                 result.get("completed_tasks") == result.get("requested_tasks"),
                 "incomplete optimizer tasks",
             )
-            require(
-                result.get("known_work_lower_bound", {}).get("failed_evaluations", 0)
-                == 0,
-                "CFD evaluation failure",
-            )
+            work = result["known_work_lower_bound"]
+            for counter in ["failed_evaluations", "cancelled_evaluations"]:
+                require(counter in work, f"result lacks {counter}")
+                require(work[counter] == 0, f"CFD {counter}: {work[counter]}")
         report["passed"] = True
         report["interpretation"] = (
             "runner execution and optimizer outcomes; CFD numerical checks are inside each fallible simulation; no CFD claim added to optimization.result"

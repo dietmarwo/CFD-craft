@@ -2,9 +2,10 @@
 """End-to-end boundaries and independent checker fault injection."""
 
 import argparse
-import copy
 import hashlib
 import json
+import math
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -45,6 +46,40 @@ class Boundaries(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         return self.root / "out"
 
+    def canyon(self):
+        case = json.loads((ROOT / "cases/canyon/wh1-wind270.json").read_text())
+        case["grid"]["cells"] = [18, 16, 12]
+        return case
+
+    def diagnostics(self, p):
+        return [
+            (d["code"], d["path"]) for d in json.loads(p.stdout)["check"]["diagnostics"]
+        ]
+
+    def reseal(self, out):
+        manifest = json.loads((out / "manifest.json").read_text())
+        for name in manifest["files"]:
+            manifest["files"][name] = hashlib.sha256(
+                (out / name).read_bytes()
+            ).hexdigest()
+        (out / "manifest.json").write_text(json.dumps(manifest))
+        (out / "complete.json").write_text(
+            json.dumps(
+                dict(
+                    manifest_sha256=hashlib.sha256(
+                        (out / "manifest.json").read_bytes()
+                    ).hexdigest()
+                )
+            )
+        )
+
+    def checker(self, out, flag):
+        return subprocess.run(
+            [sys.executable, *flag, str(ROOT / "validation/check_fields.py"), str(out)],
+            capture_output=True,
+            text=True,
+        )
+
     def test_describe_schemas_cover_case_and_result(self):
         import jsonschema
 
@@ -67,8 +102,89 @@ class Boundaries(unittest.TestCase):
     def test_memory_rejected_before_allocation(self):
         self.case["run"]["memory_limit_mib"] = 1
         p = self.invoke("check", self.save())
-        self.assertEqual(p.returncode, 2)
-        self.assertIn("CFD-E006", p.stdout)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(("CFD-E006", "run.memory_limit_mib"), self.diagnostics(p))
+
+    def test_invalid_input_has_one_exit_code_and_a_report(self):
+        self.case["numerics"]["advective_cfl_max"] = 0.9
+        out = self.root / "never"
+        for p in [
+            self.invoke("check", self.save()),
+            self.invoke("run", self.save(), "--output", out),
+        ]:
+            self.assertEqual(p.returncode, 1, p.stderr)
+            self.assertIn(
+                ("CFD-E010", "numerics.advective_cfl_max"), self.diagnostics(p)
+            )
+        self.assertFalse(out.exists())
+
+    def test_parse_errors_carry_a_code_and_path(self):
+        self.case["receptors"][0]["extra"] = 1
+        p = self.invoke("check", self.save())
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(self.diagnostics(p), [("CFD-E000", "receptors[0]")])
+
+    def test_each_problem_names_its_element(self):
+        self.case = self.canyon()
+        self.case["geometry"].append(
+            dict(id="thin", min_m=[10.0, 3.0, 0.0], max_m=[10.01, 13.0, 1.0])
+        )
+        self.case["receptors"].append(
+            dict(kind="point", id="inside", point_m=[5.5, 8.0, 0.4])
+        )
+        p = self.invoke("check", self.save())
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(("CFD-E028", "geometry[2]"), self.diagnostics(p))
+        del self.case["geometry"][2]
+        p = self.invoke("check", self.save())
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(("CFD-E042", "receptors[4]"), self.diagnostics(p))
+        warnings = [d for d in self.diagnostics(p) if d[0] == "CFD-W001"]
+        self.assertEqual(
+            warnings, [("CFD-W001", "geometry[0]"), ("CFD-W001", "geometry[1]")]
+        )
+
+    def test_missing_output_parent_fails_before_solving(self):
+        self.case = self.canyon()
+        start = time.monotonic()
+        p = self.invoke("run", self.save(), "--output", self.root / "missing" / "out")
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("parent directory", p.stderr)
+        # The canyon solve takes tens of seconds; the refusal must come first.
+        self.assertLess(time.monotonic() - start, 5.0)
+
+    def test_output_estimate_counts_constituents(self):
+        self.case["grid"]["cells"] = [32, 32, 32]
+        self.case["output"]["max_total_mib"] = 10
+        base = self.case["constituents"][0]
+        for i in range(15):
+            self.case["constituents"].append(dict(base, id=f"extra{i}"))
+        p = self.invoke("check", self.save())
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(("CFD-E007", "output.max_total_mib"), self.diagnostics(p))
+
+    def test_closed_stdout_is_not_a_crash(self):
+        read, write = os.pipe()
+        os.close(read)
+        try:
+            p = subprocess.run([str(BIN), "describe"], stdout=write, timeout=20)
+        finally:
+            os.close(write)
+        self.assertEqual(p.returncode, 0)
+
+    def test_report_rejects_inconsistent_archives(self):
+        out = self.run_case()
+        self.assertEqual(self.invoke("report", out).returncode, 0)
+        (out / "notes.txt").write_text("unlisted")
+        self.assertNotEqual(self.invoke("report", out).returncode, 0)
+        (out / "notes.txt").unlink()
+        case = json.loads((out / "case.json").read_text())
+        case["constituents"][0]["diffusivity_m2_s"] *= 2
+        (out / "case.json").write_text(json.dumps(case))
+        self.reseal(out)
+        p = self.invoke("report", out)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("does not describe case.json", p.stderr)
 
     def test_unbounded_initialization_rejected(self):
         self.case["initial_conditions"][0]["sigma_m"][0] = 1e200
@@ -153,6 +269,63 @@ class Boundaries(unittest.TestCase):
                 text=True,
             )
             self.assertNotEqual(p.returncode, 0)
+
+    def test_independent_checker_rejects_resealed_omissions(self):
+        def drop_scalars(fields, summary):
+            fields["concentrations"] = []
+            fields["budgets"] = []
+
+        def scale_receptor(fields, summary):
+            summary["constituents"][0]["receptors_kg_m3"]["R1"] *= 100
+
+        def nan_face(fields, summary):
+            fields["velocity"][3] = math.nan
+
+        def triple_velocity(fields, summary):
+            fields["velocity"] = [3 * v for v in fields["velocity"]]
+
+        def drop_rate(fields, summary):
+            del summary["constituents"][0]["source_rate_kg_s"]
+
+        def inflate_speed_scale(fields, summary):
+            summary["velocity_max_m_s"] = 1e5
+            fields["velocity"][0] += 1e-3
+
+        for mutate in [
+            drop_scalars,
+            scale_receptor,
+            nan_face,
+            triple_velocity,
+            drop_rate,
+            inflate_speed_scale,
+        ]:
+            out = self.root / mutate.__name__
+            p = self.invoke("run", self.save(), "--output", out)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            fields = json.loads((out / "fields.json").read_text())
+            summary = json.loads((out / "summary.json").read_text())
+            mutate(fields, summary)
+            (out / "fields.json").write_text(json.dumps(fields))
+            (out / "summary.json").write_text(json.dumps(summary))
+            self.reseal(out)
+            for flag in [[], ["-O"]]:
+                p = self.checker(out, flag)
+                self.assertNotEqual(p.returncode, 0, (mutate.__name__, p.stdout))
+                self.assertFalse(json.loads(p.stdout)["passed"])
+
+    def test_independent_checker_rejects_resealed_rans_fields(self):
+        self.case = self.canyon()
+        self.case["run"]["max_steps"] = 5
+        out = self.root / "rans"
+        p = self.invoke("run", self.save(), "--output", out)
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertEqual(self.checker(out, []).returncode, 0)
+        fields = json.loads((out / "fields.json").read_text())
+        fields["k"] = [-v for v in fields["k"]]
+        (out / "fields.json").write_text(json.dumps(fields))
+        self.reseal(out)
+        for flag in [[], ["-O"]]:
+            self.assertNotEqual(self.checker(out, flag).returncode, 0)
 
     def test_wall_time_retains_failure_evidence(self):
         self.case = json.loads((ROOT / "cases/canyon/wh1-wind270.json").read_text())

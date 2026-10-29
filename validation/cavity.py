@@ -56,19 +56,22 @@ def main():
             "cavity profile differs from benchmark beyond fixed coarse-grid tolerance",
         )
         report["passed"] = True
-        import matplotlib
+        try:
+            import matplotlib
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(4, 4))
-        ax.plot(u, z, label="CFD-craft")
-        ax.plot(stations[:, 1], stations[:, 0], "x", label="Ghia Re=100")
-        ax.set(xlabel="U / lid speed", ylabel="z / H")
-        ax.legend()
-        fig.tight_layout()
-        fig.savefig(args.output / "cavity.png", dpi=150)
-        plt.close(fig)
+            fig, ax = plt.subplots(figsize=(4, 4))
+            ax.plot(u, z, label="CFD-craft")
+            ax.plot(stations[:, 1], stations[:, 0], "x", label="Ghia Re=100")
+            ax.set(xlabel="U / lid speed", ylabel="z / H")
+            ax.legend()
+            fig.tight_layout()
+            fig.savefig(args.output / "cavity.png", dpi=150)
+            plt.close(fig)
+        except Exception as e:  # A figure is not evidence; record why it is missing.
+            report["figure_error"] = str(e)
     except Exception as e:
         report["error"] = str(e)
     finally:

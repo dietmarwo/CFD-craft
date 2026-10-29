@@ -58,7 +58,7 @@ def base(name="transport", cells=(24, 12, 12)):
     )
 
 
-def canyon(aspect=1.0, direction=270.0, cells=(36, 40, 16), name=None):
+def canyon(aspect=1.0, direction=270.0, cells=(18, 16, 12), name=None):
     c = base(name or f"canyon-wh{aspect:g}-wind{direction:g}", cells)
     c["domain"]["size_m"] = [18.0, 16.0, 6.0]
     c["boundaries"] = dict(x="open", y="open", z="ground_open_top")
@@ -77,6 +77,9 @@ def canyon(aspect=1.0, direction=270.0, cells=(36, 40, 16), name=None):
             id="east", min_m=[6.0 + aspect, 3.0, 0.0], max_m=[7.0 + aspect, 13.0, 1.0]
         ),
     ]
+    # A trace gas has a molecular diffusivity of order 1e-5 m2/s; turbulent mixing
+    # comes from nu_t / Sc_t, so a larger constant would mask the Schmidt number.
+    c["constituents"] = [dict(id="tracer", diffusivity_m2_s=1.5e-5)]
     c["initial_conditions"] = []
     c["sources"] = [
         dict(
@@ -96,9 +99,10 @@ def canyon(aspect=1.0, direction=270.0, cells=(36, 40, 16), name=None):
     c["run"].update(
         mode="steady",
         end_time_s=100.0,
-        max_steps=6000,
+        # A steady solution needs about 90 s of pseudo-time (ten flow-throughs).
+        max_steps=7000,
         wall_time_limit_s=240.0,
-        threads=4,
+        threads=2,
     )
     c["numerics"].update(
         max_time_step_s=0.1, transport="linear_upwind", monitor_window=40
@@ -150,7 +154,13 @@ def main():
     p["sources"] = []
     p["constituents"] = []
     p["receptors"] = []
-    p["run"].update(mode="transient", end_time_s=8.0, max_steps=10000)
+    p["run"].update(
+        mode="transient",
+        end_time_s=8.0,
+        max_steps=10000,
+        wall_time_limit_s=240.0,
+        threads=4,
+    )
     save("cases/verification/empty-abl.json", p)
     for aspect, wind in [(1, 270), (2, 270), (1, 225)]:
         save(f"cases/canyon/wh{aspect}-wind{wind}.json", canyon(aspect, wind))

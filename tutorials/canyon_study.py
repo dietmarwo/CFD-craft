@@ -6,9 +6,8 @@ import copy
 import concurrent.futures
 import json
 from pathlib import Path
-import sys
 import numpy as np
-from common import ROOT, run_case, accepted, write_report, require
+from common import ROOT, run_case, accepted, write_report, receptor_values
 
 
 def main():
@@ -60,7 +59,7 @@ def main():
             pool.submit(run_case, args.binary, c, args.output / c["name"])
             for c in cases
         ]
-        for c, f in zip(cases, futures):
+        for c, f in zip(cases, futures, strict=True):
             try:
                 records.append(f.result())
             except Exception as exc:
@@ -79,12 +78,7 @@ def main():
     if args.preset == "study":
         grid_runs = [records[0], records[3], records[4]]
         if all(accepted(r) for r in grid_runs):
-            values = [
-                np.array(
-                    list(r["summary"]["constituents"][0]["receptors_kg_m3"].values())
-                )
-                for r in grid_runs
-            ]
+            values = [np.array(receptor_values(r, cases[0])) for r in grid_runs]
             delta = float(
                 np.linalg.norm(values[2] - values[1])
                 / max(np.linalg.norm(values[2]), 1e-30)
@@ -101,21 +95,26 @@ def main():
         "blocked_data; numerical completion alone does not establish physical validity"
     )
     if records[0].get("summary"):
-        import matplotlib
+        try:
+            import matplotlib
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(7, 3.5))
-        for r in records:
-            if r.get("summary") and r["summary"]["constituents"]:
-                y = list(r["summary"]["constituents"][0]["receptors_kg_m3"].values())
-                ax.plot(range(len(y)), np.array(y) * 1e9, "o-", label=r["case"])
-        ax.set(xlabel="Receptor", ylabel="Modeled gas concentration (microgram/m3)")
-        ax.legend(fontsize=6)
-        fig.tight_layout()
-        fig.savefig(args.output / "canyon-receptors.png", dpi=150)
-        plt.close(fig)
+            fig, ax = plt.subplots(figsize=(7, 3.5))
+            for r in records:
+                if r.get("summary") and r["summary"]["constituents"]:
+                    y = receptor_values(r, cases[0])
+                    ax.plot(range(len(y)), np.array(y) * 1e9, "o-", label=r["case"])
+            ids = [x["id"] for x in cases[0]["receptors"]]
+            ax.set_xticks(range(len(ids)), ids)
+            ax.set(xlabel="Receptor", ylabel="Modeled gas concentration (microgram/m3)")
+            ax.legend(fontsize=6)
+            fig.tight_layout()
+            fig.savefig(args.output / "canyon-receptors.png", dpi=150)
+            plt.close(fig)
+        except Exception as exc:  # A figure is not evidence; record why it is missing.
+            report["figure_error"] = str(exc)
     write_report(args.output, report)
     print(json.dumps({k: v for k, v in report.items() if k != "runs"}, indent=2))
     return 0 if report["passed"] else 1

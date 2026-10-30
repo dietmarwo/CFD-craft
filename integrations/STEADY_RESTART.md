@@ -47,8 +47,8 @@ preparation leaves no partial stage. The exact runtime and rebuilt mesh must
 match the recorded identities before the solve. No physics, mesh or profile
 change is accepted by `prepare-restart`; prepare an ordinary cold case for
 another model. One-level refinement uses the separate
-[mesh initialization](MESH_INITIALIZATION.md) operation; its first release
-requires an accepted cold-generated source, rather than a continued chain.
+[mesh initialization](MESH_INITIALIZATION.md) operation, which requires an
+accepted cold-generated source rather than a continued chain.
 
 ## What is carried forward
 

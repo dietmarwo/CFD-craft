@@ -102,9 +102,10 @@ and the [continuation results](validation/RESTART_RESULTS.md).
 The separate [coarse-to-fine initializer](integrations/MESH_INITIALIZATION.md)
 uses Foundation-13 mapNearest volume fields from an accepted cold-generated
 source, preserves generated fine-grid boundaries and lets the solver construct
-new face flux. Its receipt and rebuilt mesh/runtime are checked. Cavity
-verification compares the mapped solve with a converged cold fine-grid control;
-a fine turbulent backstep and physical qualification remain open.
+new face flux. Its receipt, an independent replay of the mapping and the rebuilt
+mesh and runtime are checked. A mapped and a cold level-2 cavity converge to the
+same fields ([mapping results](validation/MAPPING_RESULTS.md)); an accepted fine
+turbulent backstep and physical qualification remain open.
 
 ## Ecosystem
 

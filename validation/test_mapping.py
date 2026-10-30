@@ -328,7 +328,7 @@ class Receipts(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "CFD-X014"):
                 mapping.replace_internal(template, path, 2304, False, name)
 
-    def test_resealing_an_altered_target_boundary_does_not_bypass_the_receipt(self):
+    def test_a_changed_consumed_boundary_differs_from_its_template(self):
         path = self.case / "0/U"
         path.write_text(path.read_text().replace("type noSlip", "type zeroGradient"))
         self.definition["inputs"]["0/U"] = restart.file_identity(path)
@@ -477,7 +477,7 @@ class Receipts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.source.audit"):
             mapping.validate(self.case, self.definition)
 
-    def test_snapshot_time_mesh_and_mapper_log_are_bound(self):
+    def test_target_mesh_and_mapper_log_are_bound(self):
         evidence = self.case / mapping.EVIDENCE
         path = evidence / "target/map.log"
         old = path.read_text()
@@ -1645,14 +1645,17 @@ class ActualMapping(unittest.TestCase):
 
     def test_source_copy_race_is_rejected_without_a_runnable_case(self):
         real = mapping.checked
+        latest = backend.verify(self.source)["numerical"]["final_time_directory"]
 
-        def changed(path, entry, field):
-            if field == "source.696/U":
+        def changed(path, entry, field, *args):
+            if field == f"source.{latest}/U":
                 return real(path, {"bytes": 1, "sha256": "0" * 64}, field)
-            return real(path, entry, field)
+            return real(path, entry, field, *args)
 
         with patch.object(mapping, "checked", side_effect=changed):
-            with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.source.696/U"):
+            with self.assertRaisesRegex(
+                ValueError, f"CFD-X014 mapping.source.{latest}/U"
+            ):
                 mapping.prepare(self.source, 2, 50, self.work / "failed", self.foam)
         self.assertFalse((self.work / "failed/case.json").exists())
         self.assertTrue((self.work / "failed/mapping-failure.json").exists())

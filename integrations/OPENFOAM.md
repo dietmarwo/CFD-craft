@@ -134,12 +134,15 @@ python validation/test_openfoam.py -v
 python -O validation/test_openfoam.py -v
 python validation/test_resolution.py -v
 python validation/test_restart.py -v
+python validation/test_mapping.py -v
 CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
   python validation/test_openfoam.py -v
 CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
   python validation/test_resolution.py -v
 CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
   python validation/test_restart.py -v
+CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
+  python validation/test_mapping.py -v
 ~~~
 
 Unit tests have explicit synthetic fixtures, including a synthetic stand-in for
@@ -147,17 +150,21 @@ the four Foundation-13 programs that drives `run` and `report` end to end. They
 test contracts, not physical accuracy. With the environment variable set, the additional tests run actual
 OpenFOAM cavity solves, check an iteration-limit failure, corrupt returned
 fields and face fluxes to verify rejection, and compare the actual wall-resolved
-`blockMesh` output with the generated first-cell heights and spacing, and
-continue actual cavity runs against uninterrupted controls. CI runs the
-boundary tests on each push/PR. A manual workflow dispatch installs the pinned
-runtime in two parallel jobs; its `external` input (`all`, `backend` or
-`resolution`) selects which of them run. `external-backend` runs the real backend tests,
-the external study preset with `--timeout-s 300` and a fixed-work
-continuation check of the wall-resolved backstep (`simple` profile, 250+250
-iterations). `external-resolution` runs the resolution smoke
-preset in one run (`--iterations 20000 --timeout-s 3500`) and in stages
-(`--iterations 6000 --max-stages 4 --timeout-s 3500`) on the same runner, then
-compares the two converged results. Both publish the key numbers as notices and
+`blockMesh` output with the generated first-cell heights and spacing,
+continue actual cavity runs against uninterrupted controls, and map actual
+cavity and backstep fields to the next level. CI runs the boundary tests on each
+push/PR. A manual workflow dispatch installs the pinned runtime in two parallel
+jobs; its `external` input selects the work: `backend`, `resolution`, `mapping`
+or `all`. `external-backend` runs the real backend tests (each failing test
+becomes an error annotation), the mapped-against-cold level-2 cavity, the
+external study preset with `--timeout-s 300` and a fixed-work continuation
+check of the wall-resolved backstep (`simple` profile, 250+250 iterations).
+`external-resolution` runs the resolution smoke preset in one run
+(`--iterations 20000 --timeout-s 3500`). For `resolution` and `all` it then
+runs it in stages (`--iterations 6000 --max-stages 4 --timeout-s 3500`) on the
+same runner and compares the two converged results; for `mapping` and `all` it
+starts level 2 from the single run and cold (`mapped_start.py`, 3000 iterations
+each). Both publish the key numbers as notices and
 upload the reports. A recorded backstep failure keeps a job green; a workflow
 error fails it.
 

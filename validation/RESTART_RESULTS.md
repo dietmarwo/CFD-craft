@@ -209,7 +209,9 @@ report names.
 - Which turbulence-model state a restart does not carry in the SST backstep
   (the restarted iteration's residuals differ by about 1e-4 relative); one
   hypothesis is that nut is recomputed from k and omega at start-up.
-- The cause of the extra time directory in the earlier staged study.
-- A coarse-to-fine start, compared against a cold control, before a fine-mesh
-  campaign; then mesh, inlet and model sensitivity. Nothing here qualifies the
-  native canyon model or passive-gas transport.
+- The cause of the extra time directory in the earlier staged study; the
+  [mapping results](MAPPING_RESULTS.md) record a second occurrence.
+- A fine-mesh campaign from a coarse-to-fine start (see the
+  [mapping results](MAPPING_RESULTS.md)); then mesh, inlet and model
+  sensitivity. Nothing here qualifies the native canyon model or passive-gas
+  transport.

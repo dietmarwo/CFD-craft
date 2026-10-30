@@ -1,5 +1,14 @@
 name: CFD checks
-"on": [push, pull_request, workflow_dispatch]
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      external:
+        description: External-runtime jobs to run
+        type: choice
+        options: [all, backend, resolution]
+        default: all
 permissions:
   contents: read
 jobs:
@@ -19,7 +28,7 @@ jobs:
       - run: python validation/test_restart.py -v
       - run: python -O validation/test_restart.py -v
   external-backend:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != 'resolution'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -76,7 +85,7 @@ jobs:
             runs/external-study/backstep-level*-comparison/*
             runs/equivalence-*/report.json
   external-resolution:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:

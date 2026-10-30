@@ -145,7 +145,8 @@ fields and face fluxes to verify rejection, and compare the actual wall-resolved
 `blockMesh` output with the generated first-cell heights and spacing, and
 continue actual cavity runs against uninterrupted controls. CI runs the
 boundary tests on each push/PR. A manual workflow dispatch installs the pinned
-runtime in two parallel jobs. `external-backend` runs the real backend tests,
+runtime in two parallel jobs; its `external` input (`all`, `backend` or
+`resolution`) selects which of them run. `external-backend` runs the real backend tests,
 the external study preset with `--timeout-s 300` and a fixed-work
 continuation check of the wall-resolved backstep (`simple` profile, 250+250
 iterations). `external-resolution` runs the resolution smoke

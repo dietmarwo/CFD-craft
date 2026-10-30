@@ -113,8 +113,9 @@ accepted; 6000 and 20000 keep cadence 250.
 `validation/restart_equivalence.py` runs FIRST iterations, continues them for
 SECOND, runs FIRST + SECOND uninterrupted, and compares the two final fields.
 `validation/compare_restart.py` compares any continued run with a control:
-`--mode fixed-work` for equal work, `--mode converged` for two converged runs,
-including their work, audits and measurement metrics. Both exit 0 when the
+`--mode fixed-work` for equal work, where both final face fluxes must also pass
+the auditor's local continuity gate, and `--mode converged` for two converged
+runs, including their work, audits and measurement metrics. Both exit 0 when the
 bounds hold, 2 when they do not and 1 for invalid input (CFD-X013
 `comparison.*`). Run `validation/test_restart.py` normally and under
 `python -O`; set `CFD_OPENFOAM_ROOT` to include the actual cavity tests. The

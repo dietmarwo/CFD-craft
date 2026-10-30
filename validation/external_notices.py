@@ -50,14 +50,13 @@ def backstep_lines(row):
             run = stage.get("execution") or {}
             work = run.get("numerical") or {}
             state = run.get("initial_state") or {}
-            balance = (state.get("source_flux_balance") or {}).get(
-                "maximum_face_scaled_balance"
-            )
+            source = state.get("source_local_continuity") or {}
+            balance = source.get("maximum_abs_divergence_h_over_u")
             lines.append(
                 f"stage {stage.get('stage')}: {run.get('execution_status')}; iterations "
                 f"{work.get('iterations')}; converged {work.get('solver_reported_convergence')}; "
                 f"wall {number(run.get('wall_s'), 5)} s"
-                + (f"; source balance {number(balance, 3)}" if state else "")
+                + (f"; source max div(phi)*H/U {number(balance, 3)}" if state else "")
                 + (f"; error {run['error']}" if run.get("error") else "")
             )
     comparison = row.get("comparison") or {}
@@ -154,6 +153,11 @@ def restart_comparison(report, title):
             f"{name}: max abs {number(field['maximum_absolute'])}, over control max "
             f"{number(field['maximum_over_control_maximum'])}, max cell relative "
             f"{number(field['maximum_cell_relative'])}"
+        )
+    for side, found in (report.get("local_continuity") or {}).items():
+        lines.append(
+            f"{side}: final max div(phi)*H/U "
+            f"{number(found['maximum_abs_divergence_h_over_u'])}"
         )
     for side, found in (report.get("metrics") or {}).items():
         lines.append(

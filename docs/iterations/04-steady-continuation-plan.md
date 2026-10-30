@@ -69,9 +69,9 @@ maximum component-wise U and p differences of 1e-6 for the cavity (400 + 200)
 and 1e-5 for the wall-resolved backstep; for k/omega/nut, the maximum difference
 over the control's largest magnitude is at most 1e-5. The planned `simplec`
 500 + 500 backstep comparison cannot start, because its source fails the flux
-gate; the `simple` profile (250 + 250) supplies the backstep comparison. The final local-flux audits must pass. These
-equivalence checks do not require nonlinear convergence and imply no
-measurement screen.
+gate; the `simple` profile (250 + 250) supplies the backstep comparison. The
+final local-flux audits must pass. These equivalence checks do not require
+nonlinear convergence and imply no measurement screen.
 
 The reference-recipe check runs the wall-resolved/simplec level-1 case in
 stages of 6000 iterations (up to four) and in one 20000-iteration run on the

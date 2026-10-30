@@ -4,8 +4,9 @@
 Both archives must verify and come from the same recipe, mesh and runtime.
 
 - `fixed-work`: the continued chain and the control did the same number of
-  iterations; their fields must agree to the equivalence bounds. Neither needs
-  to be converged.
+  iterations; their fields must agree to the equivalence bounds, and both final
+  face fluxes must pass the auditor's local continuity gate. Neither needs to be
+  converged.
 - `converged`: both reached the nonlinear gate; the chain's cumulative work,
   its fields and (for the backstep) its audit and measurement metrics must
   agree with the control to the bounds below.
@@ -137,6 +138,18 @@ def field_differences(run, control, a, b, kind, cells):
     return result
 
 
+def local_continuity(run):
+    """The independent auditor's local flux check of the final stored phi."""
+    from audit_openfoam_mesh import audit
+
+    found = audit(run)["local_continuity"]
+    return {
+        "maximum_abs_divergence_h_over_u": found["maximum_abs_divergence_h_over_u"],
+        "target_max": found["target_max"],
+        "passed": found["passed"],
+    }
+
+
 def metrics(run, data):
     from audit_openfoam_mesh import audit
     from compare_backstep import assess
@@ -193,6 +206,12 @@ def compare(run, control, mode, data=None):
     }
     if mode == "fixed-work":
         checks["work"] = work["run"] == work["control"]
+        continuity = {
+            "run": local_continuity(run),
+            "control": local_continuity(control),
+        }
+        result["local_continuity"] = continuity
+        checks["local_continuity"] = all(c["passed"] for c in continuity.values())
     else:
         checks["numerical"] = a["passed"] and b["passed"]
         checks["work"] = (

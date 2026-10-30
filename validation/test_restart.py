@@ -5,7 +5,9 @@ Unit receipts and workflow returns are synthetic, never CFD evidence. Set
 CFD_OPENFOAM_ROOT for the real Foundation-13 field/rejection tests.
 """
 
+import contextlib
 import copy
+import io
 import json
 import os
 import re
@@ -31,7 +33,7 @@ import backstep_resolution
 import compare_restart
 import restart_equivalence
 from audit_openfoam_mesh import audit, cartesian_mesh
-from external_notices import backstep_lines
+from external_notices import backstep_lines, restart_comparison
 from test_resolution import two_cells
 
 
@@ -721,6 +723,34 @@ class Stages(unittest.TestCase):
             prepared.call_args.args[0].name, "wall-resolved-simplec-level1"
         )
 
+    def test_stage_notices_report_the_recorded_source_gate_value(self):
+        state = {"source_local_continuity": {"maximum_abs_divergence_h_over_u": 2.7e-9}}
+        row = {
+            "stages": [
+                {"stage": 1, "execution": {"execution_status": "completed"}},
+                {
+                    "stage": 2,
+                    "execution": {
+                        "execution_status": "completed",
+                        "initial_state": state,
+                    },
+                },
+            ],
+            "comparison": {"status": "not_assessed"},
+        }
+        lines = backstep_lines(row)
+        self.assertTrue(
+            any(
+                line.startswith("stage 2:")
+                and "source max div(phi)*H/U 2.7e-09" in line
+                for line in lines
+            ),
+            lines,
+        )
+        self.assertFalse(
+            any("source" in line for line in lines if line.startswith("stage 1:"))
+        )
+
     def test_stages_keep_iteration_limit_results_and_stop_at_the_stage_budget(self):
         report, run, prepared, _ = self.run_study([self.execution()] * 3)
         self.assertTrue(report["workflow_completed"])
@@ -879,13 +909,40 @@ class Comparison(unittest.TestCase):
             f"internalField nonuniform List<{cls}> 576 ({values});\n"
         )
 
-    def compare(self, mode="fixed-work"):
-        with patch.object(
-            backend, "verify", side_effect=lambda run: self.records[str(run)]
+    def compare(self, mode="fixed-work", run_divergence=1e-9):
+        divergence = {"run": run_divergence, "control": 1e-9}
+
+        def continuity(run):
+            largest = divergence[Path(run).name]
+            return {
+                "maximum_abs_divergence_h_over_u": largest,
+                "target_max": 1e-4,
+                "passed": largest <= 1e-4,
+            }
+
+        with (
+            patch.object(
+                backend, "verify", side_effect=lambda run: self.records[str(run)]
+            ),
+            patch.object(compare_restart, "local_continuity", side_effect=continuity),
         ):
             return compare_restart.compare(
                 self.root / "run", self.root / "control", mode
             )
+
+    def test_fixed_work_requires_both_final_fluxes_to_pass_the_local_gate(self):
+        result = self.compare(run_divergence=2e-4)
+        self.assertTrue(result["checks"]["U"] and result["checks"]["work"])
+        self.assertFalse(result["checks"]["local_continuity"])
+        self.assertFalse(result["passed"])
+        self.assertEqual(
+            result["local_continuity"]["run"]["maximum_abs_divergence_h_over_u"], 2e-4
+        )
+        self.assertTrue(self.compare()["checks"]["local_continuity"])
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            restart_comparison(result, "equivalence cavity")
+        self.assertIn("run: final max div(phi)*H/U 0.0002", printed.getvalue())
 
     def test_equal_fields_and_work_pass_and_differences_are_measured(self):
         result = self.compare()

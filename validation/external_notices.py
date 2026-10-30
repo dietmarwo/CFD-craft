@@ -30,7 +30,8 @@ def backstep_lines(row):
     trend = (numerical.get("residual_trend") or {}).get("p") or {}
     lines = [
         f"cells {execution.get('case_metadata', {}).get('cells')}",
-        f"execution {execution.get('execution_status')}",
+        f"execution {execution.get('execution_status')}"
+        + (f"; error {execution['error']}" if execution.get("error") else ""),
         f"started iterations {progress.get('started_iterations')}",
         f"wall {number(execution.get('wall_s'), 5)} s",
         f"numerical passed {numerical.get('passed')}",
@@ -42,7 +43,8 @@ def backstep_lines(row):
     comparison = row.get("comparison") or {}
     if comparison.get("status") != "evaluated":
         lines.append(
-            f"comparison {comparison.get('status')}: {comparison.get('error')}"
+            f"comparison {comparison.get('status')}: "
+            + str(comparison.get("error") or comparison.get("reason"))
         )
         return lines
     for station, m in comparison["profiles"].items():
@@ -71,8 +73,57 @@ def backstep_lines(row):
     return lines
 
 
+def audit_lines(audit):
+    if not audit:
+        return ["independent audit not run"]
+    if audit.get("status") != "evaluated":
+        return [
+            f"independent audit {audit.get('status')}: "
+            + str(audit.get("error") or audit.get("reason"))
+        ]
+    continuity = audit["local_continuity"]
+    lines = [
+        f"independent audit passed {audit['passed']}; max div(phi)*H/U "
+        f"{number(continuity['maximum_abs_divergence_h_over_u'])}, max relative cell imbalance "
+        f"{number(continuity.get('maximum_relative_cell_imbalance'))}"
+    ]
+    for name, wall in (
+        (audit.get("wall_resolution") or {}).get("patches") or {}
+    ).items():
+        at = wall.get("maximum_y_plus_at_xy_over_h") or [None, None]
+        lines.append(
+            f"{name}: max y+ {number(wall['maximum_y_plus'], 4)} at x/H={number(at[0], 4)},"
+            f" y/H={number(at[1], 4)}; median {number(wall['median_y_plus'], 4)}"
+        )
+    return lines
+
+
+def resolution(report):
+    for row in report["rows"]:
+        title = f"resolution {row.get('name')}"
+        if row.get("status") == "not_started":
+            notice(title, f"not started: {row.get('reason')}")
+            continue
+        lines = [f"accepted {row.get('accepted')}; passed {row.get('passed')}"]
+        lines += backstep_lines(row)
+        lines += audit_lines(row.get("independent"))
+        notice(title, "\n".join(lines))
+    notice(
+        "resolution study",
+        f"preset {report.get('preset')}; passed {report.get('passed')}; "
+        f"workflow completed {report.get('workflow_completed')}; error {report.get('error')}; "
+        f"mesh sensitivity {json.dumps(report.get('mesh_sensitivity'))}\n"
+        + "\n".join(
+            f"{k} {v}" for k, v in (report.get("implementation_sha256") or {}).items()
+        ),
+    )
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
+    if "rows" in report:
+        return resolution(report)
     cavity = report.get("cavity") or {}
     errors = cavity.get("maximum_absolute_errors_lid_speed") or {}
     notice(

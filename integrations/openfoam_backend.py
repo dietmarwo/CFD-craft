@@ -73,7 +73,15 @@ def inventory(directory, symlinks=None):
     return entries
 
 
-def prepare(kind, level, iterations, output, data=None):
+def prepare(
+    kind,
+    level,
+    iterations,
+    output,
+    data=None,
+    mesh_family="legacy",
+    solver_profile="legacy",
+):
     require(
         kind != "backstep" or data is not None,
         "data",
@@ -81,7 +89,9 @@ def prepare(kind, level, iterations, output, data=None):
         "CFD-D001",
     )
     dataset = load(data) if kind == "backstep" else None
-    files, metadata = build(kind, level, iterations, dataset)
+    files, metadata = build(
+        kind, level, iterations, dataset, mesh_family, solver_profile
+    )
     output = Path(output)
     claim_directory(output)
     for name, text in files.items():
@@ -241,6 +251,51 @@ def disk_bytes(directory):
     return total
 
 
+NONFINITE_LINE = re.compile(
+    r"(?:Initial residual|Final residual|sum local|global)\s*=\s*[-+]?(?:nan|inf(?:inity)?)\b",
+    re.I,
+)
+CONTINUITY_LINE = re.compile(r"\bsum local\s*=\s*(" + NUMBER + ")")
+# The generated cases are scaled to U_ref = H = 1 and steady runs use deltaT 1,
+# so "sum local" is the volume-averaged |div(phi)| in units of U_ref/H. Converged
+# and stalled runs stay below 1e-3, also during their first iterations. A value of
+# one means the velocity field has grown by orders of magnitude.
+CONTINUITY_BREAKDOWN = 1.0
+
+
+class SolverLogScan:
+    """Reads a growing solver log once, in order. The first breakdown is kept."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.offset = 0
+        self.partial = b""
+        self.finding = None
+
+    def update(self, final=False):
+        if self.finding is not None:
+            return self.finding
+        with self.path.open("rb") as stream:
+            stream.seek(self.offset)
+            data = stream.read()
+        self.offset += len(data)
+        data = self.partial + data
+        cut = len(data) if final else data.rfind(b"\n") + 1
+        self.partial = data[cut:][-65536:]
+        for line in data[:cut].decode(errors="replace").splitlines():
+            if NONFINITE_LINE.search(line):
+                self.finding = "execution.solve.residual: nonfinite solver output"
+                break
+            values = [float(v) for v in CONTINUITY_LINE.findall(line)]
+            if any(v >= CONTINUITY_BREAKDOWN for v in values):
+                self.finding = (
+                    f"execution.solve.continuity: sum local {max(values):.6g} "
+                    f">= {CONTINUITY_BREAKDOWN:g}"
+                )
+                break
+        return self.finding
+
+
 def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
     output = Path(output)
     log = output / (label + ".log")
@@ -265,6 +320,7 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
     require(start < deadline, "execution.deadline", "wall-time limit", "CFD-X004")
     require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
     failure = None
+    scan = SolverLogScan(log) if label == "solve" else None
     with log.open("wb") as stream:
         process = subprocess.Popen(
             command,
@@ -278,6 +334,8 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         )
         try:
             while process.poll() is None:
+                if scan is not None and scan.update() is not None:
+                    raise ValueError("CFD-X010 " + scan.finding)
                 require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
                 require(
                     time.monotonic() < deadline,
@@ -303,6 +361,8 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         "wall_s": time.monotonic() - start,
         "log": log.name,
     }
+    if failure is None and scan is not None and scan.update(final=True) is not None:
+        failure = "CFD-X010 " + scan.finding
     if failure is None and disk_bytes(output) >= max_bytes:
         failure = "CFD-X005 execution.output: output budget reached"
     if failure is None and process.returncode != 0:
@@ -999,6 +1059,12 @@ def main():
     p.add_argument("--level", type=int, default=1)
     p.add_argument("--iterations", type=int, default=3000)
     p.add_argument("--data", type=Path)
+    p.add_argument(
+        "--mesh-family", choices=["legacy", "wall-resolved"], default="legacy"
+    )
+    p.add_argument(
+        "--solver-profile", choices=["legacy", "simplec", "simple"], default="legacy"
+    )
     p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("run")
     p.add_argument("--case", type=Path, required=True)
@@ -1018,7 +1084,13 @@ def main():
     try:
         if args.command == "prepare":
             result = prepare(
-                args.case, args.level, args.iterations, args.output, args.data
+                args.case,
+                args.level,
+                args.iterations,
+                args.output,
+                args.data,
+                args.mesh_family,
+                args.solver_profile,
             )
         elif args.command == "run":
             result = run(

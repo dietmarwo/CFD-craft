@@ -25,7 +25,7 @@ Re=100. The native case advances to 30 s; OpenFOAM solves the steady equations a
 
 The raw [TMR measurements](https://tmbwg.github.io/turbmodels/backstep_val.html) are fetched with frozen SHA-256 identities. The x/H=-4 profile defines the inlet; the 112 downstream velocity samples and 17 lower-wall Cf values are evaluation data. No case parameter is fitted to them.
 
-**Numerical status, level 1 (22,656 cells):** all 6000 iterations ran in 260 s, with no convergence report. The final pressure initial residual is 1.19e-3, against the gate of 1e-7. Over the last 600 iterations its median is 1.492e-3, against 1.488e-3 over the 600 before: the solve is stalled, not slowly converging. Local continuity and the stored boundary-flux imbalance are small, but every pressure solve makes them small, so they do not show a steady solution.
+**Numerical status, level 1 (22,656 cells):** all 6000 iterations ran in 265 s, with no convergence report. The final pressure initial residual is 1.19e-3, against the gate of 1e-7. Over the last 600 iterations its median is 1.492e-3, against 1.488e-3 over the 600 before: the solve is stalled, not slowly converging. Local continuity and the stored boundary-flux imbalance are small, but every pressure solve makes them small, so they do not show a steady solution.
 
 The first lower-wall cell centre lies at y+ 13 (median; range 2.4–16.7) in the scored region 1 < x/H < 12. That is the buffer layer, where the k-based wall function switches.
 
@@ -47,12 +47,12 @@ Lower-wall Cf RMSE is 0.000491 against a target of 0.001; Cf=0 everywhere would 
 | Level | Cells | Execution | Iterations started in 300 s | Numerically accepted |
 |---|---:|---|---:|---|
 | 1 | 22,656 | completed | 6000 | no (stalled) |
-| 2 | 90,624 | timeout | 1458 | no |
-| 3 | 203,904 | timeout | 570 | no |
+| 2 | 90,624 | timeout | 1418 | no |
+| 3 | 203,904 | timeout | 554 | no |
 
-Levels 2 and 3 reached about 24 % and 10 % of their 6000 iterations; finishing them needs roughly 20 and 50 minutes of serial time. Their final iteration was not written, so they are marked not evaluable rather than given a score. With no two accepted levels there is no mesh sensitivity and no GCI.
+Levels 2 and 3 reached about 24 % and 9 % of their 6000 iterations; finishing them needs roughly 20 and 55 minutes of serial time. Their final iteration was not written, so they are marked not evaluable rather than given a score. With no two accepted levels there is no mesh sensitivity and no GCI.
 
-Since refinement moves the first cell toward y+ 1–10, a converged series would also cross wall-treatment regimes. A wall-resolved or wall-function-consistent mesh is needed before the series can be interpreted.
+Since refinement moves the first cell toward y+ 1–10, a converged series would also cross wall-treatment regimes. A wall-resolved or wall-function-consistent mesh is needed before the series can be interpreted; the [wall-resolved results](RESOLUTION_RESULTS.md) record such a recipe.
 
 ## Earlier configurations, all failed
 
@@ -65,15 +65,14 @@ Before the recorded configuration, the level-1 backstep was run with four recipe
 | 3, first-order momentum advection | — | — | timeout at 600 s (CFD-X004) |
 | 4, the recorded configuration | 6000 | 1.19e-3 | gate not reached (CFD-X007) |
 
-An independent earlier run of the recorded configuration on an eight-core cloud machine gave the same level-1 metrics and cavity errors to the digits shown here; levels 2 and 3 reached 1406 and 522 iterations there.
+Earlier runs of the recorded configuration, on another runner of the same type and on an eight-core cloud machine, gave the same level-1 metrics and cavity errors to the digits shown here; levels 2 and 3 reached 1458/570 and 1406/522 iterations there.
 
 ## What is needed next
 
-The next steps are:
-- a backstep configuration that converges (the stall persists across recipes; SIMPLEC with pressure relaxation 0.2 and the wall-function buffer layer are candidates to examine);
-- a mesh whose near-wall treatment is consistent across levels;
-- an accepted mesh series;
-- inlet-turbulence and model sensitivity;
+The legacy stall persists with SIMPLEC pressure relaxation 1 as well as 0.2; in that control its largest late changes lie in wall-function cells near the switch point, y+ about 11 ([wall-resolved results](RESOLUTION_RESULTS.md)). A wall-resolved recipe converges at level 1 there. The next steps are:
+- an accepted mesh series of the wall-resolved recipe;
+- a continuous wall-function package as a one-change test of the legacy stall;
+- inlet-turbulence, inlet-profile and model sensitivity;
 - justified screening targets.
 
 The native wall roughness and throughput tasks, measured canyon concentrations and an external passive-scalar comparison are separate work. No general urban-model validation or Rust performance advantage is claimed.
@@ -84,8 +83,9 @@ Reproduction: [OPENFOAM.md](../integrations/OPENFOAM.md). Assumptions: [external
 
 | File | SHA-256 |
 |---|---|
-| integrations/openfoam_backend.py | `1eb6773f07e1ec8ec525eed2a1edffaeeedac4464fd82c1885c70ce68b5dec48` |
-| integrations/openfoam_cases.py | `65b2758c4cec66387ae9daa832dad9aa4b893b782407fdb264441efb5c3e09c7` |
+| integrations/openfoam_backend.py | `801f7e2a444b6212f92638b8ca1cbe0e7269485a239bf03ba948f2d15aca8d38` |
+| integrations/openfoam_cases.py | `07c4b8a92f4c943f9a58846e44a506b1280bc3b921dcd667db6bab3788f4fbed` |
 | validation/backstep_data.py | `736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d` |
-| validation/compare_backstep.py | `da322ea468ed7af5c6e1b62aa44520994537c7d23f1e755f2213710f44a6b577` |
+| validation/compare_backstep.py | `5141c2e7e9b22850e6a7143dab21dcb28002c527740257c1097c569e0d9a4a3e` |
+| validation/audit_openfoam_mesh.py | `a0b1695599bfff99f35417d9b9351e48704b6237dddb0d2e518b4d7ace12c7b7` |
 | tutorials/external_cfd.py | `63512ea458ba17d09791e80886a25f52bd54749236d4cccb0914c08a38b63a6e` |

@@ -1,6 +1,6 @@
 # Tutorials
 
-There are four executable workflows. Every run uses canonical inputs and preserves its evidence.
+There are five executable workflows. Every run uses canonical inputs and preserves its evidence.
 
 The [established-solver and experimental comparisons](../integrations/OPENFOAM.md)
 of `external_cfd.py` have an [agent prompt](external-cfd-prompt.md). The cavity
@@ -13,6 +13,7 @@ numerical failure and incomplete physical qualification explicit.
 | Finite canyon | python tutorials/canyon_study.py --preset smoke --output runs/canyons | Wind direction/aspect ratio, coupled flow/gas checks and limits of coarse scenarios. |
 | Native optimization | python integrations/run_jobs.py --runner RUNNER --output runs/jobs | Hashed CFD inputs, fallible simulation evaluation, equal counted BiteOpt/GP budgets and honest result semantics. |
 | External comparisons | python tutorials/external_cfd.py --preset smoke --foam-root ROOT --timeout-s 300 --output runs/external-smoke | Two solvers on the same cavity, a frozen measurement protocol, and why a numerical gate comes before a measurement screen. |
+| Backstep resolution | python tutorials/backstep_resolution.py --preset smoke --foam-root ROOT --iterations 20000 --timeout-s 3500 --output runs/resolution | Independent mesh/local-flux/wall-y+ audits, a converged wall-resolved reference, and stopping refinement after a coarse case that is not accepted. |
 
 Use fresh output paths. The source-inference study preset uses altered-grid observations. The canyon sensitivity preset adds two Schmidt values and a longer outlet domain; the full study also attempts a three-grid series and may reach its resource limits.
 
@@ -36,4 +37,4 @@ The native worker varies two of three positive source multipliers and sets the t
 
 This is a small deterministic allocation example on prescribed flow. It demonstrates real simulator calls, not a surrogate of a known analytic objective. A 24-evaluation BiteOpt hard budget and a 24-evaluation GP budget are both followed by counted rechecks. One seed and small budgets are not an optimizer ranking.
 
-Agent prompts: [source inference](source-inference-prompt.md), [canyon](canyon-prompt.md), [optimization](optimization-prompt.md).
+Agent prompts: [source inference](source-inference-prompt.md), [canyon](canyon-prompt.md), [optimization](optimization-prompt.md), [backstep resolution](backstep-resolution-prompt.md).

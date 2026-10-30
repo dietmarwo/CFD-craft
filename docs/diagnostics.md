@@ -101,4 +101,6 @@ evidence, and 1 for a failed execution or invalid input
 | CFD-X007 | A completed external solve did not reach its convergence/continuity gate |
 | CFD-X008 | External execution cancelled; process group stopped |
 | CFD-X009 | A cross-solver comparison exceeds its frozen target |
+| CFD-X010 | The solver log shows a numerical breakdown: `execution.solve.residual` for a NaN/Inf residual or continuity value, `execution.solve.continuity` for a reported mean continuity error (`sum local`, in units of U_ref/H) of at least 1. The process group is stopped and the failure archive retained |
+| CFD-X011 | The independent Cartesian audit rejects `mesh.*` (points, faces, owner/neighbour order and orientation, boundary ranges, volume, first-cell heights), `fields.phi.*` or `wallShearStress.*` (missing, malformed, nonfinite, or zero traction on a wall); `run.numerical` marks an archive without a final field, which is not assessed |
 | CFD-D001 | Reference/protocol hash, measurement identity, pairing or metric input invalid |

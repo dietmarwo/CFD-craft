@@ -74,7 +74,9 @@ def first_cell_y_plus(metadata, x, stress):
     result = {
         "first_cell_centre_height_h": 0.5 * height,
         "wall_treatment": metadata.get("turbulence_package"),
-        "meaning": "k-based wall functions switch near y+ 11; a first cell in the buffer layer (about 5 < y+ < 30) makes Cf and reattachment depend on the wall treatment",
+        "meaning": "wall-resolved candidate: compare the actual first-cell y+ with one; all-wall distances are checked independently"
+        if metadata.get("mesh_family") == "wall-resolved"
+        else "k-based wall functions switch near y+ 11; a first cell in the buffer layer (about 5 < y+ < 30) makes Cf and reattachment depend on the wall treatment",
     }
     for name, (lo, hi) in regions.items():
         selected = y_plus[(x > lo) & (x < hi)]
@@ -109,7 +111,8 @@ def crossing(x, cf):
     return crossings[-1] if crossings else None, crossings
 
 
-def assess(run, data, protocol=PROTOCOL):
+def assess(run, data, protocol=PROTOCOL, independent=None):
+    """`independent` is this archive's audit when the caller has already run it."""
     protocol = Path(protocol)
     require(
         sha256(protocol) == PROTOCOL_SHA256,
@@ -245,6 +248,30 @@ def assess(run, data, protocol=PROTOCOL):
         and reattachment["within_target"]
     )
 
+    if result["case_metadata"].get("mesh_family") != "wall-resolved":
+        independent = None
+    elif independent is None:
+        from audit_openfoam_mesh import audit
+
+        independent = audit(run)
+    require(
+        independent is None
+        or independent.get("run_manifest_sha256")
+        == sha256(Path(run) / "manifest.json"),
+        "independent_mesh_audit.run_manifest_sha256",
+        "the audit belongs to another archive",
+    )
+    prerequisites = numerical["passed"] and (
+        independent is None or independent["passed"]
+    )
+    screen = measurement_screen(prerequisites, agreement)
+    screen["numerical_passed"] = numerical["passed"]
+    screen["measurement_prerequisites_passed"] = prerequisites
+    if numerical["passed"] and not prerequisites:
+        screen["measurement_screen"] = (
+            "not_assessed: independent local-continuity/wall-resolution audit failed"
+        )
+
     return {
         "schema_version": "cfd-craft.backstep-comparison/0.1",
         "status": "evaluated",
@@ -257,10 +284,12 @@ def assess(run, data, protocol=PROTOCOL):
                 Path(__file__),
                 ROOT / "validation/backstep_data.py",
                 ROOT / "integrations/openfoam_backend.py",
+                ROOT / "validation/audit_openfoam_mesh.py",
             ]
         },
         "run_manifest_sha256": sha256(Path(run) / "manifest.json"),
-        **measurement_screen(numerical["passed"], agreement),
+        **screen,
+        "independent_mesh_audit": independent,
         "residual_trend": numerical["residual_trend"],
         "near_wall_resolution": first_cell_y_plus(
             result["case_metadata"], values[:, 0], values[:, 4:6]

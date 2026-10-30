@@ -81,7 +81,72 @@ The U profile file supplies no uncertainty interval. Cf uses the signed
 kinematic wall traction, Cf=-2*tau_x/Uref^2, at the lower wall. All downstream
 velocity sample identities are paired exactly; Cf interpolation cannot extrapolate.
 
-## Interpretation and open gates
+## Wall-resolved recipes
+
+The legacy dictionaries remain the default. Explicit backstep-only options
+select `mesh_family=legacy|wall-resolved` and `solver_profile=legacy|simplec|simple`:
+
+| Profile | Pressure coupling | Relaxation p / U, k, omega | Other settings |
+|---|---|---|---|
+| legacy | SIMPLEC | 0.2 / 0.5 | as described above |
+| simplec | SIMPLEC | 1 / 0.7 | as described above |
+| simple | SIMPLE | 0.3 / 0.5; on the wall-resolved mesh 0.1 / 0.1 | on the wall-resolved mesh: PCG/DIC pressure (absolute 1e-12, relative 0, at most 5000 iterations), bounded first-order upwind momentum, cell-limited gradients, zero initial interior U |
+
+On the wall-resolved mesh, GAMG uses a DICGaussSeidel smoother with two pre-
+and post-sweeps and a direct solve on its coarsest level. The tutorial's
+wall-resolved reference recipe is `wall-resolved`/`simplec`, with second-order
+bounded linear-upwind momentum. The first-order `simple` profile is a stability
+reference, not an accuracy reference.
+
+The wall-resolved mesh has 48896, 195584 and 440064 cells at levels 1, 2, 3.
+In y, the channel above y/H=1 is graded toward both walls (first cell 1.18e-3 H
+at level 1) and the block below the step is graded toward both the floor and
+the shear-layer line y/H=1 (first cell 9.15e-4 H). In x, both sides of the step
+plane start from the step wall's 0.002 H first cell (at level 1). Widths grow
+by 10% per cell downstream, with an 11% step into a uniform 0.1 H over the
+scored region 1 < x/H < 12, then to 0.31 H at the outlet, and by 15% per cell
+upstream to 0.18 H at the inlet. At level 1, neighbouring cell widths differ by
+at most a factor 1.15 in x and 1.32 in y, also across block interfaces; finer
+levels keep these bounds. Tests check these widths
+against blockMesh's grading rules and against the actual Foundation-13
+`blockMesh` output. An earlier streamwise spacing with a 140:1 width jump at the
+step plane diverged in every run ([results](../../validation/RESOLUTION_RESULTS.md)).
+
+SST keeps its default coefficients. k is fixed to zero at walls,
+nutLowReWallFunction imposes zero wall eddy viscosity, and omegaWallFunction
+takes its viscous-sublayer value while the k-based y+ is below its switch point
+(about 11.5 in Foundation 13). This is a low-Re near-wall package, not a change
+to the bulk Reynolds number. The inlet and its assumptions are unchanged; its
+near-wall velocity is a linear ramp to the first measured point, which is not
+an inner-layer profile.
+
+The separate Cartesian auditor has its own readers for the polyMesh files, the
+stored face flux phi and the wall traction; it uses the adapter only to verify
+the archive's seal. It checks the point, face, owner and neighbour lists, the
+owner-below-neighbour order, face orientation (area vectors point from owner
+to neighbour and out of the domain), patch ranges and the represented volume.
+From the stored phi it reconstructs each cell's divergence, with the target
+max(abs(div(phi)))*H/U <=1e-4. That measure grows like H/dx for a given relative
+flux error, so it tightens as cells shrink; the per-cell relative imbalance
+abs(sum phi)/(sum abs(phi)/2) is reported beside it, ungated. A stored phi is
+conservative to the pressure-solver tolerance by construction, so this gate
+tests the linear solve and the file's integrity, not nonlinear convergence.
+
+For the wall-resolved package the auditor also checks the first-cell distance
+on all four walls against the generated heights, and max(y+) <=1 on each wall
+from the tangential part of the stored wall traction, reporting where the
+maximum lies. A wall whose traction is zero everywhere was not sampled and is
+rejected. Its report separates its own checks from the adapter's numerical
+verdict. It does not reconstruct momentum/turbulence residuals or validate SST
+against nature.
+
+Measurement screening of the wall-resolved package additionally requires this
+independent audit. A failed numerical/independent gate leaves the screen not
+assessed. Refinement skips finer cases after a coarse case is not accepted.
+The [tutorial](../../tutorials/backstep-resolution-prompt.md) and
+[results](../../validation/RESOLUTION_RESULTS.md) retain those failures.
+
+## Interpretation and open gates (all packages)
 
 Execution, numerical convergence, measurement screening and physical
 qualification have separate fields. A zero exit cannot make a nonconverged solve
@@ -115,6 +180,15 @@ SIGTERM/SIGINT and deadline expiry terminate the process group, with a forced
 kill after one second if necessary. The log and failure archive are retained.
 Hashing/manifest creation and the bounded runtime preflight add overhead outside
 the child solve.
+
+The solver log is read incrementally, each line once. A NaN/Inf residual or
+continuity value, or a reported mean continuity error ("sum local", in units of
+U_ref/H because the cases are scaled to U_ref = H = 1 with deltaT 1) of at least
+1, stops the process group with CFD-X010, also when the child exits zero.
+Converged and stalled runs stay below 3e-4, including their first iterations;
+the recorded diverging runs crossed 1 at iterations 7 to 154, well before their
+last logged iteration (38 to 700). The actual log, return code and progress are
+retained. Earlier saved snapshots are not promoted to final solutions.
 
 `report` verifies an archive's consistency: file hashes, the consumed inputs and
 that the case holds nothing else besides solver outputs, the numerical summary

@@ -92,6 +92,13 @@ The steady canyon cost grows roughly with the sixth power of the refinement rati
 
 ## Next steps, in order
 
+The external-backend track has a separate
+[wall-resolution plan](iterations/03-wall-resolution-plan.md). Its wall-resolved
+SST reference converges and passes the independent audit at level 1; a mesh
+pair needs a larger per-case budget or a coarse-to-fine start, and inlet and
+model sensitivity remain open ([results](../validation/RESOLUTION_RESULTS.md)).
+This does not advance the native canyon's physical-validation gate.
+
 1. **Throughput (M1b, M3b):** multigrid for the pressure equation now that the masked operator is pinned against its reference; semi-implicit diffusion for momentum, k-ε and scalars; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
 2. **Near-wall consistency (M3a):** a log-consistent velocity gradient in wall-adjacent cells, so the empty ABL also stays homogeneous below H, and a building-wall roughness specified independently of the ground and the grid.
 3. **Resolution study (M3b):** the canyon at 10 or more cells per building height, a domain that meets the COST 732 clearances, and a GCI where the sequence supports one.

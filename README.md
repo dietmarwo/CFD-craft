@@ -55,6 +55,8 @@ python validation/test_cli.py -v
 python -O validation/test_cli.py -v
 python validation/test_openfoam.py -v
 python -O validation/test_openfoam.py -v
+python validation/test_resolution.py -v
+python -O validation/test_resolution.py -v
 python validation/run_suite.py --preset smoke --output runs/verification
 python validation/flow_accuracy.py --output runs/flow-accuracy
 python validation/cavity.py --output runs/cavity
@@ -77,6 +79,14 @@ and physical qualification are separate results. See the
 [iteration plan](docs/iterations/02-external-validation-plan.md) and
 [recorded results](validation/EXTERNAL_RESULTS.md). These comparisons do not
 qualify the native street-canyon model.
+
+The [backstep resolution tutorial](tutorials/backstep-resolution-prompt.md)
+runs wall-resolved recipes with independent Cartesian mesh, local face-flux and
+wall-y+ audits; refinement stops after a coarse case that is not accepted. On
+its coarse mesh the reference recipe converges, passes the audit and is screened
+against the measurements; no mesh pair or physical qualification is claimed.
+See the [plan](docs/iterations/03-wall-resolution-plan.md) and the
+[resolution results](validation/RESOLUTION_RESULTS.md).
 
 ## Ecosystem
 

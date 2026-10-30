@@ -17,4 +17,4 @@ Use CFD-craft's external backend and `docs/model-cards/openfoam-backend.md`.
    comparison does not validate concentrations or the native canyon solver.
 
 Deliver the report, paired samples, runtime/input identities and figures.
-Do not contact data owners, publish results or use Dietmar's home machines.
+Do not contact data owners or publish results.

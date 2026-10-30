@@ -2,13 +2,14 @@
 
 This page maps the development plan (version 2, which replaces the initial plan) to what 0.1.0 contains, and lists the next steps. The plan's proposed case file is a draft; the schemas from `cfd-craft describe` are authoritative. [RESULTS](../validation/RESULTS.md) holds the numbers.
 
-Iteration 02 adds an [external-backend workstream](iterations/02-external-validation-plan.md):
-Foundation-13 execution, a same-Re cavity cross-check, and a preliminary
-comparison against public backstep measurements. [EXTERNAL_RESULTS](../validation/EXTERNAL_RESULTS.md)
-records actual execution and remaining gates. This gives the optimization
-ecosystem a path to established solvers while native numerical development
-continues. It does not close M3b: an external backstep is not a measured native
-street-canyon comparison. The native wall and throughput tasks below remain.
+An [external-backend workstream](iterations/02-external-validation-plan.md) runs
+OpenFOAM Foundation 13 next to the native solver: a same-Re cavity cross-check
+and a preliminary comparison against public backstep measurements.
+[EXTERNAL_RESULTS](../validation/EXTERNAL_RESULTS.md) records the runs and the
+remaining gates. This gives the optimization ecosystem a path to an established
+solver while native numerical development continues. It does not close M3b: an
+external backstep is not a measured native street-canyon comparison. The native
+wall and throughput tasks below remain.
 
 ## Milestones
 

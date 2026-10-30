@@ -37,15 +37,14 @@ three 100-step steady monitor windows. Preserve those changes.
    failed metrics. Experimental uncertainty of reattachment is +/-0.10 H;
    profile uncertainty and unmeasured inlet turbulence components must remain
    explicit. A single coarse comparison cannot qualify the native canyon model.
-5. Execute a small mesh series where cloud budgets permit. Report convergence,
+5. Execute a small mesh series within a declared per-case budget. Report convergence,
    input assumptions and mesh sensitivity separately from measurement error.
    Do not tune constants or relax thresholds after observing predictions.
 6. Add negative tests for corrupted input/data/sample identity, malformed or
    nonfinite results, incomplete execution, timeout, version mismatch and
    optimized-Python behavior. Run repository-required Rust and Python checks.
-7. Provide an agent prompt, reproduction guide, results and an implementation
-   log. Package a patch against the exact merged base and check application on
-   a pristine checkout. Keep generated large fields outside the source tree.
+7. Provide an agent prompt, a reproduction guide and recorded results. Keep
+   generated large fields outside the source tree.
 
 ## Deliberate limits
 
@@ -53,8 +52,8 @@ No new native physics or claimed Rust speed advantage. The native wall
 roughness and pressure throughput still need their own numerical iteration.
 The external backstep uses its own documented RANS/inlet package; it does not
 inherit the native canyon's assumptions. No scalar-dispersion validation is
-implied by a velocity-only experiment. No home hardware, purchases, owner
-contact, publication or deployment is needed.
+implied by a velocity-only experiment. No purchases, owner contact,
+publication or deployment is needed.
 
 ## Primary references
 

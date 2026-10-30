@@ -85,7 +85,10 @@ Codes from a run, a restart or `report`, reported in `summary.json` `error` or o
 
 These Python diagnostics carry the code and offending field in the error text.
 They belong to the separate external artifact schema. E062/E063 are also used
-for occupied/unavailable external output paths.
+for occupied/unavailable external output paths. The external tools exit 0 for
+an accepted result, 2 for a completed, stopped or verified run without accepted
+evidence, and 1 for a failed execution or invalid input
+([backend guide](../integrations/OPENFOAM.md)).
 
 | Code | Meaning |
 |---|---|
@@ -97,4 +100,5 @@ for occupied/unavailable external output paths.
 | CFD-X006 | Invalid mesh, returned field, sample, numerical record or archive checksum |
 | CFD-X007 | A completed external solve did not reach its convergence/continuity gate |
 | CFD-X008 | External execution cancelled; process group stopped |
+| CFD-X009 | A cross-solver comparison exceeds its frozen target |
 | CFD-D001 | Reference/protocol hash, measurement identity, pairing or metric input invalid |

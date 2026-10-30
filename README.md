@@ -53,6 +53,8 @@ cargo test --release --workspace --locked
 ruff format --check . && ruff check .
 python validation/test_cli.py -v
 python -O validation/test_cli.py -v
+python validation/test_openfoam.py -v
+python -O validation/test_openfoam.py -v
 python validation/run_suite.py --preset smoke --output runs/verification
 python validation/flow_accuracy.py --output runs/flow-accuracy
 python validation/cavity.py --output runs/cavity

@@ -1,17 +1,18 @@
 # Tutorials
 
-The first release has three executable workflows. Every run uses canonical inputs and preserves its evidence.
+There are four executable workflows. Every run uses canonical inputs and preserves its evidence.
 
-Iteration 02 adds [established-solver and experimental comparisons](../integrations/OPENFOAM.md)
-through `external_cfd.py`, with an [agent prompt](external-cfd-prompt.md).
-The cavity is a numerical cross-check. The backstep uses real measurements but
-keeps numerical failure and incomplete physical qualification explicit.
+The [established-solver and experimental comparisons](../integrations/OPENFOAM.md)
+of `external_cfd.py` have an [agent prompt](external-cfd-prompt.md). The cavity
+is a numerical cross-check. The backstep uses real measurements but keeps
+numerical failure and incomplete physical qualification explicit.
 
 | Workflow | Command | Learning outcome |
 |---|---|---|
 | Source inference | python tutorials/source_inference.py --output runs/inference | Unit-source responses, nonnegative rates, held-out sensors, rank deficiency and model mismatch. |
 | Finite canyon | python tutorials/canyon_study.py --preset smoke --output runs/canyons | Wind direction/aspect ratio, coupled flow/gas checks and limits of coarse scenarios. |
 | Native optimization | python integrations/run_jobs.py --runner RUNNER --output runs/jobs | Hashed CFD inputs, fallible simulation evaluation, equal counted BiteOpt/GP budgets and honest result semantics. |
+| External comparisons | python tutorials/external_cfd.py --preset smoke --foam-root ROOT --timeout-s 300 --output runs/external-smoke | Two solvers on the same cavity, a frozen measurement protocol, and why a numerical gate comes before a measurement screen. |
 
 Use fresh output paths. The source-inference study preset uses altered-grid observations. The canyon sensitivity preset adds two Schmidt values and a longer outlet domain; the full study also attempts a three-grid series and may reach its resource limits.
 

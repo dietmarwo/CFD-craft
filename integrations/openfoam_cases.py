@@ -237,6 +237,8 @@ def build(kind, level, iterations, dataset=None):
             "input_station_x_over_h": -4,
             "height_m": 1.0,
             "reference_speed_m_s": 1.0,
+            # The lower block has uniform spacing in y: 24*level cells over H.
+            "lower_wall_first_cell_height_h": 1 / (24 * level),
             "inlet_assumptions": [
                 "ww=vv",
                 "mean transverse velocity zero",

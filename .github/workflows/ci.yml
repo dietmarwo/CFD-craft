@@ -5,6 +5,7 @@ permissions:
 jobs:
   external-contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -16,7 +17,7 @@ jobs:
   external-backend:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     env:
       CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
       OMP_NUM_THREADS: "1"
@@ -32,16 +33,31 @@ jobs:
       - run: mkdir -p runs && python integrations/install_openfoam13.py --output runs/openfoam13
       - run: python validation/test_openfoam.py -v
       - run: python -O validation/test_openfoam.py -v
-      - run: python tutorials/external_cfd.py --preset cavity --foam-root "$CFD_OPENFOAM_ROOT" --output runs/external-cavity
+      - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
+      # The study preset: the cavity comparison and the backstep at three mesh levels,
+      # each with the recorded 300-second budget. Exit 2 records unaccepted evidence;
+      # exit 1 is a workflow error and fails the job.
+      - run: |
+          set +e
+          python tutorials/external_cfd.py --preset study --timeout-s 300 --foam-root "$CFD_OPENFOAM_ROOT" --output runs/external-study
+          code=$?
+          test "$code" -eq 0 -o "$code" -eq 2
+      - if: always()
+        run: python validation/external_notices.py runs/external-study/report.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: external-cavity-evidence
+          name: external-study-evidence
           path: |
-            runs/external-cavity/report.json
-            runs/external-cavity/cavity-comparison.json
-            runs/external-cavity/openfoam-cavity/summary.json
-            runs/external-cavity/openfoam-cavity/*.log
+            runs/external-study/report.json
+            runs/external-study/cavity-comparison.json
+            runs/external-study/native-cavity/summary.json
+            runs/external-study/native-cavity.*.log
+            runs/external-study/openfoam-cavity/summary.json
+            runs/external-study/openfoam-cavity/*.log
+            runs/external-study/backstep-level*/summary.json
+            runs/external-study/backstep-level*/*.log
+            runs/external-study/backstep-level*-comparison/*
   rust:
     runs-on: ubuntu-latest
     strategy:

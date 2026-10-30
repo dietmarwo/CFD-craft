@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Stage the tested public Foundation-13 Ubuntu package without root privileges.
 
-OpenFOAM remains separately licensed GPL software. No executable is put in the
-repository or patch. This utility supports Ubuntu 24.04 x86_64, not all platforms.
+OpenFOAM is separately licensed GPL software; no OpenFOAM executable or source
+is part of this repository. This utility supports Ubuntu 24.04 x86_64.
 """
 
 import argparse
@@ -31,7 +31,12 @@ def install(output, package_file=None):
     if not shutil.which("dpkg-deb"):
         raise ValueError("CFD-X002 runtime.dpkg-deb: Ubuntu dpkg-deb is required")
     output = Path(output).resolve()
-    output.mkdir()
+    try:
+        output.mkdir()
+    except FileExistsError as exc:
+        raise ValueError(
+            f"CFD-E062 output: directory already exists: {output}"
+        ) from exc
     package = (
         Path(package_file).resolve() if package_file else output / "openfoam13.deb"
     )
@@ -77,9 +82,10 @@ def main():
     try:
         print(json.dumps(install(args.output, args.package_file), indent=2))
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
-        print(
-            json.dumps({"passed": False, "error": f"CFD-X002 runtime.install: {exc}"})
-        )
+        message = str(exc)
+        if not message.startswith("CFD-"):
+            message = f"CFD-X002 runtime.install: {message}"
+        print(json.dumps({"passed": False, "error": message}))
         return 1
     return 0
 

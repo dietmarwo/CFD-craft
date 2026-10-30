@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import signal
 import sys
 from pathlib import Path
 
@@ -14,30 +15,48 @@ sys.path.insert(0, str(ROOT / "validation"))
 import openfoam_backend as backend
 from backstep_data import fetch, load, sha256
 from compare_backstep import assess, samples, save
-from common import accepted, require, run_case
+from common import accepted, run_case
+
+require = backend.require
 
 
 def cavity_comparison(binary, external, output):
-    external_report = backend.verify(external)
-    c = json.loads((ROOT / "cases/verification/lid-cavity.json").read_text())
-    r = run_case(binary, c, Path(output) / "native-cavity")
     result = {
         "passed": False,
         "kind": "numerical_comparison",
         "experimental_validation": False,
-        "native_run": r,
-        "external_run_manifest_sha256": sha256(Path(external) / "manifest.json"),
+        "native_run": None,
     }
     try:
-        require(accepted(r), "native cavity numerical assessment")
+        external_report = backend.verify(external)
+        result["external_run_manifest_sha256"] = sha256(
+            Path(external) / "manifest.json"
+        )
+        c = json.loads((ROOT / "cases/verification/lid-cavity.json").read_text())
+        r = run_case(binary, c, Path(output) / "native-cavity")
+        result["native_run"] = r
+        require(
+            accepted(r),
+            "cavity.native_run",
+            "not an accepted native solution",
+            "CFD-X006",
+        )
         numerical = backend.numerical_assessment(
             Path(external) / "case",
             (Path(external) / "solve.log").read_text(),
             "cavity",
         )
         require(
-            numerical == external_report["numerical"] and numerical["passed"],
-            "external cavity numerical assessment",
+            numerical == external_report["numerical"],
+            "cavity.external_run.numerical",
+            "summary differs from the returned log and fields",
+            "CFD-X006",
+        )
+        require(
+            numerical["passed"],
+            "cavity.external_run.numerical",
+            "convergence/continuity gate not reached",
+            "CFD-X007",
         )
         field = json.loads((Path(output) / "native-cavity/fields.json").read_text())
         nx, ny, nz = c["grid"]["cells"]
@@ -80,11 +99,13 @@ def cavity_comparison(binary, external, output):
         )
         require(
             all(error <= 0.06 for error in errors.values()),
-            "cavity profile comparison exceeds frozen target",
+            "cavity.maximum_absolute_errors_lid_speed",
+            "exceeds the frozen target of 0.06",
+            "CFD-X009",
         )
         result["passed"] = True
     except (ValueError, OSError, KeyError, TypeError) as exc:
-        result["error"] = str(exc)
+        result["error"] = backend.diagnostic(exc, "cavity")
     backend.write_json(Path(output) / "cavity-comparison.json", result)
     return result
 
@@ -106,7 +127,9 @@ def mesh_sensitivity(rows):
     require(
         [(r["station_x_over_h"], r["sample_id"], r["y_over_h"]) for r in ra]
         == [(r["station_x_over_h"], r["sample_id"], r["y_over_h"]) for r in rb],
-        "mesh sample identity mismatch",
+        "mesh_sensitivity.paired_velocity_samples",
+        "sample identities differ between levels",
+        "CFD-D001",
     )
     difference = max(
         abs(x["predicted_u_over_u_ref"] - y["predicted_u_over_u_ref"])
@@ -141,8 +164,6 @@ def workflow(foam_root, binary, output, preset="smoke", data=None, timeout_s=600
         "workflow_implementation_sha256": sha256(__file__),
     }
     stop = backend.Stop()
-    import signal
-
     previous = {
         s: signal.signal(s, stop.signal) for s in [signal.SIGINT, signal.SIGTERM]
     }
@@ -160,7 +181,7 @@ def workflow(foam_root, binary, output, preset="smoke", data=None, timeout_s=600
             if cavity["passed"]
             else {"passed": False, "external": cavity}
         )
-        if preset != "cavity":
+        if preset != "cavity" and not stop.cancelled:
             if data is None:
                 data = output / "measurements"
                 fetch(data)
@@ -189,7 +210,7 @@ def workflow(foam_root, binary, output, preset="smoke", data=None, timeout_s=600
                     row["comparison"] = {
                         "passed": False,
                         "status": "invalid",
-                        "error": str(exc),
+                        "error": backend.diagnostic(exc, "comparison"),
                     }
                 save(output / (name + "-comparison"), row["comparison"])
                 backend.write_json(output / "report.json", report)
@@ -201,7 +222,7 @@ def workflow(foam_root, binary, output, preset="smoke", data=None, timeout_s=600
             and all(row["comparison"]["passed"] for row in report["backstep"])
         )
     except (ValueError, OSError, KeyError, TypeError) as exc:
-        report["error"] = str(exc)
+        report["error"] = backend.diagnostic(exc, "workflow")
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)
@@ -241,7 +262,11 @@ def main():
             indent=2,
         )
     )
-    return 0 if report["passed"] else 2
+    if report["passed"]:
+        return 0
+    # Exit 2: the workflow recorded failed, unaccepted or cancelled evidence.
+    # Exit 1: the workflow itself stopped with an error (runtime, data, I/O).
+    return 1 if report.get("error") else 2
 
 
 if __name__ == "__main__":

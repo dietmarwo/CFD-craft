@@ -13,6 +13,7 @@ import re
 import resource
 import shutil
 import signal
+import statistics
 import subprocess
 import sys
 import time
@@ -51,13 +52,19 @@ def diagnostic(exc, field):
     return str(exc) if str(exc).startswith("CFD-") else f"CFD-X001 {field}: {exc}"
 
 
-def inventory(directory):
+def inventory(directory, symlinks=None):
+    """File sizes and hashes. A symlink is an error, or is listed in `symlinks`."""
     directory = Path(directory)
     entries = {}
     for path in sorted(directory.rglob("*")):
-        require(
-            not path.is_symlink(), str(path.relative_to(directory)), "symlink rejected"
-        )
+        if path.is_symlink():
+            require(
+                symlinks is not None,
+                str(path.relative_to(directory)),
+                "symlink rejected",
+            )
+            symlinks.append(path.relative_to(directory).as_posix())
+            continue
         if path.is_file():
             entries[path.relative_to(directory).as_posix()] = {
                 "bytes": path.stat().st_size,
@@ -120,11 +127,18 @@ def check_prepared(directory):
     return record
 
 
+# The child sees a fixed environment. Inherited OpenFOAM site or user settings,
+# a preloaded library or a user configuration under HOME could change what the
+# hashed runtime does.
+INHERITED_ENVIRONMENT = ("LANG", "LC_ALL", "TZ", "TMPDIR")
+
+
 def runtime(foam_root):
     root = Path(foam_root).resolve()
     base = root / "platforms/linux64GccDPInt32Opt"
-    env = os.environ.copy()
+    env = {k: os.environ[k] for k in INHERITED_ENVIRONMENT if k in os.environ}
     env.update(
+        HOME="/nonexistent",
         WM_PROJECT="OpenFOAM",
         WM_PROJECT_VERSION="13",
         WM_PROJECT_DIR=str(root),
@@ -139,7 +153,7 @@ def runtime(foam_root):
     env["LD_LIBRARY_PATH"] = os.pathsep.join(
         [str(base / "lib"), str(base / "lib/dummy")]
     )
-    env["PATH"] = os.pathsep.join([str(base / "bin"), env.get("PATH", "")])
+    env["PATH"] = os.pathsep.join([str(base / "bin"), "/usr/bin", "/bin"])
     binaries = {
         name: base / "bin" / name
         for name in ["blockMesh", "checkMesh", "foamRun", "foamPostProcess"]
@@ -215,7 +229,16 @@ def stop_process(process):
 
 
 def disk_bytes(directory):
-    return sum(p.stat().st_size for p in Path(directory).rglob("*") if p.is_file())
+    """Bytes of all files below `directory`. OpenFOAM deletes old snapshots
+    (purgeWrite) while it runs, so a file can vanish between listing and stat."""
+    total = 0
+    for base, _, names in os.walk(directory):
+        for name in names:
+            try:
+                total += os.lstat(os.path.join(base, name)).st_size
+            except FileNotFoundError:
+                pass
+    return total
 
 
 def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
@@ -228,6 +251,17 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         resource.setrlimit(resource.RLIMIT_FSIZE, (max_bytes, max_bytes))
 
     start = time.monotonic()
+    for kind, wanted, field in [
+        (resource.RLIMIT_AS, memory_mib * 1024**2, "limits.memory_mib"),
+        (resource.RLIMIT_FSIZE, max_bytes, "limits.output_mib"),
+    ]:
+        hard = resource.getrlimit(kind)[1]
+        require(
+            hard == resource.RLIM_INFINITY or wanted <= hard,
+            field,
+            f"exceeds this host's hard limit of {hard} bytes",
+            "CFD-X001",
+        )
     require(start < deadline, "execution.deadline", "wall-time limit", "CFD-X004")
     require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
     failure = None
@@ -258,8 +292,8 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
                     "CFD-X005",
                 )
                 time.sleep(0.05)
-        except ValueError as exc:
-            failure = str(exc)
+        except (ValueError, OSError) as exc:
+            failure = diagnostic(exc, f"execution.{label}")
         finally:
             stop_process(process)
     record = {
@@ -313,7 +347,10 @@ def scalar_value(text, key, count):
         "wrong count",
         "CFD-X006",
     )
-    values = [float(x) for x in tokens]
+    try:
+        values = [float(x) for x in tokens]
+    except ValueError as exc:
+        raise ValueError(f"CFD-X006 fields.{key}: nonnumeric value") from exc
     require(
         all(math.isfinite(x) for x in values), f"fields.{key}", "nonfinite", "CFD-X006"
     )
@@ -439,6 +476,12 @@ def sample_checks(case, latest, metadata, kind):
             )
 
 
+def face_count(mesh, name):
+    found = re.search(r"nFaces\s+(\d+)", block(mesh, name))
+    require(found is not None, f"mesh.{name}.nFaces", "missing", "CFD-X006")
+    return int(found[1])
+
+
 def flux_balance(case, time_name):
     mesh = (Path(case) / "constant/polyMesh/boundary").read_text()
     phi = (Path(case) / time_name / "phi").read_text()
@@ -454,15 +497,13 @@ def flux_balance(case, time_name):
     ]:
         if not re.search(r"\b" + name + r"\s*\{", mesh):
             continue
-        definition = block(mesh, name)
-        count = int(re.search(r"nFaces\s+(\d+)", definition)[1])
-        values = scalar_value(block(patches, name), "value", count)
+        values = scalar_value(block(patches, name), "value", face_count(mesh, name))
         total.extend(values)
     if not total:  # The cavity has only no-slip walls and no open-boundary flow.
         for name in ["lid", "walls"]:
-            definition = block(mesh, name)
-            count = int(re.search(r"nFaces\s+(\d+)", definition)[1])
-            total.extend(scalar_value(block(patches, name), "value", count))
+            total.extend(
+                scalar_value(block(patches, name), "value", face_count(mesh, name))
+            )
     incoming = -math.fsum(x for x in total if x < 0)
     defect = abs(math.fsum(total))
     return {
@@ -472,9 +513,48 @@ def flux_balance(case, time_name):
     }
 
 
+TIME_LINE = re.compile(r"^Time = (" + NUMBER + r")(?:s)?\s*$", re.M)
+CONVERGED_LINE = re.compile(r"^SIMPLE solution converged in (\d+) iterations\s*$", re.M)
+
+
+def iteration_blocks(log):
+    """(time name, text) for each steady iteration, from its `Time =` line to the next."""
+    marks = list(TIME_LINE.finditer(log))
+    return [
+        (m[1], log[m.end() : marks[i + 1].start() if i + 1 < len(marks) else len(log)])
+        for i, m in enumerate(marks)
+    ]
+
+
+def first_residual(text, field):
+    """OpenFOAM's residualControl uses the first solve of a field in an iteration."""
+    found = re.search(
+        r"Solving for " + field + r", Initial residual = (" + NUMBER + r")", text
+    )
+    return float(found[1]) if found else None
+
+
+def residual_trend(blocks, fields):
+    """Median first-solve residual over the last tenth of the iterations and over
+    the tenth before it: a ratio near 1 at a high level is a stall, not progress."""
+    window = max(1, len(blocks) // 10)
+    trend = {"window_iterations": window}
+    for field in fields:
+        values = [first_residual(text, field) for _, text in blocks]
+        values = [v for v in values if v is not None]
+        last = values[-window:]
+        previous = values[-2 * window : -window]
+        trend[field] = {
+            "median_last_window": statistics.median(last),
+            "median_previous_window": statistics.median(previous) if previous else None,
+        }
+    return trend
+
+
 def numerical_assessment(case, log, kind):
     # Foundation 13 appends the time unit even for a steady pseudo-iteration.
-    times = re.findall(r"^Time = (" + NUMBER + r")(?:s)?\s*$", log, re.M)
+    blocks = iteration_blocks(log)
+    times = [name for name, _ in blocks]
     require(times, "execution.iterations", "no iterations", "CFD-X006")
     require(
         [float(t) for t in times] == list(range(1, len(times) + 1)),
@@ -482,7 +562,7 @@ def numerical_assessment(case, log, kind):
         "incomplete or nonsequential steady iteration log",
         "CFD-X006",
     )
-    latest = times[-1]
+    latest, final = blocks[-1]
     require(
         (Path(case) / latest / "U").is_file(),
         "fields.time",
@@ -492,19 +572,26 @@ def numerical_assessment(case, log, kind):
     residuals = {}
     required = ["Ux", "Uy", "p"] + (["k", "omega"] if kind == "backstep" else [])
     for field in required:
-        values = [
-            float(x)
-            for x in re.findall(
-                r"Solving for " + field + r", Initial residual = (" + NUMBER + r")", log
-            )
-        ]
-        require(values, f"residuals.{field}", "not reported", "CFD-X006")
-        residuals[field] = values[-1]
-    local = [abs(float(x)) for x in re.findall(r"sum local = (" + NUMBER + r")", log)]
-    require(local, "continuity", "not reported", "CFD-X006")
+        value = first_residual(final, field)
+        require(
+            value is not None,
+            f"residuals.{field}",
+            "not reported in the final iteration",
+            "CFD-X006",
+        )
+        residuals[field] = value
+    local = [abs(float(x)) for x in re.findall(r"sum local = (" + NUMBER + r")", final)]
+    require(local, "continuity", "not reported in the final iteration", "CFD-X006")
     flux = flux_balance(case, latest)
     checked_fields = final_field_checks(case, latest, kind)
-    converged = "solution converged" in log.lower()
+    reports = CONVERGED_LINE.findall(log)
+    require(
+        len(reports) <= 1 and all(int(n) == len(times) for n in reports),
+        "execution.convergence",
+        "convergence report disagrees with the iteration log",
+        "CFD-X006",
+    )
+    converged = bool(reports)
     passed = (
         converged
         and all(v <= 1e-7 for v in residuals.values())
@@ -517,6 +604,7 @@ def numerical_assessment(case, log, kind):
         "iterations": len(times),
         "final_time_directory": latest,
         "initial_residuals_final_iteration": residuals,
+        "residual_trend": residual_trend(blocks, required),
         "reported_local_continuity_final": local[-1],
         "final_fields": checked_fields,
         "turbulence_bounding_log_messages": len(
@@ -524,6 +612,23 @@ def numerical_assessment(case, log, kind):
         ),
         **flux,
         "meaning": "solver residual report plus independently summed stored boundary phi; not physical validation",
+    }
+
+
+def progress(output):
+    observed = [m[1] for m in TIME_LINE.finditer((output / "solve.log").read_text())]
+    return {
+        "started_iterations": len(observed),
+        "last_started_iteration": observed[-1] if observed else None,
+        "saved_time_directories": sorted(
+            (
+                p.name
+                for p in (output / "case").iterdir()
+                if p.is_dir() and re.fullmatch(NUMBER, p.name)
+            ),
+            key=float,
+        ),
+        "meaning": "started iterations and saved snapshots; a partial final iteration is not a completed solve",
     }
 
 
@@ -574,7 +679,16 @@ def run(
         },
     }
     try:
-        shutil.copytree(prepared, output / "case")
+        # The copy is what the solver consumes, so it is checked, not the source.
+        shutil.copytree(prepared, output / "case", symlinks=True)
+        copied = inventory(output / "case")
+        copied_case = copied.pop("case.json")
+        require(
+            copied == record["inputs"]
+            and copied_case["sha256"] == report["case_sha256"],
+            "case.inputs",
+            "changed while being copied",
+        )
         binaries, env, identity = runtime(foam_root)
         report["runtime"] = identity
         deadline = start + timeout_s
@@ -657,32 +771,31 @@ def run(
         else:
             report["execution_status"] = "failed"
     finally:
-        solve_log = output / "solve.log"
-        if solve_log.exists():
-            observed = re.findall(
-                r"^Time = (" + NUMBER + r")(?:s)?\s*$", solve_log.read_text(), re.M
-            )
-            report["progress"] = {
-                "started_iterations": len(observed),
-                "last_started_iteration": observed[-1] if observed else None,
-                "saved_time_directories": sorted(
-                    (
-                        p.name
-                        for p in (output / "case").iterdir()
-                        if p.is_dir() and re.fullmatch(NUMBER, p.name)
-                    ),
-                    key=float,
-                ),
-                "meaning": "started iterations and saved snapshots; a partial final iteration is not a completed solve",
-            }
+        if (output / "solve.log").exists():
+            report["progress"] = progress(output)
         report["wall_s"] = time.monotonic() - start
         report["output_bytes_before_manifest"] = disk_bytes(output)
+        # A symlink left by a child is evidence of a failed run, not a reason to
+        # leave the archive unsealed.
+        symlinks = []
+        files = inventory(output, symlinks)
+        if symlinks:
+            report.update(
+                passed=False,
+                execution_status="failed",
+                error=f"CFD-X006 archive.symlinks: {', '.join(symlinks)}",
+            )
         write_json(output / "summary.json", report)
+        files["summary.json"] = {
+            "bytes": (output / "summary.json").stat().st_size,
+            "sha256": sha256(output / "summary.json"),
+        }
         write_json(
             output / "manifest.json",
             {
                 "schema_version": "cfd-craft.external-archive/0.1",
-                "files": inventory(output),
+                "files": files,
+                "symlinks": symlinks,
             },
         )
         write_json(
@@ -692,8 +805,46 @@ def run(
     return report
 
 
+STATUS_CODES = {"timeout": "CFD-X004", "cancelled": "CFD-X008"}
+PROGRAMS = {
+    "cavity": ["blockMesh", "checkMesh", "foamRun", "foamPostProcess"],
+    "backstep": [
+        "blockMesh",
+        "checkMesh",
+        "foamRun",
+        "foamPostProcess",
+        "foamPostProcess",
+    ],
+}
+
+
+def case_file_allowed(name, inputs):
+    """A file in an archived case is a consumed input or a known solver output."""
+    parts = name.split("/")
+    input_directories = {key.split("/")[0] for key in inputs}
+    if name == "case.json" or name in inputs:
+        return True
+    if name.startswith("constant/polyMesh/"):
+        return True
+    if parts[0] in input_directories:
+        return False
+    return parts[0] == "postProcessing" or re.fullmatch(NUMBER, parts[0]) is not None
+
+
 def verify(directory):
-    directory = Path(directory)
+    """Check that an archive is complete and internally consistent: hashes, consumed
+    inputs, the numerical summary recomputed from the returned log and fields, status,
+    return codes, runtime identity and samples. Unkeyed hashes are not tamper-evidence:
+    a consistent rewrite of log, fields and summary is not detectable here."""
+    try:
+        return verified(Path(directory))
+    except (KeyError, TypeError, AttributeError, IndexError) as exc:
+        raise ValueError(
+            f"CFD-X006 archive: malformed record ({type(exc).__name__}: {exc})"
+        ) from exc
+
+
+def verified(directory):
     complete = json.loads((directory / "complete.json").read_text())
     require(
         complete["manifest_sha256"] == sha256(directory / "manifest.json"),
@@ -724,6 +875,45 @@ def verify(directory):
         "unsupported result version",
         "CFD-X006",
     )
+    status, error = report["execution_status"], report.get("error")
+    if status == "completed":
+        require(
+            error is None or error.startswith("CFD-X007"),
+            "archive.error",
+            "a completed run reports another failure",
+            "CFD-X006",
+        )
+        require(
+            report["numerical"] is not None
+            and [c["program"] for c in report["commands"]] == PROGRAMS[report["case"]]
+            and all(c["returncode"] == 0 for c in report["commands"]),
+            "archive.commands",
+            "a completed run needs every command to have exited 0",
+            "CFD-X006",
+        )
+    elif status in STATUS_CODES:
+        require(
+            str(error).startswith(STATUS_CODES[status]),
+            "archive.error",
+            f"{status} needs {STATUS_CODES[status]}",
+            "CFD-X006",
+        )
+    else:
+        require(
+            status == "failed"
+            and error is not None
+            and not error.startswith(("CFD-X004", "CFD-X007", "CFD-X008")),
+            "archive.execution_status",
+            "unknown status or wrong error code",
+            "CFD-X006",
+        )
+    if "runtime" in report:
+        require(
+            "Using: OpenFOAM-13 " in report["runtime"]["help"],
+            "archive.runtime",
+            "not a Foundation-13 runtime",
+            "CFD-X006",
+        )
     case = directory / "case"
     if case.exists():
         require(
@@ -747,17 +937,40 @@ def verify(directory):
                 "consumed input changed",
                 "CFD-X006",
             )
-    if report["numerical"] is not None:
-        numerical = numerical_assessment(
-            case, (directory / "solve.log").read_text(), report["case"]
+        for name in actual:
+            if name.startswith("case/"):
+                require(
+                    case_file_allowed(name[len("case/") :], definition["inputs"]),
+                    "archive." + name,
+                    "neither a consumed input nor a solver output",
+                    "CFD-X006",
+                )
+    solve_log = directory / "solve.log"
+    if solve_log.exists():
+        header = solve_log.read_text()[:4000]
+        require(
+            re.search(r"Version:\s+13\b", header)
+            and re.search(r"^Build\s*:\s*13-", header, re.M),
+            "archive.solve_log",
+            "not written by Foundation 13",
+            "CFD-X006",
         )
+        if case.exists():
+            require(
+                progress(directory) == report.get("progress"),
+                "archive.progress",
+                "summary differs from the log and saved snapshots",
+                "CFD-X006",
+            )
+    if report["numerical"] is not None:
+        numerical = numerical_assessment(case, solve_log.read_text(), report["case"])
         require(
             numerical == report["numerical"],
             "archive.numerical",
             "summary differs from returned fields/log",
             "CFD-X006",
         )
-        if report["execution_status"] == "completed":
+        if status == "completed":
             sample_checks(
                 case,
                 numerical["final_time_directory"],
@@ -765,7 +978,7 @@ def verify(directory):
                 report["case"],
             )
     expected_pass = (
-        report["execution_status"] == "completed"
+        status == "completed"
         and report["numerical"] is not None
         and report["numerical"]["passed"]
     )
@@ -798,8 +1011,10 @@ def main():
     p.add_argument("directory", type=Path)
     args = ap.parse_args()
     stop = Stop()
-    for signum in [signal.SIGINT, signal.SIGTERM]:
-        signal.signal(signum, stop.signal)
+    if args.command == "run":
+        # Only a solve is stopped gracefully; prepare and report stop at once.
+        for signum in [signal.SIGINT, signal.SIGTERM]:
+            signal.signal(signum, stop.signal)
     try:
         if args.command == "prepare":
             result = prepare(
@@ -818,7 +1033,11 @@ def main():
         else:
             result = verify(args.directory)
         print(json.dumps(result, indent=2, allow_nan=False))
-        return 0 if result.get("passed", True) else 2
+        if result.get("passed", True):
+            return 0
+        # Exit 2: a completed, stopped or verified run without accepted numerical
+        # evidence. Exit 1: the execution itself failed (runtime, input, I/O).
+        return 1 if result.get("execution_status") == "failed" else 2
     except (ValueError, OSError, KeyError, TypeError) as exc:
         print(json.dumps({"passed": False, "error": diagnostic(exc, "input")}))
         return 1

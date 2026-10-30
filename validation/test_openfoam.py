@@ -7,6 +7,7 @@ synthetic fixture in this file is experimental or solver-validation evidence.
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -18,6 +19,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "integrations"))
 sys.path.insert(0, str(ROOT / "tutorials"))
+sys.path.insert(0, str(ROOT / "validation"))
 import openfoam_backend as backend
 import openfoam_cases
 import backstep_data
@@ -297,10 +299,371 @@ class Boundaries(unittest.TestCase):
         }
         other = json.loads(json.dumps(row))
         other["paired_velocity_samples"][0]["sample_id"] = 2
-        with self.assertRaisesRegex(ValueError, "identity"):
+        with self.assertRaisesRegex(
+            ValueError, "CFD-D001 mesh_sensitivity.paired_velocity_samples"
+        ):
             mesh_sensitivity(
                 [{"level": 1, "comparison": row}, {"level": 2, "comparison": other}]
             )
+
+
+# A synthetic stand-in for the four Foundation-13 programs. It writes logs, fields,
+# a patch list and samples in the formats the adapter parses, so run() and verify()
+# are exercised end to end without OpenFOAM. Behaviour comes from <root>/mode.
+FAKE_PROGRAM = r"""
+import json, os, re, sys, time
+from pathlib import Path
+
+name = Path(sys.argv[0]).name
+root = Path(sys.argv[0]).resolve().parents[3]
+mode = (root / "mode").read_text().strip()
+args = sys.argv[1:]
+if "-help" in args:
+    print("Usage: foamRun [OPTIONS]")
+    print("Using: OpenFOAM-13 (synthetic test runtime)")
+    sys.exit(0)
+case = Path(args[args.index("-case") + 1])
+print("| Version:  13")
+print("Build  : 13-synthetic")
+meta = json.loads((case / "case.json").read_text())["metadata"]
+cells = meta["cells"]
+faces = round(cells**0.5)
+if name == "blockMesh":
+    mesh = case / "constant/polyMesh"
+    mesh.mkdir(parents=True)
+    (mesh / "boundary").write_text(
+        f"2\n(\nlid {{ type wall; nFaces {faces}; startFace 0; }}\n"
+        f"walls {{ type wall; nFaces {3 * faces}; startFace {faces}; }}\n)\n"
+    )
+elif name == "checkMesh":
+    print("Mesh OK.")
+elif name == "foamRun":
+    print("ENVIRONMENT", " ".join(sorted(os.environ)), "HOME=" + os.environ.get("HOME", ""))
+    iterations = 3 if mode == "stalled" else 2
+    if mode == "churn":
+        # Old snapshots appear and vanish while the adapter measures the output.
+        end, i = time.monotonic() + 1.0, 0
+        while time.monotonic() < end:
+            snapshot = case / str(100 + i % 3)
+            snapshot.mkdir(exist_ok=True)
+            for j in range(30):
+                (snapshot / f"f{j}").write_bytes(b"x" * 64)
+            for f in list(snapshot.iterdir()):
+                f.unlink()
+            snapshot.rmdir()
+            i += 1
+    for it in range(1, iterations + 1):
+        r = 5e-8 if it == iterations and mode != "stalled" else 1e-3
+        print(f"Time = {it}s")
+        print(f"smoothSolver:  Solving for Ux, Initial residual = {r}, Final residual = 1e-12, No Iterations 3")
+        print(f"smoothSolver:  Solving for Uy, Initial residual = {r}, Final residual = 1e-12, No Iterations 3")
+        print(f"GAMG:  Solving for p, Initial residual = {r}, Final residual = 1e-12, No Iterations 5")
+        # A second pressure solve: OpenFOAM's residualControl uses the first one.
+        print("GAMG:  Solving for p, Initial residual = 0.09, Final residual = 1e-12, No Iterations 5")
+        print(f"time step continuity errors : sum local = {r * 1e-3}, global = 0, cumulative = 0")
+    snapshot = case / str(iterations)
+    snapshot.mkdir()
+    values = " ".join("(0.1 0 0)" for _ in range(cells))
+    (snapshot / "U").write_text(f"internalField nonuniform List<vector> {cells} ({values});\n")
+    (snapshot / "p").write_text("internalField uniform 0;\n")
+    lid = f"nonuniform List<scalar> {faces} ({' '.join(['1e-3'] * faces)})" if mode == "leak" else "uniform 0"
+    (snapshot / "phi").write_text(
+        f"boundaryField\n{{\nlid {{ type calculated; value {lid}; }}\n"
+        "walls { type calculated; value uniform 0; }\n}\n"
+    )
+    if mode != "stalled":
+        print(f"SIMPLE solution converged in {iterations} iterations")
+    if mode == "symlink":
+        (case / "link").symlink_to(case / "case.json")
+    print("End")
+elif name == "foamPostProcess":
+    latest = max((p for p in case.iterdir() if re.fullmatch(r"[0-9]+", p.name)), key=lambda p: int(p.name)).name
+    for sample, spec in meta["expected_samples"].items():
+        out = case / "postProcessing/sampleProfiles" / latest
+        out.mkdir(parents=True, exist_ok=True)
+        rows = "\n".join(f"{y!r} 0.1 0 0" for y in spec["positions"])
+        (out / f"{sample}.xy").write_text(f"# {spec['axis']} U_x U_y U_z\n{rows}\n")
+    print("End")
+"""
+
+
+def fake_runtime(root, mode):
+    """A runtime directory whose four programs are FAKE_PROGRAM."""
+    bin_directory = Path(root) / "platforms/linux64GccDPInt32Opt/bin"
+    bin_directory.mkdir(parents=True)
+    (Path(root) / "etc").mkdir()
+    (Path(root) / "etc/controlDict").write_text("synthetic\n")
+    (Path(root) / "mode").write_text(mode)
+    for name in ["blockMesh", "checkMesh", "foamRun", "foamPostProcess"]:
+        program = bin_directory / name
+        program.write_text(f"#!{sys.executable}\n" + FAKE_PROGRAM)
+        program.chmod(0o755)
+    return Path(root)
+
+
+def reseal(directory):
+    entries = backend.inventory(directory)
+    entries.pop("manifest.json")
+    entries.pop("complete.json")
+    backend.write_json(
+        directory / "manifest.json",
+        {"schema_version": "cfd-craft.external-archive/0.1", "files": entries},
+    )
+    backend.write_json(
+        directory / "complete.json",
+        {"manifest_sha256": backend.sha256(directory / "manifest.json")},
+    )
+
+
+class FakeRuntime(unittest.TestCase):
+    """run() and verify() end to end on a synthetic runtime; not solver evidence."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="cfd-external-fake-")
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def run_fake(self, mode, name="run"):
+        prepared = self.root / f"{name}-input"
+        backend.prepare("cavity", 1, 50, prepared)
+        foam = fake_runtime(self.root / f"{name}-runtime", mode)
+        output = self.root / name
+        return backend.run(prepared, output, foam, timeout_s=60), output
+
+    def test_a_converged_run_verifies_with_first_solve_residuals(self):
+        saved = {k: os.environ.get(k) for k in ["WM_PROJECT_SITE", "FOAM_SIGFPE"]}
+        os.environ.update(WM_PROJECT_SITE="/site", FOAM_SIGFPE="0")
+        try:
+            report, output = self.run_fake("converged")
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key)
+                else:
+                    os.environ[key] = value
+        self.assertTrue(report["passed"], report.get("error"))
+        self.assertTrue(backend.verify(output)["passed"])
+        numerical = report["numerical"]
+        self.assertEqual(numerical["iterations"], 2)
+        self.assertTrue(numerical["solver_reported_convergence"])
+        # The first pressure solve of the last iteration, not the later one at 0.09.
+        self.assertEqual(numerical["initial_residuals_final_iteration"]["p"], 5e-8)
+        self.assertEqual(numerical["residual_trend"]["p"]["median_last_window"], 5e-8)
+        self.assertEqual(
+            [c["program"] for c in report["commands"]], backend.PROGRAMS["cavity"]
+        )
+        # The child sees a fixed environment, not the caller's OpenFOAM settings.
+        line = next(
+            x
+            for x in (output / "solve.log").read_text().splitlines()
+            if x.startswith("ENVIRONMENT")
+        )
+        self.assertNotIn("WM_PROJECT_SITE", line)
+        self.assertNotIn("FOAM_SIGFPE", line)
+        self.assertIn("HOME=/nonexistent", line)
+
+    def test_a_stalled_run_completes_without_numerical_acceptance(self):
+        report, output = self.run_fake("stalled")
+        self.assertEqual(report["execution_status"], "completed")
+        self.assertFalse(report["passed"])
+        self.assertTrue(report["error"].startswith("CFD-X007"))
+        self.assertFalse(backend.verify(output)["passed"])
+
+    def test_a_net_boundary_flux_fails_the_balance(self):
+        report, output = self.run_fake("leak")
+        faces = round(report["case_metadata"]["cells"] ** 0.5)
+        self.assertAlmostEqual(
+            report["numerical"]["net_flux_m3_s"], faces * 1e-3, delta=1e-12
+        )
+        self.assertFalse(report["passed"])
+
+    def test_snapshot_deletion_during_a_solve_keeps_every_record(self):
+        report, output = self.run_fake("churn")
+        self.assertTrue(report["passed"], report.get("error"))
+        self.assertEqual(
+            [c["program"] for c in report["commands"]], backend.PROGRAMS["cavity"]
+        )
+
+    def test_a_symlink_left_by_the_solver_seals_a_failed_archive(self):
+        report, output = self.run_fake("symlink")
+        self.assertEqual(report["execution_status"], "failed")
+        self.assertIn("CFD-X006 archive.symlinks: case/link", report["error"])
+        self.assertTrue((output / "complete.json").is_file())
+        with self.assertRaisesRegex(ValueError, "symlink rejected"):
+            backend.verify(output)
+
+    def test_the_copied_case_is_what_gets_checked(self):
+        original = backend.shutil.copytree
+
+        def copy_and_add(source, destination, *args, **kwargs):
+            result = original(source, destination, *args, **kwargs)
+            if Path(destination).name == "case":
+                (Path(destination) / "constant/fvModels").write_text("added\n")
+            return result
+
+        backend.shutil.copytree = copy_and_add
+        try:
+            report, output = self.run_fake("converged")
+        finally:
+            backend.shutil.copytree = original
+        self.assertEqual(report["execution_status"], "failed")
+        self.assertIn("CFD-X001 case.inputs", report["error"])
+
+    def test_the_verifier_rejects_inconsistent_archives(self):
+        report, output = self.run_fake("converged")
+
+        def mutated(change):
+            target = self.root / f"mutated-{len(list(self.root.iterdir()))}"
+            backend.shutil.copytree(output, target, symlinks=True)
+            change(target)
+            reseal(target)
+            return target
+
+        def summary(edit):
+            def change(target):
+                record = json.loads((target / "summary.json").read_text())
+                edit(record)
+                backend.write_json(target / "summary.json", record)
+
+            return change
+
+        def failed_solver(r):
+            r["commands"][2]["returncode"] = 139
+
+        def other_runtime(r):
+            r["runtime"]["help"] = "Using: OpenFOAM-v2312"
+
+        def progress(r):
+            r["progress"]["started_iterations"] = 3000
+
+        def relabelled(r):
+            r["execution_status"] = "timeout"
+
+        def extra_input(target):
+            (target / "case/constant/fvModels").write_text("not consumed\n")
+
+        def inputs_as_list(target):
+            record = json.loads((target / "case/case.json").read_text())
+            record["inputs"] = list(record["inputs"])
+            backend.write_json(target / "case/case.json", record)
+            summary(
+                lambda r: r.update(
+                    case_sha256=backend.sha256(target / "case/case.json")
+                )
+            )(target)
+
+        for change, expected in [
+            (summary(failed_solver), "archive.commands"),
+            (summary(other_runtime), "archive.runtime"),
+            (summary(progress), "archive.progress"),
+            (summary(relabelled), "archive.error"),
+            (extra_input, "archive.case/constant/fvModels"),
+            (inputs_as_list, "CFD-X006 archive: malformed"),
+        ]:
+            with self.assertRaisesRegex(ValueError, expected):
+                backend.verify(mutated(change))
+
+    def test_exit_codes_separate_failed_execution_from_unaccepted_numerics(self):
+        prepared = self.root / "cli-input"
+        backend.prepare("cavity", 1, 50, prepared)
+        script = ROOT / "integrations/openfoam_backend.py"
+
+        def cli(output, foam):
+            return subprocess.run(
+                [sys.executable, str(script), "run", "--case", str(prepared)]
+                + ["--output", str(output), "--foam-root", str(foam)]
+                + ["--timeout-s", "60"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            ).returncode
+
+        self.assertEqual(cli(self.root / "cli-missing", self.root / "missing"), 1)
+        stalled = fake_runtime(self.root / "cli-runtime", "stalled")
+        self.assertEqual(cli(self.root / "cli-stalled", stalled), 2)
+
+    def test_tutorial_errors_are_coded_and_cancellation_stops_downloads(self):
+        import external_cfd
+
+        report, output = self.run_fake("converged")
+        result = external_cfd.cavity_comparison(
+            self.root / "no-binary", output, self.root / "comparison"
+        )
+        self.assertFalse(result["passed"])
+        self.assertTrue(result["error"].startswith("CFD-"), result["error"])
+        self.assertTrue((self.root / "comparison/cavity-comparison.json").is_file())
+
+        fetched = []
+        original_run, original_fetch = external_cfd.backend.run, external_cfd.fetch
+
+        def cancelled_run(*args, stop, **kwargs):
+            stop.cancelled = True
+            return {"passed": False, "execution_status": "cancelled"}
+
+        external_cfd.backend.run = cancelled_run
+        external_cfd.fetch = fetched.append
+        try:
+            workflow = external_cfd.workflow(
+                self.root / "unused", self.root / "no-binary", self.root / "flow"
+            )
+        finally:
+            external_cfd.backend.run = original_run
+            external_cfd.fetch = original_fetch
+        self.assertEqual(fetched, [])
+        self.assertFalse(workflow["workflow_completed"])
+
+
+class Installer(unittest.TestCase):
+    def test_installer_errors_carry_one_code(self):
+        import install_openfoam13
+
+        with tempfile.TemporaryDirectory(prefix="cfd-installer-") as d:
+            root = Path(d)
+            (root / "occupied").mkdir()
+            with self.assertRaisesRegex(ValueError, "^CFD-E062 output"):
+                install_openfoam13.install(root / "occupied", root / "missing.deb")
+            package = root / "wrong.deb"
+            package.write_bytes(b"not the pinned package")
+            p = subprocess.run(
+                [sys.executable, str(ROOT / "integrations/install_openfoam13.py")]
+                + ["--output", str(root / "out"), "--package-file", str(package)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(p.returncode, 1)
+            error = json.loads(p.stdout)["error"]
+            self.assertEqual(error.count("CFD-"), 1, error)
+
+
+class Comparison(unittest.TestCase):
+    def test_a_failed_numerical_gate_leaves_the_screen_unassessed(self):
+        screen = compare_backstep.measurement_screen(False, True)
+        self.assertIsNone(screen["measurement_screen_passed"])
+        self.assertFalse(screen["passed"])
+        self.assertTrue(screen["measurement_screen"].startswith("not_assessed"))
+        self.assertTrue(compare_backstep.measurement_screen(True, True)["passed"])
+
+    def test_baselines_and_near_wall_resolution(self):
+        inlet = [[0, 1.0, 0.5], [1, 2.0, 1.0]]
+        baseline = compare_backstep.no_step_baseline(inlet, np.array([0.5, 1.5, 3.0]))
+        np.testing.assert_allclose(baseline, [0.0, 0.75, 1.0])
+        metadata = {
+            "lower_wall_first_cell_height_h": 1 / 24,
+            "reference_speed_m_s": 1.0,
+            "height_m": 1.0,
+            "reynolds": 36000,
+            "turbulence_package": "synthetic",
+        }
+        x = np.array([2.0, 6.0, 20.0])
+        stress = np.array([[-1e-4, 0.0], [4e-4, 0.0], [9e-4, 0.0]])
+        resolution = compare_backstep.first_cell_y_plus(metadata, x, stress)
+        expected = [0.01 * 36000 / 48, 0.02 * 36000 / 48, 0.03 * 36000 / 48]
+        self.assertAlmostEqual(resolution["scored_1_to_12"]["minimum"], expected[0])
+        self.assertAlmostEqual(resolution["scored_1_to_12"]["maximum"], expected[1])
+        self.assertAlmostEqual(resolution["recovery_12_to_40"]["median"], expected[2])
 
 
 @unittest.skipUnless(

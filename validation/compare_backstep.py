@@ -52,6 +52,53 @@ def interpolate(x, y, target, field):
     return np.interp(target, x, y)
 
 
+def rmse(error):
+    return float(np.sqrt(np.mean(error**2))) if len(error) else None
+
+
+def no_step_baseline(inlet, y):
+    """A predictor that ignores the step: the measured x/H=-4 profile above the
+    step height and zero below it, held constant beyond the measured range."""
+    inlet = np.array(inlet)
+    return np.where(y < 1.0, 0.0, np.interp(y, inlet[:, 1], inlet[:, 2]))
+
+
+def first_cell_y_plus(metadata, x, stress):
+    """y+ of the first lower-wall cell centre, from the sampled wall shear stress."""
+    height = metadata.get("lower_wall_first_cell_height_h")
+    if height is None:
+        return None
+    nu = metadata["reference_speed_m_s"] * metadata["height_m"] / metadata["reynolds"]
+    y_plus = np.sqrt(np.hypot(stress[:, 0], stress[:, 1])) * 0.5 * height / nu
+    regions = {"scored_1_to_12": (1, 12), "recovery_12_to_40": (12, 40)}
+    result = {
+        "first_cell_centre_height_h": 0.5 * height,
+        "wall_treatment": metadata.get("turbulence_package"),
+        "meaning": "k-based wall functions switch near y+ 11; a first cell in the buffer layer (about 5 < y+ < 30) makes Cf and reattachment depend on the wall treatment",
+    }
+    for name, (lo, hi) in regions.items():
+        selected = y_plus[(x > lo) & (x < hi)]
+        result[name] = {
+            "median": float(np.median(selected)),
+            "minimum": float(selected.min()),
+            "maximum": float(selected.max()),
+        }
+    return result
+
+
+def measurement_screen(numerical_passed, agreement):
+    """Metrics of a solve that missed its numerical gate describe one iterate, not a
+    solution: they are reported, but they do not make a measurement screen."""
+    return {
+        "numerical_passed": numerical_passed,
+        "measurement_screen": "evaluated"
+        if numerical_passed
+        else "not_assessed: the numerical gate failed; the metrics describe the final iterate only",
+        "measurement_screen_passed": agreement if numerical_passed else None,
+        "passed": numerical_passed and agreement,
+    }
+
+
 def crossing(x, cf):
     crossings = []
     for i in range(len(x) - 1):
@@ -122,13 +169,20 @@ def assess(run, data, protocol=PROTOCOL):
             "sample identity mismatch",
         )
         error = values[:, 1] - observed[:, 2]
-        rmse = float(np.sqrt(np.mean(error**2)))
+        y = observed[:, 1]
+        station_rmse = rmse(error)
         metrics[str(station)] = {
             "samples": len(values),
-            "rmse_u_ref": rmse,
+            "rmse_u_ref": station_rmse,
             "maximum_absolute_error_u_ref": float(max(abs(error))),
             "target_rmse_max": p["profile_rmse_max_u_ref"],
-            "passed": rmse <= p["profile_rmse_max_u_ref"],
+            "within_target": station_rmse <= p["profile_rmse_max_u_ref"],
+            # The outer flow is easy to match; the shear layer is not.
+            "rmse_u_ref_below_y2": rmse(error[y < 2]),
+            "rmse_u_ref_from_y2": rmse(error[y >= 2]),
+            "baseline_no_step_rmse_u_ref": rmse(
+                no_step_baseline(reference["profiles"][-4], y) - observed[:, 2]
+            ),
         }
         for observed_row, predicted_row in zip(observed, values, strict=True):
             paired.append(
@@ -159,16 +213,18 @@ def assess(run, data, protocol=PROTOCOL):
     cf = -2 * values[:, 4]
     observed = np.array([row for row in reference["cf"] if row[0] > 0])
     predicted = interpolate(values[:, 0], cf, observed[:, 0], "cf.x_over_h")
-    cf_rmse = float(np.sqrt(np.mean((predicted - observed[:, 1]) ** 2)))
+    cf_rmse = rmse(predicted - observed[:, 1])
     reattach, crossings = crossing(values[:, 0], cf)
     reattach_error = (
         abs(reattach - p["reattachment_x_over_h"]) if reattach is not None else None
     )
     friction = {
         "samples": len(observed),
+        "excluded_upstream_rows": len(reference["cf"]) - len(observed),
         "rmse": cf_rmse,
         "target_rmse_max": p["lower_wall_cf_rmse_max"],
-        "passed": cf_rmse <= p["lower_wall_cf_rmse_max"],
+        "within_target": cf_rmse <= p["lower_wall_cf_rmse_max"],
+        "baseline_zero_cf_rmse": rmse(observed[:, 1]),
         "reported_measurement_error_not_used_as_a_95pct_interval": observed[
             :, 2
         ].tolist(),
@@ -180,14 +236,15 @@ def assess(run, data, protocol=PROTOCOL):
         "reported_experimental_uncertainty_h": p["reattachment_reported_uncertainty_h"],
         "absolute_error_h": reattach_error,
         "target_absolute_error_max_h": p["reattachment_absolute_error_max_h"],
-        "passed": reattach_error is not None
+        "within_target": reattach_error is not None
         and reattach_error <= p["reattachment_absolute_error_max_h"],
     }
     agreement = (
-        all(m["passed"] for m in metrics.values())
-        and friction["passed"]
-        and reattachment["passed"]
+        all(m["within_target"] for m in metrics.values())
+        and friction["within_target"]
+        and reattachment["within_target"]
     )
+
     return {
         "schema_version": "cfd-craft.backstep-comparison/0.1",
         "status": "evaluated",
@@ -203,9 +260,11 @@ def assess(run, data, protocol=PROTOCOL):
             ]
         },
         "run_manifest_sha256": sha256(Path(run) / "manifest.json"),
-        "numerical_passed": numerical["passed"],
-        "measurement_screen_passed": agreement,
-        "passed": numerical["passed"] and agreement,
+        **measurement_screen(numerical["passed"], agreement),
+        "residual_trend": numerical["residual_trend"],
+        "near_wall_resolution": first_cell_y_plus(
+            result["case_metadata"], values[:, 0], values[:, 4:6]
+        ),
         "profiles": metrics,
         "skin_friction": friction,
         "reattachment": reattachment,
@@ -277,7 +336,11 @@ def main():
     try:
         result = assess(args.run, args.data, args.protocol)
     except (ValueError, OSError, KeyError, TypeError) as exc:
-        result = {"status": "invalid", "passed": False, "error": str(exc)}
+        result = {
+            "status": "invalid",
+            "passed": False,
+            "error": backend.diagnostic(exc, "comparison"),
+        }
     try:
         save(args.output, result)
     except (ValueError, OSError) as exc:

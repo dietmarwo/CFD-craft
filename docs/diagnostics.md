@@ -58,6 +58,8 @@ more than the host can hold.
 | CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
 | CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
+W002 and W003 encode the COST 732 best-practice guideline (Franke et al., 2007) as summarized by secondary sources that cite it. The primary document was not retrieved from its distribution share; `validation/data-inventory.json` records that. They are warnings because best-practice distances depend on the scenario: a wind-tunnel reproduction may use the tunnel's own dimensions.
+
 Codes from a run, a restart or `report`, reported in `summary.json` `error` or on stderr:
 
 | Code | Meaning |

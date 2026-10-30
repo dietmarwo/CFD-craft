@@ -104,8 +104,9 @@ def canyon(aspect=1.0, direction=270.0, cells=(18, 16, 12), name=None):
         wall_time_limit_s=240.0,
         threads=2,
     )
+    # Steady acceptance compares three successive 100-step monitor windows.
     c["numerics"].update(
-        max_time_step_s=0.1, transport="linear_upwind", monitor_window=40
+        max_time_step_s=0.1, transport="linear_upwind", monitor_window=100
     )
     return c
 
@@ -193,6 +194,7 @@ def main():
         )
     ]
     p["run"].update(mode="steady", max_steps=6000, wall_time_limit_s=120.0)
+    p["numerics"]["monitor_window"] = 100
     p["numerics"]["transport"] = "linear_upwind"
     save("cases/verification/source-response.json", p)
 

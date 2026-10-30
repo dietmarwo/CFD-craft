@@ -6,22 +6,57 @@
       "id": "codasc",
       "status": "data_unavailable",
       "paper": "https://www.harmo.org/Conferences/Proceedings/_Madrid/publishedSections/H15-142.pdf",
-      "attempted_endpoints": ["https://www.codasc.de/", "https://www.ifh.uni-karlsruhe.de/science/aerodyn/CODASC.htm", "https://www.iwu.kit.edu/efm/CODASC.htm"],
+      "attempted_endpoints": [
+        "https://www.codasc.de/",
+        "https://www.ifh.uni-karlsruhe.de/science/aerodyn/CODASC.htm",
+        "https://www.iwu.kit.edu/efm/CODASC.htm"
+      ],
       "result": "Timeout or inaccessible legacy endpoint; no raw concentration files acquired.",
       "redistribution": "not established; no raw data bundled",
-      "needed": ["finite geometry and exact line sources", "measured inlet and tunnel dimensions", "wall concentration files", "normalization, uncertainty and quantification metadata", "usage terms"],
+      "needed": [
+        "finite geometry and exact line sources",
+        "measured inlet and tunnel dimensions",
+        "wall concentration files",
+        "normalization, uncertainty and quantification metadata",
+        "usage terms"
+      ],
       "development_case": "W/H=1, perpendicular",
-      "heldout_cases": ["W/H=2, perpendicular", "W/H=1, oblique"],
+      "heldout_cases": [
+        "W/H=2, perpendicular",
+        "W/H=1, oblique"
+      ],
       "code_case_status": "illustrative 1 m boxes on coarse grids, not an exact CODASC reconstruction"
     },
     {
-      "id": "cedval-les-es1006",
+      "id": "cedval-les",
       "status": "access_required",
       "url": "https://www.mi.uni-hamburg.de/en/arbeitsgruppen/windkanallabor/data-sets.html",
-      "result": "Owner describes password-protected archives; ES1006 requires its data agreement.",
+      "result": "The owner's page states that the measurement archives are zipped and password protected; the password is requested from the wind-tunnel laboratory by e-mail.",
+      "redistribution": "not established; no raw data bundled",
+      "public_ci": "must not depend on the password"
+    },
+    {
+      "id": "cost-es1006-michelstadt",
+      "status": "agreement_required",
+      "url": "https://www.mi.uni-hamburg.de/en/arbeitsgruppen/windkanallabor/data-sets.html",
+      "result": "Password-protected archives, and the owner's page makes signing the Data Policy Agreement of COST Action ES1006 mandatory for using the data set.",
       "redistribution": "not established; no raw data bundled"
+    },
+    {
+      "id": "external-solver-canyon",
+      "status": "not_started",
+      "purpose": "A pinned OpenFOAM run of the same finite canyon, sources, receptors and observables",
+      "claim": "numerical comparison only; not experimental data"
     }
   ],
   "experimental_release_gate": "blocked_data",
-  "automatic_contact": false
+  "automatic_contact": false,
+  "best_practice_guideline": {
+    "id": "cost-732-bpg",
+    "status": "primary_not_retrieved",
+    "reference": "Franke et al. (2007), Best Practice Guideline for the CFD Simulation of Flows in the Urban Environment, COST Action 732; summary in Int. J. Environment and Pollution 44 (2011), doi:10.1504/IJEP.2011.038443",
+    "distributed_by": "https://www.mi.uni-hamburg.de/en/arbeitsgruppen/windkanallabor/documents.html",
+    "result": "The owner's documents page links the guideline on a cloud share that was not reachable from the build environment.",
+    "encoded_as": "warnings CFD-W002 (blockage above 3 %) and CFD-W003 (clearance about 5 H_max upstream, at the sides and above, 15 H_max downstream), values from secondary summaries that cite the guideline"
+  }
 }

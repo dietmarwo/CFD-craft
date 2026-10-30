@@ -510,6 +510,24 @@ class Boundaries(unittest.TestCase):
             self.assertNotEqual(p.returncode, 0)
             self.assertIn("solid cell", p.stdout)
 
+    def test_independent_checker_rejects_a_wrong_source_strength(self):
+        self.case = self.canyon()
+        self.case["run"]["max_steps"] = 5
+        out = self.root / "rate"
+        p = self.invoke("run", self.save(), "--output", out)
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertEqual(self.checker(out, []).returncode, 0)
+        case = json.loads((out / "case.json").read_text())
+        source = case["sources"][0]
+        rate = next(k for k in source if k.startswith("rate_"))
+        source[rate] *= 1.1
+        (out / "case.json").write_text(json.dumps(case))
+        self.reseal(out)
+        for flag in [[], ["-O"]]:
+            p = self.checker(out, flag)
+            self.assertNotEqual(p.returncode, 0)
+            self.assertIn("emission normalization", p.stdout)
+
     def test_launcher_forwards_a_signal_that_arrives_while_starting(self):
         work = self.root / "work"
         work.mkdir()

@@ -1,4 +1,5 @@
-//! Regression tests for defects found in review of 0.1.0.
+//! Tests for diagnostics, estimates, geometry, archives, boundary classification and an
+//! independently assembled pressure reference.
 use cfd_craft::{
     case::*,
     flow,
@@ -310,4 +311,204 @@ fn the_output_estimate_counts_constituents() {
         c.constituents.push(s);
     }
     assert!(c.check().estimated_output_mib > 2.5 * (one - 2.0) + 2.0);
+}
+
+/// Boundary faces of one side of the domain, by kind.
+fn side_kinds(g: &Grid, axis: usize, high: bool) -> Vec<FaceKind> {
+    let mut kinds: Vec<FaceKind> = g
+        .faces
+        .iter()
+        .filter(|f| f.axis == axis && f.coord[axis] == if high { g.n[axis] } else { 0 })
+        .filter(|f| f.kind != FaceKind::Blocked)
+        .map(|f| f.kind)
+        .collect();
+    kinds.dedup();
+    kinds
+}
+
+#[test]
+fn an_oblique_wind_classifies_its_inlets_and_outlets() {
+    use FaceKind::{Inlet, Outlet, Slip};
+    // Meteorological direction is where the wind comes from, clockwise from north.
+    for (degrees, x, y) in [
+        (270.0, [Inlet, Outlet], [Slip, Slip]),
+        (225.0, [Inlet, Outlet], [Inlet, Outlet]),
+        (45.0, [Outlet, Inlet], [Outlet, Inlet]),
+        (135.0, [Outlet, Inlet], [Inlet, Outlet]),
+    ] {
+        let mut c = canyon();
+        c.grid.cells = [18, 16, 12];
+        let Flow::NeutralRans {
+            direction_deg_from, ..
+        } = &mut c.flow
+        else {
+            unreachable!()
+        };
+        *direction_deg_from = degrees;
+        let g = Grid::build(&c).unwrap();
+        for (axis, expected) in [(0, x), (1, y)] {
+            for (side, kind) in expected.iter().enumerate() {
+                assert_eq!(
+                    side_kinds(&g, axis, side == 1),
+                    vec![*kind],
+                    "{degrees} deg, axis {axis}, side {side}"
+                );
+            }
+        }
+    }
+}
+
+/// Dense Gaussian elimination with partial pivoting, for small reference systems.
+fn dense_solve(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Vec<f64> {
+    let n = b.len();
+    for k in 0..n {
+        let p = (k..n)
+            .max_by(|&i, &j| a[i][k].abs().total_cmp(&a[j][k].abs()))
+            .unwrap();
+        a.swap(k, p);
+        b.swap(k, p);
+        let (top, bottom) = a.split_at_mut(k + 1);
+        let pivot = &top[k];
+        for (offset, row) in bottom.iter_mut().enumerate() {
+            let f = row[k] / pivot[k];
+            for (x, p) in row[k..].iter_mut().zip(&pivot[k..]) {
+                *x -= f * p;
+            }
+            b[k + 1 + offset] -= f * b[k];
+        }
+    }
+    let mut x = vec![0.0; n];
+    for k in (0..n).rev() {
+        let s: f64 = (k + 1..n).map(|j| a[k][j] * x[j]).sum();
+        x[k] = (b[k] - s) / a[k][k];
+    }
+    x
+}
+
+#[test]
+fn the_masked_pressure_operator_matches_an_assembled_reference() {
+    // A RANS street with a sealed 2x2x2 pocket inside a hollow box: one component
+    // anchored by its outlet and one closed component with a gauge.
+    for periodic_y in [false, true] {
+        let mut c = canyon();
+        c.constituents.clear();
+        c.sources.clear();
+        c.receptors.clear();
+        c.initial_conditions.clear();
+        c.domain.size_m = [10.0, 6.0, 5.0];
+        c.grid.cells = [10, 6, 5];
+        if periodic_y {
+            c.boundaries.y = Boundary::Periodic;
+        }
+        let shell = [
+            ([3.0, 1.0, 0.0], [7.0, 5.0, 1.0]),
+            ([3.0, 1.0, 3.0], [7.0, 5.0, 4.0]),
+            ([3.0, 1.0, 1.0], [4.0, 5.0, 3.0]),
+            ([6.0, 1.0, 1.0], [7.0, 5.0, 3.0]),
+            ([4.0, 1.0, 1.0], [6.0, 2.0, 3.0]),
+            ([4.0, 4.0, 1.0], [6.0, 5.0, 3.0]),
+        ];
+        c.geometry = shell
+            .iter()
+            .enumerate()
+            .map(|(i, (lo, hi))| Block {
+                id: format!("shell{i}"),
+                min_m: *lo,
+                max_m: *hi,
+            })
+            .collect();
+        let g = Grid::build(&c).unwrap();
+        assert_eq!(g.anchored.len(), 2);
+        assert_eq!(g.anchored.iter().filter(|a| !**a).count(), 1);
+        // Assemble from the mask and the boundary semantics alone, without the face list:
+        // fluid neighbors couple with 1/dx^2; an open face with outflow is a Dirichlet
+        // face at half a cell (2/dx^2); walls, slip, inlets and solids add nothing.
+        let fluid: Vec<usize> = (0..g.count()).filter(|i| g.fluid[*i]).collect();
+        let row: std::collections::HashMap<usize, usize> =
+            fluid.iter().enumerate().map(|(r, i)| (*i, r)).collect();
+        let m = fluid.len();
+        let mut a = vec![vec![0.0; m]; m];
+        for (r, &i) in fluid.iter().enumerate() {
+            let q = g.coord(i);
+            for axis in 0..3 {
+                let h2 = g.dx[axis] * g.dx[axis];
+                for step in [-1isize, 1] {
+                    let t = q[axis] as isize + step;
+                    let inside = (0..g.n[axis] as isize).contains(&t);
+                    if !inside && c.boundaries.at(axis) != Boundary::Periodic {
+                        if c.boundaries.at(axis) == Boundary::Open {
+                            let z = g.center(i)[2];
+                            let outward = c.flow.vector(z)[axis] * step as f64;
+                            if outward > 1e-12 {
+                                a[r][r] += 2.0 / h2;
+                            }
+                        }
+                        continue;
+                    }
+                    let mut p = q;
+                    p[axis] = t.rem_euclid(g.n[axis] as isize) as usize;
+                    let j = Grid::index(g.n, p);
+                    if let Some(&s) = row.get(&j) {
+                        a[r][r] += 1.0 / h2;
+                        a[r][s] -= 1.0 / h2;
+                    }
+                }
+            }
+        }
+        // Products agree on a nonsmooth field.
+        let x: Vec<f64> = (0..g.count())
+            .map(|i| ((7 * i) % 13) as f64 - 6.0)
+            .collect();
+        let mut y = vec![0.0; g.count()];
+        pressure::apply(&g, &x, &mut y);
+        let scale = y.iter().map(|v| v.abs()).fold(0.0, f64::max);
+        for (r, &i) in fluid.iter().enumerate() {
+            let reference: f64 = fluid.iter().enumerate().map(|(s, &j)| a[r][s] * x[j]).sum();
+            assert!((y[i] - reference).abs() <= 1e-12 * scale, "{i}");
+        }
+        // Solutions agree: a compatible right-hand side, the closed component's gauge
+        // fixed by one pinned cell, then both solutions centered there.
+        let mut b: Vec<f64> = (0..g.count())
+            .map(|i| {
+                if g.fluid[i] {
+                    (i as f64 * 0.37).sin()
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let closed = g.anchored.iter().position(|a| !*a).unwrap();
+        let members = &g.components[closed];
+        let mean = members.iter().map(|i| b[*i]).sum::<f64>() / members.len() as f64;
+        members.iter().for_each(|i| b[*i] -= mean);
+        let (x, info) = pressure::solve(&g, &b, 1e-14, 5000, &Control::new(20.0)).unwrap();
+        assert!(
+            info.relative_residual <= 1e-13,
+            "{}",
+            info.relative_residual
+        );
+        let pin = row[&members[0]];
+        let mut ar = a.clone();
+        ar[pin] = vec![0.0; m];
+        ar[pin][pin] = 1.0;
+        let mut br: Vec<f64> = fluid.iter().map(|i| b[*i]).collect();
+        br[pin] = 0.0;
+        let mut reference = dense_solve(ar, br);
+        let rmean = members.iter().map(|i| reference[row[i]]).sum::<f64>() / members.len() as f64;
+        members.iter().for_each(|i| reference[row[i]] -= rmean);
+        let mut solved: Vec<f64> = fluid.iter().map(|i| x[*i]).collect();
+        let smean = members.iter().map(|i| solved[row[i]]).sum::<f64>() / members.len() as f64;
+        members.iter().for_each(|i| solved[row[i]] -= smean);
+        let norm = reference.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let error = solved
+            .iter()
+            .zip(&reference)
+            .map(|(a, b)| (a - b).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        assert!(
+            error <= 1e-10 * norm,
+            "periodic_y {periodic_y}: {error} vs {norm}"
+        );
+    }
 }

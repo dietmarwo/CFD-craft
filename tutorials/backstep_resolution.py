@@ -165,7 +165,7 @@ def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iteration
         report["passed"] = report["workflow_completed"] and all(
             r["passed"] for r in report["rows"]
         )
-    except (ValueError, OSError, KeyError, TypeError) as exc:
+    except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
         report["error"] = backend.diagnostic(exc, "study")
     finally:
         for s, handler in previous.items():

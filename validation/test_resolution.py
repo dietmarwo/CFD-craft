@@ -33,6 +33,7 @@ from audit_openfoam_mesh import (
     vector_values,
     patches,
     checked_wall_distances,
+    relative_cell_imbalance,
     represented_domain,
     wall_resolution,
 )
@@ -42,21 +43,19 @@ WALLS = ["lowerWall", "stepWall", "upperWall", "upstreamWall"]
 
 
 def line_divide(cells, grading):
-    """blockMesh's division of one block edge, reimplemented from its documented
-    multi-grading rules: normalized length and cell fractions, nearest-integer
-    cell counts, the remainder in the last segment, last/first width expansion."""
+    """blockMesh's division of one block edge, reimplemented from Foundation 13's
+    lineDivide: normalized length and cell fractions, nearest-integer cell counts
+    with the remainder on the (first) largest cell fraction, and expansion as the
+    last/first width."""
     if not isinstance(grading, list):
         grading = [(1, 1, grading)]
     length = sum(g[0] for g in grading)
     fraction = sum(g[1] for g in grading)
-    widths, used = [], 0
-    for i, (part, share, expansion) in enumerate(grading):
-        count = (
-            cells - used
-            if i == len(grading) - 1
-            else int(share / fraction * cells + 0.5)
-        )
-        used += count
+    counts = [int(g[1] / fraction * cells + 0.5) for g in grading]
+    largest = max(range(len(grading)), key=lambda i: (grading[i][1], -i))
+    counts[largest] += cells - sum(counts)
+    widths = []
+    for (part, _, expansion), count in zip(grading, counts, strict=True):
         ratio = expansion ** (1 / (count - 1)) if count > 1 else 1
         first = (
             part
@@ -373,10 +372,11 @@ class Resolution(unittest.TestCase):
             ]:
                 self.assertAlmostEqual(sum(widths), length, places=10)
             # Across x=0 (both channel rows) and across y=1 (downstream), and within.
-            self.assertLessEqual(neighbour_ratio(np.r_[upstream, downstream]), 1.2)
-            self.assertLessEqual(neighbour_ratio(np.r_[lower, upper]), 1.35)
-            self.assertLessEqual(downstream[0] / upstream[-1], 1.2)
-            self.assertLessEqual(upstream[-1] / downstream[0], 1.2)
+            # Growth of at most 15% per cell upstream, 11% downstream and 33% in y.
+            self.assertLessEqual(neighbour_ratio(upstream), 1.15 + 1e-9)
+            self.assertLessEqual(neighbour_ratio(downstream), 1.11)
+            self.assertLessEqual(neighbour_ratio(np.r_[lower, upper]), 1.33)
+            self.assertLessEqual(neighbour_ratio([upstream[-1], downstream[0]]), 1.02)
             heights = meta["wall_first_cell_height_h"]
             for name, width in [
                 ("stepWall", downstream[0]),
@@ -601,6 +601,32 @@ class Resolution(unittest.TestCase):
         self.assertEqual(
             wall["patches"]["lowerWall"]["maximum_y_plus_at_xy_over_h"], [0, 0]
         )
+        # The location is the face centre of the largest y+, in units of H.
+        mesh, parts, metadata, text = self.wall_case({})
+        mesh = {
+            "owner": np.array([0, 0]),
+            "cell_centres": np.array([[3.5, 0.5, 0.5]]),
+            "face_centres": np.array([[3.0, 0, 0.5], [4.0, 0, 0.5]]),
+        }
+        parts["lowerWall"] = (0, 2)
+        metadata["height_m"] = 2
+        metadata["wall_first_cell_height_h"]["lowerWall"] = 0.5
+        text = text.replace(
+            "lowerWall { type calculated; value uniform (0 0 1); }",
+            "lowerWall { type calculated; value nonuniform List<vector> 2 ((1 0 0) (4 0 0)); }",
+        )
+        names = ["lowerWall"]
+        metadata["wall_first_cell_height_h"] = {"lowerWall": 0.5}
+        with patch(
+            "audit_openfoam_mesh.checked_wall_distances",
+            return_value={"lowerWall": np.array([0.5, 0.5])},
+        ):
+            located = wall_resolution(
+                mesh, {n: parts[n] for n in names}, metadata, text
+            )
+        self.assertEqual(
+            located["patches"]["lowerWall"]["maximum_y_plus_at_xy_over_h"], [2.0, 0.0]
+        )
         wall = wall_resolution(*self.wall_case({"upperWall": (16.0001, 0, 0)}))
         self.assertFalse(wall["passed"])
         self.assertFalse(wall["patches"]["upperWall"]["passed"])
@@ -758,7 +784,8 @@ class Resolution(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         report = json.loads((self.root / "audit.json").read_text())
         self.assertEqual(report["status"], "invalid")
-        self.assertNotIn(str(self.root), report["error"].split(":", 1)[0])
+        self.assertTrue(report["error"].startswith("CFD-X006 archive:"), report)
+        self.assertNotIn(str(self.root), report["error"])
         result = cli(
             "--run", self.root / "missing", "--output", self.root / "audit.json"
         )
@@ -768,6 +795,145 @@ class Resolution(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("CFD-E063", result.stdout)
         self.assertEqual(result.stderr, "")
+
+    def test_an_archive_without_a_final_field_is_not_assessed(self):
+        (self.root / "manifest.json").write_text("{}")
+        with patch.object(backend, "verify", return_value={"numerical": None}):
+            result = audit(self.root)
+        self.assertEqual(result["status"], "not_assessed")
+        self.assertFalse(result["passed"])
+        self.assertIn("run.numerical", result["reason"])
+
+    def test_an_unterminated_last_log_line_is_read_at_exit(self):
+        log = self.root / "solve.log"
+        log.write_bytes(
+            b"sum local = 2.9e-4, global = 1e-5\nSolving for p, Initial residual = nan"
+        )
+        scan = backend.SolverLogScan(log)
+        self.assertIsNone(scan.update())
+        self.assertIn("residual", scan.update(final=True))
+
+    def test_the_first_breakdown_is_kept_and_the_limit_is_inclusive(self):
+        log = self.root / "solve.log"
+        log.write_bytes(
+            b"Solving for Ux, Initial residual = -nan, Final residual = 1\n"
+        )
+        scan = backend.SolverLogScan(log)
+        self.assertIn("execution.solve.residual", scan.update())
+        with log.open("ab") as stream:
+            stream.write(b"time step continuity errors : sum local = 5, global = 1\n")
+        self.assertIn("execution.solve.residual", scan.update(final=True))
+        log.write_bytes(b"time step continuity errors : sum local = 1, global = 0\n")
+        self.assertIn(
+            "execution.solve.continuity", backend.SolverLogScan(log).update(final=True)
+        )
+
+    def test_a_commented_ascii_format_in_a_multiline_header_is_rejected(self):
+        two_cells(self.root)
+        points = self.root / "constant/polyMesh/points"
+        text = points.read_text()
+        header = text[: text.index("}") + 1]
+        multiline = (
+            "FoamFile\n{\n    version 2.0;\n    format binary; // format ascii;\n"
+            "    class vectorField;\n    object points;\n}\n"
+        )
+        points.write_text(text.replace(header, multiline))
+        with self.assertRaisesRegex(ValueError, "CFD-X011 mesh.points: ASCII required"):
+            cartesian_mesh(self.root)
+        points.write_text(
+            text.replace(header, multiline.replace("binary; // format ", ""))
+        )
+        self.assertEqual(cartesian_mesh(self.root)["cells"], 2)
+
+    def test_extra_text_in_point_and_vector_lists_is_rejected(self):
+        two_cells(self.root)
+        points = self.root / "constant/polyMesh/points"
+        points.write_text(points.read_text().replace("(0 0 0)", "(0 0 0) junk", 1))
+        with self.assertRaisesRegex(ValueError, "CFD-X011 mesh.points"):
+            cartesian_mesh(self.root)
+        text = "value nonuniform List<vector> 2 ((1 0 0) junk (2 0 0));"
+        with self.assertRaisesRegex(ValueError, "CFD-X011 wall: wrong vector width"):
+            vector_values(text, 2, "wall")
+        rows = vector_values(
+            "value nonuniform List<vector> 2 ((1 0 0) (2 0 0));", 2, "wall"
+        )
+        np.testing.assert_allclose(rows, [[1, 0, 0], [2, 0, 0]])
+
+    def test_relative_cell_imbalance_is_scale_free(self):
+        mesh = {
+            "cells": 2,
+            "owner": np.array([0, 0, 1]),
+            "neighbour": np.array([1]),
+            "volumes": np.array([1.0, 1e-6]),
+        }
+        # Cell 0: +1.1 out through the internal face, -1 in through the boundary.
+        self.assertAlmostEqual(
+            relative_cell_imbalance(mesh, [1.1, -1, 1.1]), 0.1 / 1.05
+        )
+        self.assertEqual(relative_cell_imbalance(mesh, [1, -1, 1]), 0)
+        self.assertEqual(relative_cell_imbalance(mesh, [0, 0, 0]), 0)
+
+    def test_resolution_notices_cover_skipped_and_failed_rows(self):
+        report = {
+            "preset": "study",
+            "passed": False,
+            "workflow_completed": True,
+            "error": None,
+            "rows": [
+                {
+                    "name": "wall-resolved-simplec-level1",
+                    "accepted": False,
+                    "passed": False,
+                    "execution": {
+                        "execution_status": "failed",
+                        "error": "CFD-X010 execution.solve.continuity: sum local 1.2 >= 1",
+                        "progress": {"started_iterations": 154},
+                        "wall_s": 70.5,
+                        "numerical": None,
+                    },
+                    "comparison": {
+                        "status": "not_assessed",
+                        "reason": "no final field",
+                    },
+                    "independent": None,
+                },
+                {
+                    "name": "wall-resolved-simplec-level2",
+                    "status": "not_started",
+                    "reason": "coarser_level_not_accepted",
+                },
+            ],
+            "implementation_sha256": {"backstep_resolution.py": "0" * 64},
+        }
+        path = self.root / "report.json"
+        path.write_text(json.dumps(report))
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "validation/external_notices.py"), str(path)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 3)
+        self.assertIn("sum local 1.2 >= 1", lines[0])
+        self.assertIn("started iterations 154", lines[0])
+        self.assertIn("independent audit not run", lines[0])
+        self.assertIn(
+            "not started%3A coarser_level_not_accepted", lines[1].replace(":", "%3A")
+        )
+        self.assertIn("backstep_resolution.py", lines[2])
+
+    def test_other_workflow_errors_are_recorded(self):
+        with (
+            patch.object(backstep_resolution, "load", return_value=synthetic_data()),
+            patch.object(backend, "prepare", side_effect=IndexError("list index")),
+        ):
+            report = backstep_resolution.study(
+                self.root, self.root / "study", self.root
+            )
+        self.assertFalse(report["workflow_completed"])
+        self.assertTrue(report["error"].startswith("CFD-X001 study:"))
 
     def test_nonfinite_solver_output_stops_before_the_deadline(self):
         (self.root / "case").mkdir()

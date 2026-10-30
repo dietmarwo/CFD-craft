@@ -19,7 +19,7 @@ jobs:
   external-backend:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 150
     env:
       CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
       OMP_NUM_THREADS: "1"

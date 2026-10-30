@@ -397,7 +397,11 @@ def wall_resolution(mesh, parts, metadata, text):
 
 def audit(run):
     run = Path(run)
-    record = backend.verify(run)
+    try:
+        record = backend.verify(run)
+    except OSError as exc:
+        name = Path(exc.filename).name if exc.filename else "archive"
+        raise ValueError(f"CFD-X006 archive: cannot read {name}") from exc
     if record["numerical"] is None:
         return {
             "schema_version": "cfd-craft.cartesian-audit/0.1",

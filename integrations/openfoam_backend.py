@@ -449,9 +449,30 @@ def internal_values(path, count, vector=False):
     """Read this adapter's ASCII vol field, checking every returned cell."""
     text = Path(path).read_text()
     width = 3 if vector else 1
+    name = Path(path).name
+
+    def tokens_of(body):
+        # Whole (x y z) groups only; a regrouped or split vector list is rejected.
+        if vector:
+            group = r"\(\s*([^\s()]+)\s+([^\s()]+)\s+([^\s()]+)\s*\)"
+            require(
+                not re.sub(group, " ", body).strip(),
+                f"fields.{name}",
+                "expected (x y z) vector entries",
+                "CFD-X006",
+            )
+            return [x for row in re.findall(group, body) for x in row]
+        require(
+            "(" not in body and ")" not in body,
+            f"fields.{name}",
+            "unexpected parentheses in a scalar field",
+            "CFD-X006",
+        )
+        return body.split()
+
     uniform = re.search(r"\binternalField\s+uniform\s+([^;]+);", text)
     if uniform:
-        tokens = uniform[1].replace("(", " ").replace(")", " ").split()
+        tokens = tokens_of(uniform[1])
         expected = width
     else:
         cls = "vector" if vector else "scalar"
@@ -474,7 +495,7 @@ def internal_values(path, count, vector=False):
             "cell count mismatch",
             "CFD-X006",
         )
-        tokens = match[2].replace("(", " ").replace(")", " ").split()
+        tokens = tokens_of(match[2])
         expected = count * width
     require(
         len(tokens) == expected,

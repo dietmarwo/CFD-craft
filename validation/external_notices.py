@@ -174,11 +174,97 @@ def restart_comparison(report, title):
     return 0
 
 
+def mapping_experiment(report, title):
+    lines = [
+        f"passed {report.get('passed')}; stop {report.get('stop_reason')}; "
+        f"error {report.get('error')}; preparation {number(report.get('preparation_wall_s'), 4)} s"
+    ]
+    for name, run in (report.get("runs") or {}).items():
+        work = run.get("numerical") or {}
+        lines.append(
+            f"{name}: {run.get('execution_status')}; passed {run.get('passed')}; "
+            f"iterations {work.get('iterations')}; wall {number(run.get('wall_s'), 5)} s"
+        )
+    for name, field in (report.get("field_differences") or {}).items():
+        lines.append(f"{name}: max abs difference {number(field['maximum_absolute'])}")
+    for name, found in (report.get("audits") or {}).items():
+        continuity = found.get("local_continuity") or {}
+        lines.append(
+            f"{name}: audit passed {found.get('passed')}; max div(phi)*H/U "
+            f"{number(continuity.get('maximum_abs_divergence_h_over_u'))}"
+        )
+    for name, found in (report.get("ghia") or {}).items():
+        lines.append(
+            f"{name}: Ghia centerline error {number(found['maximum_centerline_error'])}"
+        )
+    lines += [
+        f"{k} {v}" for k, v in (report.get("implementation_sha256") or {}).items()
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
+def mapped_start(report, title):
+    target = report.get("target") or {}
+    source = report.get("source") or {}
+    lines = [
+        f"source level {source.get('level')} ({source.get('iterations')} iterations, "
+        f"accepted {source.get('numerically_accepted')}) -> level {target.get('level')}, "
+        f"{target.get('iterations')} iterations, {target.get('timeout_s')} s each; "
+        f"preparation {number(report.get('preparation_wall_s'), 4)} s; "
+        f"workflow completed {report.get('workflow_completed')}; error {report.get('error')}"
+    ]
+    for name, run in (report.get("runs") or {}).items():
+        residuals = run.get("initial_residuals_final_iteration") or {}
+        trend = ((run.get("residual_trend") or {}).get("p")) or {}
+        lines.append(
+            f"{name}: {run.get('execution_status')}; iterations {run.get('iterations')}; "
+            f"converged {run.get('solver_reported_convergence')}; accepted "
+            f"{run.get('numerically_accepted')}; wall {number(run.get('wall_s'), 5)} s; "
+            "final residuals "
+            + ", ".join(f"{k} {number(v, 4)}" for k, v in residuals.items())
+            + f"; p median last/previous window {number(trend.get('median_last_window'), 4)}"
+            f" / {number(trend.get('median_previous_window'), 4)}"
+        )
+        found = run.get("audit") or {}
+        if found:
+            lines.append(
+                f"{name}: audit passed {found.get('passed')}; max div(phi)*H/U "
+                f"{number(found.get('maximum_abs_divergence_h_over_u'), 3)}; max y+ "
+                + ", ".join(
+                    f"{k} {number(v, 4)}"
+                    for k, v in (found.get("maximum_y_plus") or {}).items()
+                )
+            )
+        metrics = run.get("final_iterate_metrics") or {}
+        if metrics:
+            lines.append(
+                f"{name}: final iterate reattachment "
+                f"{number(metrics.get('reattachment_x_over_h'), 6)} H; Cf RMSE "
+                f"{number(metrics.get('cf_rmse'), 4)}; profiles "
+                + ", ".join(
+                    f"{k} {number(v, 4)}"
+                    for k, v in (metrics.get("profile_rmse") or {}).items()
+                )
+                + f"; screen {metrics.get('measurement_screen_passed')}"
+            )
+    lines += [
+        f"{k} {v}" for k, v in (report.get("implementation_sha256") or {}).items()
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
     if "rows" in report:
         return resolution(report)
+    schema = str(report.get("schema_version", ""))
+    if schema.startswith("cfd-craft.mapping-experiment"):
+        return mapping_experiment(report, title)
+    if schema.startswith("cfd-craft.mapped-start"):
+        return mapped_start(report, title)
     if str(report.get("schema_version", "")).startswith(
         "cfd-craft.restart-equivalence"
     ):

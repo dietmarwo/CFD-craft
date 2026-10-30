@@ -19,6 +19,7 @@ sys.path[:0] = [str(ROOT / "integrations"), str(ROOT / "validation")]
 import openfoam_backend as backend
 import openfoam_mapping as mapping
 from audit_openfoam_mesh import audit
+from compare_backstep import samples
 from compare_restart import field_differences, same_recipe
 
 
@@ -27,13 +28,8 @@ class UnacceptedRun(ValueError):
 
 
 def ghia(run, record):
-    path = (
-        Path(run)
-        / "case/postProcessing/sampleProfiles"
-        / record["numerical"]["final_time_directory"]
-        / "centerline.xy"
-    )
-    rows = np.loadtxt(path, ndmin=2)
+    # The checked sample reader: column order, finite values, increasing y.
+    rows = samples(run, "centerline", ["y", "U_x", "U_y", "U_z"], record)
     observed = np.loadtxt(
         ROOT / "validation/ghia-re100-u.csv", delimiter=",", skiprows=1
     )

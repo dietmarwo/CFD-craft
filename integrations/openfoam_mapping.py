@@ -11,16 +11,44 @@ import re
 import time
 from pathlib import Path
 
+import numpy as np
+
 import openfoam_backend as backend
 import openfoam_restart as restart
 from openfoam_cases import build, control_dict
 
-SCHEMA = "cfd-craft.mesh-initialization/0.1"
+SCHEMA = "cfd-craft.mesh-initialization/0.2"
 EVIDENCE = "mapping_evidence"
 
 
 def require(ok, field, message):
     backend.require(ok, "mapping." + field, message, "CFD-X014")
+
+
+def coded(exc, field):
+    """The CFD-X014 form of an exception raised while reading mapping evidence."""
+    if isinstance(exc, KeyError):
+        key = exc.args[0] if exc.args else "receipt"
+        return ValueError(f"CFD-X014 mapping.{key}: missing")
+    if isinstance(exc, (TypeError, AttributeError, IndexError, OverflowError)):
+        return ValueError(
+            f"CFD-X014 mapping.{field}: malformed record ({type(exc).__name__})"
+        )
+    if isinstance(exc, OSError):
+        name = Path(exc.filename).name if exc.filename else "evidence"
+        return ValueError(f"CFD-X014 mapping.{field}: cannot access {name}")
+    if isinstance(exc, ValueError) and str(exc).startswith("CFD-"):
+        return exc
+    if isinstance(exc, ValueError):
+        return ValueError(f"CFD-X014 mapping.{field}: invalid text/JSON evidence")
+    return exc
+
+
+def finite(value):
+    """A JSON number that is not a bool and fits a float."""
+    if type(value) is int:
+        return abs(value) <= 2**53
+    return type(value) is float and math.isfinite(value)
 
 
 def digest(data):
@@ -34,14 +62,48 @@ def text(data, field):
         raise ValueError(f"CFD-X014 mapping.{field}: non-text input") from exc
 
 
-def checked(path, entry, field):
+def checked(path, entry, field, message="source changed after verification"):
     data = Path(path).read_bytes()
-    require(
-        {"bytes": len(data), "sha256": digest(data)} == entry,
-        field,
-        "source changed after verification",
-    )
+    require({"bytes": len(data), "sha256": digest(data)} == entry, field, message)
     return data
+
+
+def nearest_replay(evidence, source_time, fields, source_cells, target_cells):
+    """Replay nearest-cell-centre mapping from the stored source copy.
+
+    Every mapped internal value must equal the value of a source cell whose
+    centre is nearest to the target cell centre (either one of two equidistant
+    centres). This ties the consumed fields to the receipt's source fields with
+    the independent mesh reader, not with the mapper's own output.
+    """
+    from audit_openfoam_mesh import cartesian_mesh
+    from scipy.spatial import cKDTree
+
+    source = cartesian_mesh(evidence / "source/case")
+    target = cartesian_mesh(evidence / "target/case")
+    require(
+        source["cells"] == source_cells and target["cells"] == target_cells,
+        "mesh.cells",
+        "stored source/target meshes differ from the receipt's cell counts",
+    )
+    distance, index = cKDTree(source["cell_centres"]).query(target["cell_centres"], k=2)
+    tie = distance[:, 1] - distance[:, 0] <= 1e-9 * distance[:, 1]
+    for name in fields:
+        width = 3 if name == "U" else 1
+
+        def values(path, cells):
+            found = np.array(backend.internal_values(path, cells, name == "U"))
+            return np.broadcast_to(found.reshape(-1, width), (cells, width))
+
+        coarse = values(evidence / "source/case" / source_time / name, source_cells)
+        mapped = values(evidence / "target/case/0" / name, target_cells)
+        nearest = np.all(mapped == coarse[index[:, 0]], axis=1)
+        nearest |= tie & np.all(mapped == coarse[index[:, 1]], axis=1)
+        require(
+            bool(nearest.all()),
+            "mapper.values." + name,
+            f"{int((~nearest).sum())} target cells differ from the nearest source cell",
+        )
 
 
 def volume_fields(kind):
@@ -122,18 +184,11 @@ def check_mesh(case, state):
 def validate(case, definition):
     try:
         validate_inputs(Path(case), definition)
-    except (KeyError, TypeError, AttributeError, IndexError) as exc:
-        raise ValueError(
-            f"CFD-X014 mapping.receipt: malformed record ({type(exc).__name__})"
-        ) from exc
-    except OSError as exc:
-        raise ValueError(
-            f"CFD-X014 mapping.inputs: cannot read {Path(exc.filename).name if exc.filename else 'evidence'}"
-        ) from exc
-    except ValueError as exc:
-        if str(exc).startswith("CFD-"):
+    except Exception as exc:
+        error = coded(exc, "inputs")
+        if error is exc:
             raise
-        raise ValueError("CFD-X014 mapping.inputs: invalid text/JSON evidence") from exc
+        raise error from exc
 
 
 def validate_inputs(case, definition):
@@ -145,7 +200,7 @@ def validate_inputs(case, definition):
     )
     limits = state["limits"]
     require(
-        math.isfinite(limits["wall_s"])
+        finite(limits["wall_s"])
         and 0 < limits["wall_s"] <= 3600
         and type(limits["output_mib"]) is int
         and 1 <= limits["output_mib"] <= 2048
@@ -155,15 +210,27 @@ def validate_inputs(case, definition):
         "invalid preparation limits",
     )
     require(
-        math.isfinite(state["preparation_wall_s"]) and state["preparation_wall_s"] >= 0,
+        finite(state["preparation_wall_s"]) and state["preparation_wall_s"] >= 0,
         "preparation_wall_s",
         "invalid preparation work record",
+    )
+    require(
+        type(definition["max_iterations"]) is int
+        and 50 <= definition["max_iterations"] <= 20000,
+        "max_iterations",
+        "expected 50..20000",
+    )
+    require(
+        isinstance(state["source_time"], str)
+        and re.fullmatch(r"[1-9][0-9]*", state["source_time"]) is not None,
+        "source_time",
+        "expected a positive iteration directory name",
     )
     require(
         state["schema_version"] == SCHEMA
         and state["method"] == "mapNearest_internal_only",
         "schema_version",
-        "unsupported mapping method",
+        "unsupported receipt schema or mapping method",
     )
     require(
         state["initial_flux_policy"] == "solver_initializes_phi_from_new_mesh_U",
@@ -247,6 +314,12 @@ def validate_inputs(case, definition):
         "source.acceptance",
         "source is not an accepted final snapshot",
     )
+    require(
+        type(state["source_iterations"]) is int
+        and state["source_iterations"] == summary["numerical"]["iterations"],
+        "source_iterations",
+        "source work differs from the source summary",
+    )
     audit = json.loads((evidence / "source-audit.json").read_text())
     require(
         audit["passed"] is True
@@ -309,7 +382,8 @@ def validate_inputs(case, definition):
     )
     require(
         tuple(Path(arguments[1]).parts[-3:]) == (EVIDENCE, "target", "case")
-        and tuple(Path(arguments[2]).parts[-3:]) == (EVIDENCE, "source", "case"),
+        and tuple(Path(arguments[2]).parts[-3:]) == (EVIDENCE, "source", "case")
+        and Path(arguments[1]).parents[1] == Path(arguments[2]).parents[1],
         "mapper.arguments",
         "wrong source/target work case",
     )
@@ -381,7 +455,12 @@ def validate_inputs(case, definition):
         "unexpected prepared fields",
     )
     for name, entry in template["inputs"].items():
-        data = checked(evidence / "templates" / name, entry, "templates." + name)
+        data = checked(
+            evidence / "templates" / name,
+            entry,
+            "templates." + name,
+            "stored template differs from the target template record",
+        )
         if name.startswith("0/"):
             field = name[2:]
             require(field in fields, "fields", "unexpected volume field")
@@ -406,45 +485,59 @@ def validate_inputs(case, definition):
             "mesh." + name,
             "mapping mesh identity mismatch",
         )
+    nearest_replay(
+        evidence,
+        state["source_time"],
+        fields,
+        original["metadata"]["cells"],
+        definition["metadata"]["cells"],
+    )
     backend.final_field_checks(case, "0", definition["kind"])
 
 
 def verify_receipt(case, definition, report):
+    """Recheck runtime and rebuilt mesh; a pre-solve rejection is a consistent failure."""
+    try:
+        archive_receipt(Path(case), definition, report)
+    except Exception as exc:
+        error = coded(exc, "archive")
+        if error is exc:
+            raise
+        raise error from exc
+
+
+def archive_receipt(case, definition, report):
     validate(case, definition)
     state = definition["mesh_initialization"]
-    solved = any(c["program"] == "foamRun" for c in report["commands"])
 
-    def checks():
-        require(
-            not solved or "runtime" in report, "runtime", "solved case lacks runtime"
+    def mesh_passed():
+        return (
+            any(
+                c["program"] == "checkMesh" and c["returncode"] == 0
+                for c in report["commands"]
+            )
+            and "Mesh OK." in (case.parent / "check-mesh.log").read_text()
         )
+
+    if any(c["program"] == "foamRun" for c in report["commands"]):
+        # A solved case passed both checks before its solve: both are mandatory.
+        require("runtime" in report, "runtime", "solved case lacks runtime")
+        check_runtime(state, report["runtime"])
+        require(mesh_passed(), "mesh", "solved case lacks a passed mesh check")
+        check_mesh(case, state)
+        return
+    try:
         if "runtime" in report:
             check_runtime(state, report["runtime"])
-        mesh_ok = any(
-            c["program"] == "checkMesh" and c["returncode"] == 0
-            for c in report["commands"]
-        )
-        require(not solved or mesh_ok, "mesh", "solved case lacks mesh check")
-        if mesh_ok:
-            require(
-                "Mesh OK." in (Path(case).parent / "check-mesh.log").read_text(),
-                "mesh",
-                "target mesh check did not pass",
-            )
+        # A failed mesh check stops the run with its own error before this check.
+        if mesh_passed():
             check_mesh(case, state)
-
-    if solved:
-        checks()
-    else:
-        try:
-            checks()
-        except ValueError as exc:
-            require(
-                report["execution_status"] == "failed"
-                and report.get("error") == str(exc),
-                "archive",
-                "mismatch was not rejected before solving",
-            )
+    except ValueError as exc:
+        require(
+            report["execution_status"] == "failed" and report.get("error") == str(exc),
+            "archive",
+            "mismatch was not rejected before solving",
+        )
 
 
 def prepare(
@@ -469,7 +562,7 @@ def prepare(
     )
     interval = backend.snapshot_interval(iterations)
     require(
-        math.isfinite(timeout_s) and 0 < timeout_s <= 3600,
+        finite(timeout_s) and 0 < timeout_s <= 3600,
         "timeout_s",
         "expected (0,3600]",
     )
@@ -496,18 +589,11 @@ def prepare(
             stop or backend.Stop(),
             interval,
         )
-    except (KeyError, TypeError, AttributeError, IndexError) as exc:
-        raise ValueError(
-            f"CFD-X014 mapping.inputs: malformed record ({type(exc).__name__})"
-        ) from exc
-    except OSError as exc:
-        raise ValueError(
-            f"CFD-X014 mapping.inputs: cannot access {Path(exc.filename).name if exc.filename else 'input'}"
-        ) from exc
-    except ValueError as exc:
-        if str(exc).startswith("CFD-"):
+    except Exception as exc:
+        error = coded(exc, "inputs")
+        if error is exc:
             raise
-        raise ValueError("CFD-X014 mapping.inputs: invalid text/JSON source") from exc
+        raise error from exc
 
 
 def prepared(
@@ -693,6 +779,8 @@ def prepared(
             "mapper.identity",
             "mapper changed during preparation",
         )
+        # A cancellation after the last utility still leaves no runnable case.
+        backend.require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
         for name, content in target_files.items():
             destination = output / name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -714,6 +802,7 @@ def prepared(
             "source_case_sha256": digest(original_bytes),
             "source_level": original["level"],
             "source_time": latest,
+            "source_iterations": parent["numerical"]["iterations"],
             "source_fields": {n: entries[f"case/{latest}/{n}"] for n in fields},
             "target_metadata_sha256": restart.identity(target_meta),
             "target_mesh": {
@@ -752,13 +841,16 @@ def prepared(
         return backend.check_prepared(output)
     except BaseException as exc:
         (output / "case.json").unlink(missing_ok=True)
+        error = coded(exc, "inputs") if isinstance(exc, Exception) else exc
         backend.write_json(evidence / "commands.json", commands)
         backend.write_json(
             output / "mapping-failure.json",
             {
                 "preparation_passed": False,
-                "error": backend.diagnostic(exc, "mapping"),
+                "error": backend.diagnostic(error, "mapping"),
                 "meaning": "non-runnable preparation evidence",
             },
         )
-        raise
+        if error is exc:
+            raise
+        raise error from exc

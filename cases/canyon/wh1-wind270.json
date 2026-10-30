@@ -128,7 +128,7 @@
     "pressure_max_iterations": 1200,
     "steady_residual_tolerance": 1e-05,
     "steady_monitor_tolerance": 0.001,
-    "monitor_window": 40
+    "monitor_window": 100
   },
   "run": {
     "mode": "steady",

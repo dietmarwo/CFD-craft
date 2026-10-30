@@ -42,7 +42,7 @@ Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid c
 - Strict case/result schemas through describe; JSON/CSV evidence; VTK conversion.
 - Synthetic source inversion, finite-canyon wind/Schmidt/domain studies, and a scalar fcmaes application worker.
 
-The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/roadmap.md) maps the initial plan's iterations to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, multigrid and GPU execution are later work.
+The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/roadmap.md) maps the development plan's milestones, numeric targets and tutorials to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, multigrid and GPU execution are later work.
 
 ## Verification
 

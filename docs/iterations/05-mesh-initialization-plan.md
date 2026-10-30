@@ -62,6 +62,18 @@ No source-flux, final residual, wall-y+ or measurement threshold changes. A
 GCI, mesh independence and physical validation remain open, as do native
 physics, GPU and MPI.
 
+## Outcome
+
+The [results](../../validation/MAPPING_RESULTS.md) record the GitHub runs. The
+mapped and cold level-2 cavities meet every declared bound (U 5.1e-9). On the
+real backstep meshes, Foundation 13's mapNearest takes a nearby source cell
+other than the nearest for 4.9% of the level-2 cells, so the replay accepts any
+of the 27 nearest cells, the same one in every field, and records how many and
+how far. From the accepted level-1 backstep, a mapped level-2 start reaches a
+pressure residual of 1.1e-6 after 3000 iterations, a cold start 6.4e-5; neither
+reaches the nonlinear gate. An accepted level-2 backstep, its stage lengths and
+the source-gate decision remain open.
+
 ## Primary source
 
 [Foundation 13 mapFields](https://cpp.openfoam.org/v13/mapFields_8C_source.html)

@@ -36,13 +36,13 @@ before. The development run of the same dictionaries (below) stopped at the
 same iteration with the same p residual; its final Ux, Uy, k and omega residuals
 are 1.00e-7, 6.0e-8, 3.6e-8 and 4.5e-11.
 
-**Reruns at the current implementation.** The `external-resolution` CI job ran
-the same study at the current implementation (second column of the table
-below) on two runners, with four cores of an AMD EPYC 9V45 and of an AMD EPYC
-7763. Both converged at iteration 18412 and reproduce every number of this
-section to the digits shown, apart from the wall time: 1984.6 s and 2982 s of
-execution. The same job continued the recipe in stages; the
-[continuation results](RESTART_RESULTS.md) compare the two.
+**Reruns at later revisions.** The `external-resolution` CI job ran the same
+study three more times, on runners with four cores of an AMD EPYC 9V45, an AMD
+EPYC 7763 and an Intel Xeon Platinum 8370C. Each converged at iteration 18412
+and reproduces every number of this section to the digits shown, apart from the
+wall time: 1984.6 s, 2982 s and 3161.4 s of execution. The same job continued
+the recipe in stages, compared in the [continuation results](RESTART_RESULTS.md),
+and started level 2 from it, reported in the [mapping results](MAPPING_RESULTS.md).
 
 **Independent audit.** Maximum local divergence 6.38e-11 H/U against 1e-4
 (maximum relative cell imbalance 2.4e-7). Largest first-cell y+ per wall, from
@@ -174,22 +174,22 @@ The recorded run used OpenFOAM Foundation 13 package `20260407` (build
 GitHub-hosted ubuntu-24.04 runner with four cores of an AMD EPYC 7763. The
 implementation files had the SHA-256 identities in the first column; the
 development runs used the same `openfoam_backend.py` and generated the same
-dictionaries. The reruns used the second column, which generates byte-identical
-dictionaries for this recipe.
+dictionaries. The last rerun used the second column, which generates
+byte-identical dictionaries for this recipe.
 
-| File | Recorded run | Reruns |
+| File | Recorded run | Last rerun |
 |---|---|---|
 | tutorials/backstep_resolution.py | `dbe4a43014df73ebb02558c232bd3c6c370dfc68a0371e6ad86211eb79e80f15` | `97fd503e8f54102cf2936a8cefdd673e90f6e26fd93eb966061537c5a1d93fe5` |
-| integrations/openfoam_backend.py | `801f7e2a444b6212f92638b8ca1cbe0e7269485a239bf03ba948f2d15aca8d38` | `5c75ea48aae2fd8ffb7339182c918c10ea0c8da4f310a666b8fdef3c03e1ec98` |
+| integrations/openfoam_backend.py | `801f7e2a444b6212f92638b8ca1cbe0e7269485a239bf03ba948f2d15aca8d38` | `1f733f86f08acfe5d87b514678c67ec718ce7b72cb3019779ded7405a7c91969` |
 | integrations/openfoam_cases.py | `07c4b8a92f4c943f9a58846e44a506b1280bc3b921dcd667db6bab3788f4fbed` | `f0e79c2e8054884c56e38e740b8dcc5708134fb44fbbe379ca6ed22ec6a38860` |
-| integrations/openfoam_restart.py | — | `97d4ef6bfbf1a19b674c5b7ff04fce1e27daafb16e0006aa36904d001b4febb6` |
+| integrations/openfoam_restart.py | — | `202d4605ca82f4625b5bd24b49af046de64ff534c0d7597f566862d9abe31a35` |
 | validation/audit_openfoam_mesh.py | `a0b1695599bfff99f35417d9b9351e48704b6237dddb0d2e518b4d7ace12c7b7` | `9274c2151328ea0fbde8b083eb184b4d2b36767f4d5d514907735678b0d77cd1` |
 | validation/compare_backstep.py | `5141c2e7e9b22850e6a7143dab21dcb28002c527740257c1097c569e0d9a4a3e` | same |
 | validation/backstep_data.py | `736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d` | same |
 
-The EPYC 7763 rerun used an earlier `openfoam_restart.py`
-(`f830574b7b98d6d541606be9e30fcc705c0b59731caac5f1a99fa5105d7ca259`), which
-the single run does not call.
+The two earlier reruns used `openfoam_backend.py`
+`5c75ea48aae2fd8ffb7339182c918c10ea0c8da4f310a666b8fdef3c03e1ec98` and
+earlier revisions of `openfoam_restart.py`, which the single run does not call.
 
 ## Software verification
 

@@ -25,7 +25,7 @@ Re=100. The native case advances to 30 s; OpenFOAM solves the steady equations a
 
 The raw [TMR measurements](https://tmbwg.github.io/turbmodels/backstep_val.html) are fetched with frozen SHA-256 identities. The x/H=-4 profile defines the inlet; the 112 downstream velocity samples and 17 lower-wall Cf values are evaluation data. No case parameter is fitted to them.
 
-**Numerical status, level 1 (22,656 cells):** all 6000 iterations ran in 265 s, with no convergence report. The final pressure initial residual is 1.19e-3, against the gate of 1e-7. Over the last 600 iterations its median is 1.492e-3, against 1.488e-3 over the 600 before: the solve is stalled, not slowly converging. Local continuity and the stored boundary-flux imbalance are small, but every pressure solve makes them small, so they do not show a steady solution.
+**Numerical status, level 1 (22,656 cells):** all 6000 iterations ran in 260 s, with no convergence report. The final pressure initial residual is 1.19e-3, against the gate of 1e-7. Over the last 600 iterations its median is 1.492e-3, against 1.488e-3 over the 600 before: the solve is stalled, not slowly converging. Local continuity and the stored boundary-flux imbalance are small, but every pressure solve makes them small, so they do not show a steady solution.
 
 The first lower-wall cell centre lies at y+ 13 (median; range 2.4–16.7) in the scored region 1 < x/H < 12. That is the buffer layer, where the k-based wall function switches.
 
@@ -47,8 +47,8 @@ Lower-wall Cf RMSE is 0.000491 against a target of 0.001; Cf=0 everywhere would 
 | Level | Cells | Execution | Iterations started in 300 s | Numerically accepted |
 |---|---:|---|---:|---|
 | 1 | 22,656 | completed | 6000 | no (stalled) |
-| 2 | 90,624 | timeout | 1418 | no |
-| 3 | 203,904 | timeout | 554 | no |
+| 2 | 90,624 | timeout | 1456 | no |
+| 3 | 203,904 | timeout | 572 | no |
 
 Levels 2 and 3 reached about 24 % and 9 % of their 6000 iterations; finishing them needs roughly 20 and 55 minutes of serial time. Their final iteration was not written, so they are marked not evaluable rather than given a score. With no two accepted levels there is no mesh sensitivity and no GCI.
 
@@ -65,7 +65,7 @@ Before the recorded configuration, the level-1 backstep was run with four recipe
 | 3, first-order momentum advection | — | — | timeout at 600 s (CFD-X004) |
 | 4, the recorded configuration | 6000 | 1.19e-3 | gate not reached (CFD-X007) |
 
-Earlier runs of the recorded configuration, on another runner of the same type and on an eight-core cloud machine, gave the same level-1 metrics and cavity errors to the digits shown here; levels 2 and 3 reached 1458/570 and 1406/522 iterations there.
+Earlier runs of the recorded configuration, on another runner of the same type and on an eight-core cloud machine, gave the same level-1 metrics and cavity errors to the digits shown here; levels 2 and 3 reached 1458/570 and 1406/522 iterations there. The previous record, at a revision of the backend and case generator that generates the same dictionaries, reached 1418/554 in 265 s of level-1 wall time. A second run at the recorded implementation, on a runner with four cores of an AMD EPYC 9V74, gave the same metrics; its level 1 took 224 s, and levels 2 and 3 reached 1672/663 iterations.
 
 ## What is needed next
 
@@ -83,9 +83,9 @@ Reproduction: [OPENFOAM.md](../integrations/OPENFOAM.md). Assumptions: [external
 
 | File | SHA-256 |
 |---|---|
-| integrations/openfoam_backend.py | `801f7e2a444b6212f92638b8ca1cbe0e7269485a239bf03ba948f2d15aca8d38` |
-| integrations/openfoam_cases.py | `07c4b8a92f4c943f9a58846e44a506b1280bc3b921dcd667db6bab3788f4fbed` |
+| integrations/openfoam_backend.py | `5c75ea48aae2fd8ffb7339182c918c10ea0c8da4f310a666b8fdef3c03e1ec98` |
+| integrations/openfoam_cases.py | `f0e79c2e8054884c56e38e740b8dcc5708134fb44fbbe379ca6ed22ec6a38860` |
 | validation/backstep_data.py | `736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d` |
 | validation/compare_backstep.py | `5141c2e7e9b22850e6a7143dab21dcb28002c527740257c1097c569e0d9a4a3e` |
-| validation/audit_openfoam_mesh.py | `a0b1695599bfff99f35417d9b9351e48704b6237dddb0d2e518b4d7ace12c7b7` |
+| validation/audit_openfoam_mesh.py | `9274c2151328ea0fbde8b083eb184b4d2b36767f4d5d514907735678b0d77cd1` |
 | tutorials/external_cfd.py | `63512ea458ba17d09791e80886a25f52bd54749236d4cccb0914c08a38b63a6e` |

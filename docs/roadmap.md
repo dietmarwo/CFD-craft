@@ -101,9 +101,12 @@ This does not advance the native canyon's physical-validation gate.
 
 The [continuation plan](iterations/04-steady-continuation-plan.md) provides
 verified same-mesh field continuation in bounded stages, which lets a solve
-exceed one run's 3600 s limit. A level-2 mesh still needs several stages of
-roughly an hour each; a coarse-to-fine start, cross-mesh interpolation and an
-accepted fine/coarse pair remain work.
+exceed one run's 3600 s limit; staged, the coarse reference reaches the same
+converged solution as one run. A level-2 mesh still needs several stages of
+roughly an hour each, whose sources must pass the source flux gate, an open
+decision in the [continuation results](../validation/RESTART_RESULTS.md); a
+coarse-to-fine start, cross-mesh interpolation and an accepted fine/coarse pair
+remain work.
 
 1. **Throughput (M1b, M3b):** multigrid for the pressure equation now that the masked operator is pinned against its reference; semi-implicit diffusion for momentum, k-ε and scalars; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
 2. **Near-wall consistency (M3a):** a log-consistent velocity gradient in wall-adjacent cells, so the empty ABL also stays homogeneous below H, and a building-wall roughness specified independently of the ground and the grid.

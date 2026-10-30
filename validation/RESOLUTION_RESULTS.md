@@ -36,6 +36,14 @@ before. The development run of the same dictionaries (below) stopped at the
 same iteration with the same p residual; its final Ux, Uy, k and omega residuals
 are 1.00e-7, 6.0e-8, 3.6e-8 and 4.5e-11.
 
+**Reruns at the current implementation.** The `external-resolution` CI job ran
+the same study at the current implementation (second column of the table
+below) on two runners, with four cores of an AMD EPYC 9V45 and of an AMD EPYC
+7763. Both converged at iteration 18412 and reproduce every number of this
+section to the digits shown, apart from the wall time: 1984.6 s and 2982 s of
+execution. The same job continued the recipe in stages; the
+[continuation results](RESTART_RESULTS.md) compare the two.
+
 **Independent audit.** Maximum local divergence 6.38e-11 H/U against 1e-4
 (maximum relative cell imbalance 2.4e-7). Largest first-cell y+ per wall, from
 the tangential stored traction, against the limit of 1:
@@ -164,17 +172,24 @@ grading model, with neighbouring widths within a factor 1.2 in x and 1.35 in y.
 The recorded run used OpenFOAM Foundation 13 package `20260407` (build
 `13-441953dfbb42`, serial, f64, 32-bit labels) with Python 3.12 on a
 GitHub-hosted ubuntu-24.04 runner with four cores of an AMD EPYC 7763. The
-implementation files had these SHA-256 identities; the development runs used the
-same `openfoam_backend.py` and generated the same dictionaries.
+implementation files had the SHA-256 identities in the first column; the
+development runs used the same `openfoam_backend.py` and generated the same
+dictionaries. The reruns used the second column, which generates byte-identical
+dictionaries for this recipe.
 
-| File | SHA-256 |
-|---|---|
-| tutorials/backstep_resolution.py | `dbe4a43014df73ebb02558c232bd3c6c370dfc68a0371e6ad86211eb79e80f15` |
-| integrations/openfoam_backend.py | `801f7e2a444b6212f92638b8ca1cbe0e7269485a239bf03ba948f2d15aca8d38` |
-| integrations/openfoam_cases.py | `07c4b8a92f4c943f9a58846e44a506b1280bc3b921dcd667db6bab3788f4fbed` |
-| validation/audit_openfoam_mesh.py | `a0b1695599bfff99f35417d9b9351e48704b6237dddb0d2e518b4d7ace12c7b7` |
-| validation/compare_backstep.py | `5141c2e7e9b22850e6a7143dab21dcb28002c527740257c1097c569e0d9a4a3e` |
-| validation/backstep_data.py | `736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d` |
+| File | Recorded run | Reruns |
+|---|---|---|
+| tutorials/backstep_resolution.py | `dbe4a43014df73ebb02558c232bd3c6c370dfc68a0371e6ad86211eb79e80f15` | `97fd503e8f54102cf2936a8cefdd673e90f6e26fd93eb966061537c5a1d93fe5` |
+| integrations/openfoam_backend.py | `801f7e2a444b6212f92638b8ca1cbe0e7269485a239bf03ba948f2d15aca8d38` | `5c75ea48aae2fd8ffb7339182c918c10ea0c8da4f310a666b8fdef3c03e1ec98` |
+| integrations/openfoam_cases.py | `07c4b8a92f4c943f9a58846e44a506b1280bc3b921dcd667db6bab3788f4fbed` | `f0e79c2e8054884c56e38e740b8dcc5708134fb44fbbe379ca6ed22ec6a38860` |
+| integrations/openfoam_restart.py | — | `97d4ef6bfbf1a19b674c5b7ff04fce1e27daafb16e0006aa36904d001b4febb6` |
+| validation/audit_openfoam_mesh.py | `a0b1695599bfff99f35417d9b9351e48704b6237dddb0d2e518b4d7ace12c7b7` | `9274c2151328ea0fbde8b083eb184b4d2b36767f4d5d514907735678b0d77cd1` |
+| validation/compare_backstep.py | `5141c2e7e9b22850e6a7143dab21dcb28002c527740257c1097c569e0d9a4a3e` | same |
+| validation/backstep_data.py | `736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d` | same |
+
+The EPYC 7763 rerun used an earlier `openfoam_restart.py`
+(`f830574b7b98d6d541606be9e30fcc705c0b59731caac5f1a99fa5105d7ca259`), which
+the single run does not call.
 
 ## Software verification
 
@@ -202,8 +217,8 @@ python tutorials/backstep_resolution.py --preset smoke --iterations 20000 \
   --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/resolution-study
 ~~~
 
-The `external-backend` job of the CI workflow runs these commands on manual
-dispatch and publishes the numbers as notices. For one profile on its own:
+The `external-backend` and `external-resolution` jobs of the CI workflow run
+these commands on manual dispatch and publish the numbers as notices. For one profile on its own:
 
 ~~~sh
 python integrations/openfoam_backend.py prepare --case backstep --level 1 \
@@ -226,9 +241,11 @@ level 1; the cavity corruption check is
 
 - **Mesh sensitivity.** A level-2 case has four times the cells of the
   level-1 solve, which took about 50 minutes, and more iterations would be
-  expected; it is not expected to finish within the 3600 s per-case limit. A
-  converged pair needs a larger budget or a start from the interpolated coarse
-  solution. No GCI or mesh-independent claim is made.
+  expected; it is not expected to finish within the 3600 s per-case limit.
+  Same-mesh continuation ([continuation results](RESTART_RESULTS.md)) lets it
+  run in bounded stages, each of which must pass the source flux gate; a start
+  from the interpolated coarse solution is not implemented. No GCI or
+  mesh-independent claim is made.
 - **Near-wall resolution margin.** The step wall's largest y+ (0.96) and the
   upstream wall's near the lip (0.88) are close to the y+ <=1 gate at level 1.
 - **Inlet.** The inlet velocity falls linearly from the first measured point to

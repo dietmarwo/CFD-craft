@@ -86,6 +86,21 @@ The scientific mesh-pair, inlet-sensitivity and model-form gates remain open.
 Cross-mesh mapping, changes to the turbulence treatment, native-kernel changes,
 GPU and MPI are outside this plan.
 
+## Outcome
+
+The [results](../../validation/RESTART_RESULTS.md) record the checks on GitHub
+runners. The staged reference solve meets every preregistered bound: four
+stages converge after 18412 cumulative iterations, as the single run does,
+with identical metrics to all digits reported and final fields within 2e-12. The
+cavity and `simple`-profile fixed-work comparisons meet their equivalence
+bounds and their final local-flux audits pass. The `simplec` 500-iteration
+source fails the flux gate, as before. Whether that gate, which follows the
+pressure solver's tolerance, should decide eligibility is open; a development
+continuation of that source under a scale-free check exceeded the fixed-work
+bounds (U 7.25e-5). Level-2 stage lengths, the SST state a restart does not
+carry and an unexplained extra time directory in an earlier staged archive are
+also open.
+
 ## Primary reference
 
 [Foundation 13 time/I-O controls](https://doc.cfd.direct/openfoam/user-guide-v13/controldict)

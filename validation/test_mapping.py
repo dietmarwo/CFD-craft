@@ -245,6 +245,7 @@ def synthetic_prepared(root):
         "target_mesh": {
             n: restart.file_identity(target_mesh / n) for n in restart.MESH_FILES
         },
+        "nearest_replay": mapping.nearest_replay(evidence, "2", ["U", "p"], 576, 2304),
     }
     definition = {
         **template,
@@ -349,7 +350,7 @@ class Receipts(unittest.TestCase):
             (evidence / "target/case/0" / name).write_text(template)
             (self.case / "0" / name).write_text(template)
         self.reseal()
-        with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.mapper.values.U"):
+        with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.mapper.values"):
             backend.check_prepared(self.case)
 
     def test_one_changed_mapped_value_is_found_by_the_replay(self):
@@ -367,7 +368,7 @@ class Receipts(unittest.TestCase):
         )
         self.reseal()
         with self.assertRaisesRegex(
-            ValueError, "CFD-X014 mapping.mapper.values.p: 1 target cells"
+            ValueError, "CFD-X014 mapping.mapper.values: 1 target cells"
         ):
             mapping.validate(self.case, self.definition)
 
@@ -542,7 +543,9 @@ class Receipts(unittest.TestCase):
             "commands": [{"program": "foamRun", "returncode": 0}],
             "execution_status": "completed",
         }
-        with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.runtime"):
+        with self.assertRaisesRegex(
+            ValueError, "CFD-X014 mapping.runtime: solved case lacks runtime"
+        ):
             mapping.verify_receipt(self.case, self.definition, report)
         report["runtime"] = {"fixture": "synthetic"}
         with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.mesh"):
@@ -866,6 +869,60 @@ class Tampering(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.p: expected one"):
             mapping.replace_internal(twice, mapped, 2304, False, "p")
 
+    def remap(self, choose):
+        """Mapped values taken per target cell from the coarse cell `choose` picks."""
+        from scipy.spatial import cKDTree
+
+        coarse = cartesian_mesh(self.evidence / "source/case")
+        fine = cartesian_mesh(self.evidence / "target/case")
+        _, index = cKDTree(coarse["cell_centres"]).query(fine["cell_centres"], k=4)
+        for name in ["U", "p"]:
+            source = coarse_values(name)
+            rows = source[[choose(name, cell, index[cell]) for cell in range(2304)]]
+            template = (self.evidence / "templates/0" / name).read_text()
+            mapped = self.evidence / "target/case/0" / name
+            mapped.write_text(internal_field(template, rows, name == "U"))
+            (self.case / "0" / name).write_text(
+                mapping.replace_internal(template, mapped, 2304, name == "U", name)
+            )
+        self.state["nearest_replay"] = mapping.nearest_replay(
+            self.evidence, "2", ["U", "p"], 576, 2304
+        )
+        self.reseal_inputs()
+
+    def test_a_nearby_source_cell_is_accepted_when_every_field_agrees(self):
+        # Target cell 0 takes all its values from its second-nearest source cell.
+        self.remap(lambda name, cell, near: near[1] if cell == 0 else near[0])
+        mapping.validate(self.case, self.definition)
+        replay = self.state["nearest_replay"]
+        self.assertEqual(
+            (replay["nearest_source"], replay["other_candidate"]), (2303, 1)
+        )
+        self.assertEqual(replay["maximum_rank"], 2)
+        # Different source cells for different fields of one target cell: rejected.
+        self.fresh()
+        with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.mapper.values: 1 "):
+            self.remap(
+                lambda name, cell, near: (
+                    near[1] if cell == 0 and name == "p" else near[0]
+                )
+            )
+
+    def test_replay_statistics_are_part_of_the_receipt(self):
+        self.state["nearest_replay"]["nearest_source"] -= 1
+        self.rejected("mapper.replay")
+
+    def test_the_replay_meshes_must_have_the_recorded_cells(self):
+        target = self.evidence / "target/case"
+        shutil.rmtree(target / "constant/polyMesh")
+        square_mesh(target, 40)
+        self.state["target_mesh"] = {
+            n: restart.file_identity(target / "constant/polyMesh" / n)
+            for n in restart.MESH_FILES
+        }
+        self.reseal_inputs()
+        self.rejected("mesh.cells")
+
     def test_archive_receipt(self):
         mesh = self.case / "constant/polyMesh"
         shutil.copytree(self.evidence / "target/case/constant/polyMesh", mesh)
@@ -1151,6 +1208,24 @@ class OfflinePreparation(unittest.TestCase):
 
         self.execute = failed_mesh
         self.rejected("mesh", created=True)
+        ran = json.loads(
+            (self.root / "mapped" / mapping.EVIDENCE / "commands.json").read_text()
+        )
+        self.assertEqual([r["program"] for r in ran], ["blockMesh", "checkMesh"])
+
+        def large_mesh(command, env, output, label, *args):
+            record = real(command, env, output, label, *args)
+            if label == "mesh":
+                (Path(output) / "mesh-output.log").write_bytes(b"x" * 2 * 1024**2)
+            return record
+
+        # The budget is checked before each utility, not only at the end.
+        self.execute = large_mesh
+        self.rejected("output", output="early", created=True, output_mib=1)
+        ran = json.loads(
+            (self.root / "early" / mapping.EVIDENCE / "commands.json").read_text()
+        )
+        self.assertEqual([r["program"] for r in ran], ["blockMesh"])
         self.execute = real
         self.on_map = lambda: self.mapper.write_text("another mapper\n")
         self.rejected("mapper.identity", output="changed", created=True)
@@ -1173,11 +1248,11 @@ class OfflinePreparation(unittest.TestCase):
         wrong = coarse_values("p")[nearest_coarse_cell()].copy()
         wrong[100] += 1e-3
         self.mapped_values["p"] = wrong
-        with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.mapper.values.p"):
+        with self.assertRaisesRegex(ValueError, "CFD-X014 mapping.mapper.values"):
             self.prepare(self.root / "mapped")
         self.assertFalse((self.root / "mapped/case.json").exists())
         failure = json.loads((self.root / "mapped/mapping-failure.json").read_text())
-        self.assertIn("mapping.mapper.values.p: 1 target cells", failure["error"])
+        self.assertIn("mapping.mapper.values: 1 target cells", failure["error"])
 
     def test_cancellation_after_the_mapper_leaves_no_runnable_case(self):
         stop = backend.Stop()
@@ -1519,6 +1594,9 @@ class ActualMapping(unittest.TestCase):
                 backend.block(template.read_text(), "boundaryField"),
             )
         self.assertFalse((self.mapped / "0/phi").exists())
+        # On the uniformly refined cavity mapNearest is the nearest-centre rule.
+        replay = self.definition["mesh_initialization"]["nearest_replay"]
+        self.assertEqual(replay["nearest_source"], count, replay)
 
     def test_mapped_run_converges_and_can_supply_a_same_mesh_continuation(self):
         record = backend.run(
@@ -1718,9 +1796,10 @@ class ActualMapping(unittest.TestCase):
         self.assertFalse((target / "0/phi").exists())
         # Foundation 13's mapNearest agrees with the independent replay on the
         # graded L-shaped meshes, for every field and target cell.
-        mapping.nearest_replay(
+        replay = mapping.nearest_replay(
             self.work, "0", list(values), coarse["cells"], metadata["cells"]
         )
+        print(f"::notice title=mapNearest on backstep levels 1-2::{json.dumps(replay)}")
 
 
 if __name__ == "__main__":

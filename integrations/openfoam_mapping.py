@@ -68,13 +68,23 @@ def checked(path, entry, field, message="source changed after verification"):
     return data
 
 
-def nearest_replay(evidence, source_time, fields, source_cells, target_cells):
-    """Replay nearest-cell-centre mapping from the stored source copy.
+# Source cells, nearest centre first, among which each target cell's source must be.
+CANDIDATES = 27
 
-    Every mapped internal value must equal the value of a source cell whose
-    centre is nearest to the target cell centre (either one of two equidistant
-    centres). This ties the consumed fields to the receipt's source fields with
-    the independent mesh reader, not with the mapper's own output.
+
+def nearest_replay(
+    evidence, source_time, fields, source_cells, target_cells, candidates=CANDIDATES
+):
+    """Bind every consumed value to one nearby source cell, for all fields at once.
+
+    Foundation 13's mapNearest gives each target cell the values of one source
+    cell, the same cell for every field. On a uniformly refined mesh that is the
+    cell with the nearest centre; on graded meshes its search can end at a nearby
+    cell instead. The replay, with the independent mesh reader, requires for each
+    target cell one source cell among the `candidates` nearest centres whose
+    values equal the consumed values in every field, and reports how far down
+    that list it was. This ties the consumed fields to the receipt's source
+    fields rather than to the mapper's own output.
     """
     from audit_openfoam_mesh import cartesian_mesh
     from scipy.spatial import cKDTree
@@ -86,8 +96,15 @@ def nearest_replay(evidence, source_time, fields, source_cells, target_cells):
         "mesh.cells",
         "stored source/target meshes differ from the receipt's cell counts",
     )
-    distance, index = cKDTree(source["cell_centres"]).query(target["cell_centres"], k=2)
-    tie = distance[:, 1] - distance[:, 0] <= 1e-9 * distance[:, 1]
+    count = min(candidates, source_cells)
+    distance, index = cKDTree(source["cell_centres"]).query(
+        target["cell_centres"], k=count
+    )
+    distance, index = (
+        distance.reshape(target_cells, -1),
+        index.reshape(target_cells, -1),
+    )
+    match = np.ones(index.shape, bool)
     for name in fields:
         width = 3 if name == "U" else 1
 
@@ -97,13 +114,27 @@ def nearest_replay(evidence, source_time, fields, source_cells, target_cells):
 
         coarse = values(evidence / "source/case" / source_time / name, source_cells)
         mapped = values(evidence / "target/case/0" / name, target_cells)
-        nearest = np.all(mapped == coarse[index[:, 0]], axis=1)
-        nearest |= tie & np.all(mapped == coarse[index[:, 1]], axis=1)
-        require(
-            bool(nearest.all()),
-            "mapper.values." + name,
-            f"{int((~nearest).sum())} target cells differ from the nearest source cell",
-        )
+        for rank in range(count):
+            match[:, rank] &= np.all(coarse[index[:, rank]] == mapped, axis=1)
+    found = match.any(axis=1)
+    used = distance[np.arange(target_cells), np.argmax(match, axis=1)]
+    # Rank by distance: equidistant centres share a rank.
+    rank = 1 + np.sum(distance < used[:, None] * (1 - 1e-9), axis=1)
+    ratio = used / np.maximum(distance[:, 0], 1e-300)
+    stats = {
+        "candidates": count,
+        "nearest_source": int(np.sum(found & (rank == 1))),
+        "other_candidate": int(np.sum(found & (rank > 1))),
+        "maximum_rank": int(rank[found].max()) if found.any() else None,
+        "maximum_distance_ratio": float(ratio[found].max()) if found.any() else None,
+    }
+    require(
+        bool(found.all()),
+        "mapper.values",
+        f"{int((~found).sum())} target cells match no single source cell among "
+        f"their {count} nearest in every field ({json.dumps(stats)})",
+    )
+    return stats
 
 
 def volume_fields(kind):
@@ -485,12 +516,17 @@ def validate_inputs(case, definition):
             "mesh." + name,
             "mapping mesh identity mismatch",
         )
-    nearest_replay(
-        evidence,
-        state["source_time"],
-        fields,
-        original["metadata"]["cells"],
-        definition["metadata"]["cells"],
+    require(
+        nearest_replay(
+            evidence,
+            state["source_time"],
+            fields,
+            original["metadata"]["cells"],
+            definition["metadata"]["cells"],
+        )
+        == state["nearest_replay"],
+        "mapper.replay",
+        "replay statistics differ from the receipt",
     )
     backend.final_field_checks(case, "0", definition["kind"])
 
@@ -779,6 +815,9 @@ def prepared(
             "mapper.identity",
             "mapper changed during preparation",
         )
+        replay = nearest_replay(
+            evidence, latest, fields, meta["cells"], target_meta["cells"]
+        )
         # A cancellation after the last utility still leaves no runnable case.
         backend.require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
         for name, content in target_files.items():
@@ -811,6 +850,7 @@ def prepared(
             },
             "runtime_sha256": restart.identity(runtime),
             "mapper_sha256": mapper_sha,
+            "nearest_replay": replay,
             "limits": {
                 "wall_s": timeout_s,
                 "output_mib": output_mib,

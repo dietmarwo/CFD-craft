@@ -9,12 +9,13 @@ Do not feed those archives to the native `cfd-craft report` command. Numerical
 code agreement, comparison with measurements and physical qualification remain
 distinct. The native canyon validation gate is unchanged.
 
-For the experimental backstep resolution workflow, read the
-[prompt](../tutorials/backstep-resolution-prompt.md) and
-[iteration 03 results](../validation/RESOLUTION_RESULTS.md). Legacy remains
-the default; the wall-resolved reference is not numerically accepted. Its
-measurement screen additionally requires the independent local-flux and
-all-wall y+ audit. Never turn a saved pre-failure snapshot into a final result.
+For the backstep resolution workflow, read the
+[prompt](../tutorials/backstep-resolution-prompt.md) and the
+[resolution results](../validation/RESOLUTION_RESULTS.md). Legacy remains the
+default recipe; the wall-resolved reference is `wall-resolved`/`simplec`, accepted
+at level 1 only. Its measurement screen additionally requires the independent
+local-flux and all-wall y+ audit. Never turn a saved pre-failure snapshot into
+a final result.
 
 1. Build with cargo build --release --locked. Inspect cfd-craft describe.
 2. Choose a canonical case. Run check before allocating a larger simulation. Each diagnostic names its element and field (for example `geometry[1]` or `sources[0].rate_kg_s_m`); [diagnostics](diagnostics.md) lists the codes. Invalid input exits 1 from check, run and preview, with the report on stdout. A check on a host too small for the case warns with CFD-W070 and skips the grid checks; run the case on a larger host, or preview it here.

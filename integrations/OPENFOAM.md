@@ -61,14 +61,14 @@ of serial time to finish their 6000 iterations.
 
 ## Use the individual commands
 
-The [resolution tutorial](../tutorials/backstep-resolution-prompt.md) adds an
-experimental wall-resolved backstep recipe and an independent Cartesian
-mesh/local-flux/wall-distance audit. It is not numerically accepted. Select it
-explicitly with `prepare --mesh-family wall-resolved --solver-profile simple`;
-the legacy recipe remains the default. The `backstep_resolution.py` study
-preset skips finer meshes when a coarse case fails acceptance. Read the
-[iteration 03 results](../validation/RESOLUTION_RESULTS.md) before allocating
-a larger run.
+The [resolution tutorial](../tutorials/backstep-resolution-prompt.md) runs
+wall-resolved backstep recipes and an independent Cartesian
+mesh/local-flux/wall-distance audit. Select a recipe explicitly, for example
+`prepare --mesh-family wall-resolved --solver-profile simplec`; the legacy
+recipe remains the default. The `backstep_resolution.py` study preset skips
+finer meshes when a coarse case is not accepted. Read the
+[resolution results](../validation/RESOLUTION_RESULTS.md) before allocating a
+larger run.
 
 ~~~sh
 python integrations/openfoam_backend.py prepare --case backstep --level 1 \
@@ -105,8 +105,10 @@ without it, and 1 when the execution itself failed (runtime, input, I/O).
 `report` exits 0 or 2 by the archived result, and 1 for an archive that fails
 verification. `compare_backstep` exits 0 when the numerical gate and the
 development screen pass, otherwise 2, and 1 when its output cannot be written.
-The tutorial exits 0 when everything passes, 2 when it recorded failed,
-unaccepted or cancelled evidence, and 1 on a workflow error. **None of these exit codes sets physical
+Both tutorials exit 0 when everything passes, 2 when they recorded failed,
+unaccepted or cancelled evidence, and 1 on a workflow error.
+`audit_openfoam_mesh.py` exits 0 when its checks pass, 2 when they fail or the
+archive has no final field, and 1 for an invalid archive or output path. **None of these exit codes sets physical
 qualification to true.** Read all four levels: execution, numerics, measurement
 screen and physical qualification.
 
@@ -115,19 +117,25 @@ screen and physical qualification.
 ~~~sh
 python validation/test_openfoam.py -v
 python -O validation/test_openfoam.py -v
+python validation/test_resolution.py -v
 CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
   python validation/test_openfoam.py -v
+CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
+  python validation/test_resolution.py -v
 ~~~
 
 Unit tests have explicit synthetic fixtures, including a synthetic stand-in for
 the four Foundation-13 programs that drives `run` and `report` end to end. They
-test contracts, not physical accuracy. With the environment variable set, the additional test runs actual
-OpenFOAM cavity solves, checks an iteration-limit failure and corrupts returned
-fields to verify rejection. CI runs boundary tests on each push/PR. A manual
-workflow dispatch additionally installs the pinned runtime, runs the real
-backend tests and the study preset with `--timeout-s 300`, publishes the key
-numbers as notices and uploads the reports. A recorded backstep failure keeps
-the job green; a workflow error fails it.
+test contracts, not physical accuracy. With the environment variable set, the additional tests run actual
+OpenFOAM cavity solves, check an iteration-limit failure, corrupt returned
+fields and face fluxes to verify rejection, and compare the actual wall-resolved
+`blockMesh` output with the generated first-cell heights and spacing. CI runs
+the boundary tests on each push/PR. A manual workflow dispatch additionally
+installs the pinned runtime, runs the real backend tests, the external study
+preset with `--timeout-s 300` and the resolution smoke preset with
+`--iterations 20000 --timeout-s 3500`, publishes the key numbers of both as
+notices and uploads the reports. A recorded backstep failure keeps the job
+green; a workflow error fails it.
 
 ## Frozen protocol
 

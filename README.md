@@ -81,11 +81,12 @@ and physical qualification are separate results. See the
 qualify the native street-canyon model.
 
 The [backstep resolution tutorial](tutorials/backstep-resolution-prompt.md)
-adds explicit experimental wall/solver recipes and independent Cartesian
-mesh, local face-flux and wall-distance audits. The new backstep recipe has
-not passed numerical acceptance; refinement stops after a failed coarse case.
-See the [iteration 03 plan](docs/iterations/03-wall-resolution-plan.md) and
-[results](validation/RESOLUTION_RESULTS.md).
+runs wall-resolved recipes with independent Cartesian mesh, local face-flux and
+wall-y+ audits; refinement stops after a coarse case that is not accepted. On
+its coarse mesh the reference recipe converges, passes the audit and is screened
+against the measurements; no mesh pair or physical qualification is claimed.
+See the [plan](docs/iterations/03-wall-resolution-plan.md) and the
+[resolution results](validation/RESOLUTION_RESULTS.md).
 
 ## Ecosystem
 

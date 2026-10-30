@@ -13,7 +13,7 @@ numerical failure and incomplete physical qualification explicit.
 | Finite canyon | python tutorials/canyon_study.py --preset smoke --output runs/canyons | Wind direction/aspect ratio, coupled flow/gas checks and limits of coarse scenarios. |
 | Native optimization | python integrations/run_jobs.py --runner RUNNER --output runs/jobs | Hashed CFD inputs, fallible simulation evaluation, equal counted BiteOpt/GP budgets and honest result semantics. |
 | External comparisons | python tutorials/external_cfd.py --preset smoke --foam-root ROOT --timeout-s 300 --output runs/external-smoke | Two solvers on the same cavity, a frozen measurement protocol, and why a numerical gate comes before a measurement screen. |
-| Backstep resolution | python tutorials/backstep_resolution.py --preset smoke --foam-root ROOT --timeout-s 300 --output runs/resolution | Independent mesh/local-flux/wall-distance audits, failed numerical recipes and stopping refinement after a failed coarse case. |
+| Backstep resolution | python tutorials/backstep_resolution.py --preset smoke --foam-root ROOT --iterations 20000 --timeout-s 3500 --output runs/resolution | Independent mesh/local-flux/wall-y+ audits, a converged wall-resolved reference, and stopping refinement after a coarse case that is not accepted. |
 
 Use fresh output paths. The source-inference study preset uses altered-grid observations. The canyon sensitivity preset adds two Schmidt values and a longer outlet domain; the full study also attempts a three-grid series and may reach its resource limits.
 

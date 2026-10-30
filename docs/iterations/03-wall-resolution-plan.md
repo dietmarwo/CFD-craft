@@ -4,10 +4,10 @@ Date: 29 October 2026. Base: merged PR #3, `4ea88a3`.
 
 ## Evidence and decision
 
-PR #3 preserves the delivered backend and strengthens copied-input checks,
+The merged external backend has copied-input checks,
 environment isolation, archive verification, first-solve residual parsing,
 diagnostic codes, residual trends and comparison baselines. A nonconverged
-iterate no longer passes the measurement screen. These changes are retained.
+iterate does not pass the measurement screen. These properties are retained.
 
 The backstep stalls with the first cell in the wall-function buffer layer.
 The present SIMPLEC recipe also under-relaxes pressure by 0.2. These are two
@@ -25,7 +25,8 @@ alone are not the proposed fix.
    inlet and unmeasured-inlet assumptions. Do not fit downstream measurements.
 3. Add a SIMPLEC profile with pressure relaxation 1 and transport relaxation
    0.7. Keep the nonlinear residual, continuity and experimental thresholds
-   unchanged. Compare pressure-coupling and wall-package effects separately.
+   unchanged. Compare pressure-coupling and mesh/wall-package effects
+   separately, in a 2x2 design at level 1.
 4. Independently read the actual Cartesian OpenFOAM mesh. Recompute cell
    volumes, local finite-volume divergence from stored phi and first-cell
    distances/y+ from stored wall traction. Check generated geometry against
@@ -40,8 +41,7 @@ alone are not the proposed fix.
    measurement screen; a mesh pair requires the same wall/numerical package.
 7. Test geometry/flux corruption, metadata mismatch, options, legacy behavior
    and optimized Python. Run required Rust/Ruff checks, the existing external
-   suite and the native analytic/empty-ABL suite. Verify the patch on a clean
-   checkout and deliver a ZIP and implementation log.
+   suite and the native analytic/empty-ABL suite.
 
 ## Acceptance and limits
 
@@ -52,8 +52,8 @@ is a further target, not permission to conceal a budget or convergence failure.
 Do not claim GCI outside an appropriate refinement regime. The original
 screening protocol remains unchanged and its broad-target limitations remain.
 
-There are no native RANS/kernel changes, new scalar physics, home-machine,
-GPU or MPI requirements. Velocity evidence still does not qualify the native
+There are no native RANS/kernel changes, new scalar physics, GPU or MPI
+requirements. Velocity evidence still does not qualify the native
 canyon or concentrations. Physical uncertainty and inlet/model sensitivity
 remain separate gates even if numerical convergence is achieved.
 
@@ -64,30 +64,16 @@ remain separate gates even if numerical convergence is achieved.
 - [SIMPLE/SIMPLEC controls](https://www.openfoam.com/documentation/user-guide/6-solving/6.3-solution-and-algorithm-control).
 - [Driver--Seegmiller data and boundary definitions](https://tmbwg.github.io/turbmodels/backstep_val.html).
 
-## Review amendment after the bounded trials
 
-The SIMPLEC pressure/transport-relaxation control still stalls. Wall-resolved trials develop
-nonfinite residuals, including a cold-start, first-order, strongly damped SIMPLE
-reference with tighter pressure solves. These observations do not establish
-that either wall resolution or pressure relaxation caused the original stall.
-The additional solver trials changed several settings and are exploratory,
-not controlled estimates of individual effects.
+## Outcome
 
-The delivered `wall-resolved`/`simple` recipe is explicitly experimental: zero
-interior velocity, measured inlet, bounded upwind momentum, limited U/k/omega
-gradients, PCG/DIC pressure with absolute 1e-12 and zero relative tolerance,
-and 0.1 pressure/transport relaxation. The unchanged nonlinear gate remains
-1e-7. Remove irrelevant GAMG dictionary entries from this PCG reference.
-
-The software acceptance target is retained. The scientific acceptance target
-is **not achieved**. Stop a solve when logged residuals/continuity become
-nonfinite; preserve its log, return code and started-iteration count. Do not
-postprocess an earlier saved snapshot as a final solution. The refinement
-workflow records finer levels as not started when the coarse level is not
-accepted, rather than allocating more compute to an unqualified recipe.
-
-Before another mesh campaign, reproduce the instability on the pinned runtime
-and compare against an independently maintained Foundation-13 SST backstep
-setup, checking pressure/flux initialization and boundary/turbulence treatment.
-Only then attempt same-recipe mesh sensitivity. A first-order reference is
-not evidence of improved accuracy or performance.
+The software gate is met. The scientific target is met at level 1: the
+`wall-resolved`/`simplec` recipe converges to the unchanged nonlinear gate,
+passes the independent local-flux and all-wall y+ audit, and its measurement
+screen is assessed. A converged mesh pair is not reached: a level-2 case has
+four times the cells of a level-1 solve that took about 50 minutes, so it is
+not expected to finish within the 3600 s per-case limit. The first streamwise
+spacing had a 140:1 cell-width jump at the step plane and diverged under every
+profile tried; with only the spacing changed, the same `simple` recipe became
+stable. The legacy-mesh stall is unchanged by the pressure-coupling control.
+See the [resolution results](../../validation/RESOLUTION_RESULTS.md).

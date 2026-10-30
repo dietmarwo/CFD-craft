@@ -6,6 +6,9 @@ First version, 0.1.0, a research prototype. Experimental canyon validation and a
 
 ### Added
 
+- Bounded OpenFOAM Foundation-13 execution with hashed inputs, a checked input copy, runtime/library identity, a fixed child environment, process-group cancellation, hard address-space and per-file limits, independent stored boundary-flux checks and an archive consistency verifier.
+- A cavity comparison between the native and external solvers, a frozen Driver--Seegmiller experimental screening protocol, exact raw-data identities, paired downstream profiles, signed skin-friction/reattachment metrics, trivial-predictor baselines and a first-cell y+ estimate. The measurement screen is assessed only for a numerically accepted solve. These do not qualify the native canyon solver.
+- A reproducible non-root installer for the tested OpenFOAM package, external execution tests with a synthetic Foundation-13 runtime, and an optional real-backend CI job that runs the study preset.
 - Rust flow and passive-transport library and the `cfd-craft` CLI (describe, check, preview, run, report, verify) with strict case and result schemas.
 - `check` diagnostics with codes and field paths, including COST 732 domain and blockage warnings for RANS cases; a catalog in docs/diagnostics.md. Run, restart, output and `report` errors carry codes as well.
 - Memory and output estimates that bound the measured peak and the written artifacts, including the monitor history and the per-receptor text; a host-memory refusal that comes before any grid allocation.

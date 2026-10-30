@@ -190,6 +190,41 @@ of the limit up to 250, and rejects limits without a divisor between 50 and 250;
 [guide](../../integrations/STEADY_RESTART.md) and
 [continuation results](../../validation/RESTART_RESULTS.md).
 
+## Coarse-to-fine volume initialization
+
+`prepare-mapped` supports one finer existing mesh level of the same generated
+case/wall/solver package. It requires a numerically accepted current cold source
+and a passing independent audit. Restarted or previously mapped sources are
+excluded in this first release; use the recorded cold coarse control. Source
+inputs must match the generator, including the measured inlet and controls.
+
+The separately licensed Foundation-13 mapFields utility runs in checked copies
+with mapNearest. Only internal U/p and (for SST) k/omega/nut are imported.
+Generated target boundary dictionaries, dimensions and controls are retained
+exactly. This nearest-cell initialization is not conservative interpolation
+or an accuracy claim. Coarse phi/wall stress are not transferred. The target
+solver constructs new phi from its new-mesh U and performs its normal pressure
+corrections. Preparation does not establish initial conservation, fine-grid
+convergence or a measurement screen.
+
+A separate mesh-initialization receipt binds source case/manifest/fields,
+templates, raw mapper outputs/logs, target metadata/mesh, mapper binary and exact
+runtime. Verification replays internal-field insertion against the stored
+generated templates; solved runs require runtime and mesh checks. The evidence
+is retained among consumed inputs. Unkeyed hashes remain consistency checks,
+not authenticity of an untrusted case. Runtime programs remain external GPL
+executables; no implementation code is copied into the MIT core.
+
+After a mapped solve completes, same-mesh continuation uses its actual final
+fields/phi under the existing gate. Its new parent-bound continuation receipt
+replaces the mapping receipt; source-grid work is not fine-grid work. No source
+flux, final nonlinear, wall-y+ or measurement threshold is weakened.
+See the [guide](../../integrations/MESH_INITIALIZATION.md),
+[plan](../iterations/05-mesh-initialization-plan.md) and
+[results](../../validation/MAPPING_RESULTS.md). Cavity mapping is numerical
+verification. The synthetic SST mapping-format fixture is not turbulent-flow
+validation, and no new accepted fine backstep is claimed.
+
 ## Interpretation and open gates (all packages)
 
 Execution, numerical convergence, measurement screening and physical

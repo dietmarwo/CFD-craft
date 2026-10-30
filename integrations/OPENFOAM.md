@@ -61,6 +61,11 @@ of serial time to finish their 6000 iterations.
 
 ## Use the individual commands
 
+For refinement, [prepare-mapped](MESH_INITIALIZATION.md) is a separate operation
+from same-mesh continuation: use accepted cold coarse fields, preserve generated
+fine boundaries and construct new phi in the target solver. It carries no
+fine-grid acceptance verdict; run the normal numerical/audit/screen checks.
+
 For a steady solve longer than one run's limits, see the
 [continuation guide](STEADY_RESTART.md). `prepare-restart` turns a completed
 archive into a fresh same-mesh input from its final fields and phi. The

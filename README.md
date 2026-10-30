@@ -59,6 +59,8 @@ python validation/test_resolution.py -v
 python -O validation/test_resolution.py -v
 python validation/test_restart.py -v
 python -O validation/test_restart.py -v
+python validation/test_mapping.py -v
+python -O validation/test_mapping.py -v
 python validation/run_suite.py --preset smoke --output runs/verification
 python validation/flow_accuracy.py --output runs/flow-accuracy
 python validation/cavity.py --output runs/cavity
@@ -96,6 +98,13 @@ same-mesh run. Initial-state provenance, runtime and rebuilt mesh are checked;
 staged work counts and final convergence remain distinct, and the numerical
 gates are unchanged. See the [plan](docs/iterations/04-steady-continuation-plan.md)
 and the [continuation results](validation/RESTART_RESULTS.md).
+
+The separate [coarse-to-fine initializer](integrations/MESH_INITIALIZATION.md)
+uses Foundation-13 mapNearest volume fields from an accepted cold-generated
+source, preserves generated fine-grid boundaries and lets the solver construct
+new face flux. Its receipt and rebuilt mesh/runtime are checked. Cavity
+verification compares the mapped solve with a converged cold fine-grid control;
+a fine turbulent backstep and physical qualification remain open.
 
 ## Ecosystem
 

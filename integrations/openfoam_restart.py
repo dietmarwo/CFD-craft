@@ -464,6 +464,9 @@ def prepared_stage(source, iterations, interval, output):
         definition.update(
             max_iterations=iterations, inputs=expected, initial_state=state
         )
+        # This is now a same-mesh stage. Its parent case hash binds the mapped
+        # initialization; the new final-field receipt replaces that old receipt.
+        definition.pop("mesh_initialization", None)
         backend.write_json(output / "case.json", definition)
         return backend.check_prepared(output)
     except BaseException:

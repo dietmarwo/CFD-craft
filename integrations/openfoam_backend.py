@@ -158,6 +158,10 @@ def check_prepared(directory):
         from openfoam_restart import validate
 
         validate(directory, record)
+    if "mesh_initialization" in record:
+        from openfoam_mapping import validate
+
+        validate(directory, record)
     return record
 
 
@@ -767,6 +771,14 @@ def run(
         report["implementation_sha256"]["openfoam_restart.py"] = sha256(
             ROOT / "integrations/openfoam_restart.py"
         )
+    if "mesh_initialization" in record:
+        report["mesh_initialization"] = record["mesh_initialization"]
+        report["implementation_sha256"]["openfoam_mapping.py"] = sha256(
+            ROOT / "integrations/openfoam_mapping.py"
+        )
+        report["implementation_sha256"]["openfoam_restart.py"] = sha256(
+            ROOT / "integrations/openfoam_restart.py"
+        )
     try:
         # The copy is what the solver consumes, so it is checked, not the source.
         shutil.copytree(prepared, output / "case", symlinks=True)
@@ -784,6 +796,10 @@ def run(
             from openfoam_restart import check_runtime
 
             check_runtime(record["initial_state"], identity)
+        if "mesh_initialization" in record:
+            from openfoam_mapping import check_runtime
+
+            check_runtime(record["mesh_initialization"], identity)
         deadline = start + timeout_s
 
         def command(program, label, *extra):
@@ -821,6 +837,10 @@ def run(
                 record["metadata"],
                 record["kind"],
             )
+        if "mesh_initialization" in record:
+            from openfoam_mapping import check_mesh
+
+            check_mesh(output / "case", record["mesh_initialization"])
         command("foamRun", "solve")
         report["numerical"] = numerical_assessment(
             output / "case", (output / "solve.log").read_text(), record["kind"]
@@ -1036,6 +1056,16 @@ def verified(directory):
 
             verify_receipt(case, definition, report)
         require(
+            definition.get("mesh_initialization") == report.get("mesh_initialization"),
+            "archive.mesh_initialization",
+            "summary differs from mapped initialization",
+            "CFD-X006",
+        )
+        if "mesh_initialization" in definition:
+            from openfoam_mapping import verify_receipt
+
+            verify_receipt(case, definition, report)
+        require(
             definition["kind"] == report["case"]
             and definition["metadata"] == report["case_metadata"],
             "archive.case_metadata",
@@ -1129,12 +1159,22 @@ def main():
     p.add_argument("--timeout-s", type=float, default=600)
     p.add_argument("--output-mib", type=int, default=256)
     p.add_argument("--memory-mib", type=int, default=2048)
+    p = sub.add_parser("prepare-mapped")
+    p.add_argument("--source", type=Path, required=True)
+    p.add_argument("--level", type=int, required=True)
+    p.add_argument("--iterations", type=int, default=6000)
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--foam-root", type=Path, required=True)
+    p.add_argument("--data", type=Path)
+    p.add_argument("--timeout-s", type=float, default=300)
+    p.add_argument("--output-mib", type=int, default=512)
+    p.add_argument("--memory-mib", type=int, default=2048)
     p = sub.add_parser("report")
     p.add_argument("directory", type=Path)
     args = ap.parse_args()
     stop = Stop()
-    if args.command == "run":
-        # Only a solve is stopped gracefully; prepare and report stop at once.
+    if args.command in {"run", "prepare-mapped"}:
+        # Long-running mapping preparation and solves support cancellation.
         for signum in [signal.SIGINT, signal.SIGTERM]:
             signal.signal(signum, stop.signal)
     try:
@@ -1157,6 +1197,21 @@ def main():
                 args.case,
                 args.output,
                 args.foam_root,
+                args.timeout_s,
+                args.output_mib,
+                args.memory_mib,
+                stop,
+            )
+        elif args.command == "prepare-mapped":
+            from openfoam_mapping import prepare as prepare_mapped
+
+            result = prepare_mapped(
+                args.source,
+                args.level,
+                args.iterations,
+                args.output,
+                args.foam_root,
+                args.data,
                 args.timeout_s,
                 args.output_mib,
                 args.memory_mib,

@@ -92,6 +92,12 @@ The steady canyon cost grows roughly with the sixth power of the refinement rati
 
 ## Next steps, in order
 
+The [mesh-initialization plan](iterations/05-mesh-initialization-plan.md) adds
+an explicit accepted-coarse-to-new-fine start, verified against a cold fine
+cavity. The same-mesh source gate remains unchanged. A full accepted fine
+backstep, same-package mesh sensitivity and inlet/model uncertainty still
+require a bounded campaign; preparation is not a qualified fine solution.
+
 The external-backend track has a separate
 [wall-resolution plan](iterations/03-wall-resolution-plan.md). Its wall-resolved
 SST reference converges and passes the independent audit at level 1; a mesh
@@ -103,10 +109,12 @@ The [continuation plan](iterations/04-steady-continuation-plan.md) provides
 verified same-mesh field continuation in bounded stages, which lets a solve
 exceed one run's 3600 s limit; staged, the coarse reference reaches the same
 converged solution as one run. A level-2 mesh still needs several stages of
-roughly an hour each, whose sources must pass the source flux gate, an open
-decision in the [continuation results](../validation/RESTART_RESULTS.md); a
-coarse-to-fine start, cross-mesh interpolation and an accepted fine/coarse pair
-remain work.
+roughly an hour each, whose sources must pass the source flux gate. This
+iteration keeps that gate; its limitations remain recorded in the
+[continuation results](../validation/RESTART_RESULTS.md). Nearest-cell
+coarse-to-fine initialization is now available for accepted cold sources;
+conservative interpolation, broader source-chain support and an accepted
+fine/coarse turbulent pair remain work.
 
 1. **Throughput (M1b, M3b):** multigrid for the pressure equation now that the masked operator is pinned against its reference; semi-implicit diffusion for momentum, k-ε and scalars; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
 2. **Near-wall consistency (M3a):** a log-consistent velocity gradient in wall-adjacent cells, so the empty ABL also stays homogeneous below H, and a building-wall roughness specified independently of the ground and the grid.

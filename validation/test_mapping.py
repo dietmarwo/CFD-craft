@@ -1306,6 +1306,29 @@ class Reports(unittest.TestCase):
         )
         self.assertFalse((self.root / "unused").exists())
 
+    def test_failing_tests_become_error_annotations(self):
+        script = self.root / "test_fixture.py"
+        script.write_text(
+            "import unittest\n"
+            "class T(unittest.TestCase):\n"
+            "    def test_ok(self):\n"
+            "        pass\n"
+            "    def test_bad(self):\n"
+            "        self.assertEqual(1, 2, 'one: two')\n"
+            "unittest.main()\n"
+        )
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "validation/unittest_notices.py"), str(script)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 1)
+        errors = [x for x in result.stdout.splitlines() if x.startswith("::error")]
+        self.assertEqual(len(errors), 1, result.stdout)
+        self.assertIn("title=FAIL __main__.T.test_bad::", errors[0])
+        self.assertIn("AssertionError: 1 != 2 : one: two", errors[0])
+
     def test_the_cavity_experiment_exit_codes(self):
         for report, code in [
             ({"passed": True}, 0),

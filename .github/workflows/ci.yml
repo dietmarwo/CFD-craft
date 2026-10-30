@@ -46,14 +46,15 @@ jobs:
       - run: cargo build --release --locked
       - run: python -m pip install -r requirements-validation.txt
       - run: mkdir -p runs && python integrations/install_openfoam13.py --output runs/openfoam13
-      - run: python validation/test_openfoam.py -v
-      - run: python -O validation/test_openfoam.py -v
-      - run: python validation/test_resolution.py -v
-      - run: python -O validation/test_resolution.py -v
-      - run: python validation/test_restart.py -v
-      - run: python -O validation/test_restart.py -v
-      - run: python validation/test_mapping.py -v
-      - run: python -O validation/test_mapping.py -v
+      # Each runner prints failing tests as error annotations, with their tracebacks.
+      - run: python validation/unittest_notices.py validation/test_openfoam.py
+      - run: python validation/unittest_notices.py validation/test_openfoam.py -O
+      - run: python validation/unittest_notices.py validation/test_resolution.py
+      - run: python validation/unittest_notices.py validation/test_resolution.py -O
+      - run: python validation/unittest_notices.py validation/test_restart.py
+      - run: python validation/unittest_notices.py validation/test_restart.py -O
+      - run: python validation/unittest_notices.py validation/test_mapping.py
+      - run: python validation/unittest_notices.py validation/test_mapping.py -O
       # The cavity mapped from level 1 against a cold level-2 control, with the bounds
       # of the mapping results. Exit 2 records unaccepted evidence.
       - run: |

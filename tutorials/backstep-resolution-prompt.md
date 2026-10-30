@@ -29,7 +29,8 @@ after the installer) and `VERIFIED_DATA` a directory of measurements fetched by
 frozen measurement files. Exit 0 means every requested case was accepted and
 passed its screen. Exit 2 means the study retained unaccepted evidence; inspect
 `report.json` and every row's execution, error, progress and limits. Exit 1
-means a workflow, input or runtime error, including a failure to prepare a case.
+means a workflow, input or runtime error, including a failure to prepare a case;
+a completed stage that cannot seed the next stage is recorded evidence (exit 2).
 A NaN/Inf solver log or a diverging continuity error stops a solve early with
 CFD-X010. A timeout/failure has no accepted final field, so its measurement
 comparison is not assessed.
@@ -44,26 +45,27 @@ The presets are:
 
 Each attempted stage has its own wall-time budget, covering mesh generation,
 solve and postprocessing. Defaults are 900 seconds and 6000 iterations; the
-CLI limits are 3600 seconds and 20000 iterations per case. Numerical acceptance
-of the reference recipe needs more than 6000 iterations, so pass the limits
-shown above. The output budget is 512 MiB and the child address-space limit
-2048 MiB. The controls preset can spend four case budgets, the study three.
+CLI limits are 3600 seconds and 20000 iterations per stage, and the iteration
+limit needs a divisor between 50 and 250 (any multiple of 50 works). Numerical
+acceptance of the reference recipe needs more than 6000 iterations, so pass the
+limits shown above. The output budget is 512 MiB and the child address-space
+limit 2048 MiB. The controls preset can spend up to four times `--max-stages`
+stage budgets, the study three times.
 
-For bounded continuation, add `--max-stages N` (1..8, default 1). For example:
+For bounded continuation, add `--max-stages N` (1..8, default 1). The recorded
+staged run of the reference recipe is:
 
 ```sh
-python tutorials/backstep_resolution.py --preset smoke --iterations 5000 \
-  --max-stages 4 --timeout-s 900 --foam-root ROOT --data VERIFIED_DATA \
+python tutorials/backstep_resolution.py --preset smoke --iterations 6000 \
+  --max-stages 4 --timeout-s 3500 --foam-root ROOT --data VERIFIED_DATA \
   --output runs/resolution-staged
 ```
 
-This permits four 5000-iteration stages, each with its own 900-second run
-budget; it is not a guarantee of convergence within that budget. Preparation
-and hashing add overhead. A completed unaccepted stage may supply its verified
-fields and phi to the next stage on the same mesh. A timeout, cancellation,
-failure or failed source-flux check stops continuation. Every stage is retained;
-`execution` and comparison describe the last attempted stage, and
-`completed_solver_iterations`/`started_iterations` count work across stages.
+A completed unaccepted stage supplies its verified fields and phi to the next
+stage on the same mesh. Every stage is retained; `execution` and the
+comparison describe the last stage, `completed_solver_iterations` and
+`started_iterations` count work across stages, and `continuation_stop_reason`
+says why the chain ended.
 Finer meshes still require accepted coarser rows. Read the
 [continuation guide](../integrations/STEADY_RESTART.md) for eligibility,
 provenance, storage and pseudo-time semantics.

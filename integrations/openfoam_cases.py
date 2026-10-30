@@ -90,6 +90,20 @@ UPSTREAM_X = [(4 - APPROACH[0], 15, 1), (APPROACH[0], 33, 1 / APPROACH[2])]
 WALL_RESOLVED_CELLS = 48 * 80 + 352 * 80 + 352 * 48
 
 
+def control_dict(iterations, interval):
+    """Steady pseudo-time controls: deltaT 1, so time is the iteration count."""
+    return (
+        header("controlDict")
+        + f"""
+solver incompressibleFluid;
+startFrom startTime; startTime 0; stopAt endTime; endTime {iterations}; deltaT 1;
+writeControl timeStep; writeInterval {interval}; purgeWrite 1;
+writeFormat ascii; writePrecision 15; writeCompression off;
+timeFormat general; timePrecision 12; runTimeModifiable false;
+"""
+    )
+
+
 def build(
     kind, level, iterations, dataset=None, mesh_family="legacy", solver_profile="legacy"
 ):
@@ -361,16 +375,7 @@ def build(
         }
         for name, axis, points in sets
     }
-    files["system/controlDict"] = (
-        header("controlDict")
-        + f"""
-solver incompressibleFluid;
-startFrom startTime; startTime 0; stopAt endTime; endTime {iterations}; deltaT 1;
-writeControl timeStep; writeInterval {min(iterations, 250)}; purgeWrite 1;
-writeFormat ascii; writePrecision 15; writeCompression off;
-timeFormat general; timePrecision 12; runTimeModifiable false;
-"""
-    )
+    files["system/controlDict"] = control_dict(iterations, min(iterations, 250))
     files["system/fvSchemes"] = (
         header("fvSchemes")
         + """

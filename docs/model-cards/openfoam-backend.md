@@ -148,34 +148,44 @@ The [tutorial](../../tutorials/backstep-resolution-prompt.md) and
 
 ## Bounded steady field continuation
 
-`prepare-restart` copies the verified final U/p/phi and (for SST) k/omega/nut
-of a completed same-mesh run into a fresh local pseudo-time zero. A completed
-but unconverged stage is eligible only with finite final fields and independent
-local flux <=1e-4; failed, timed-out or cancelled snapshots are ineligible.
-This resets steady solver history/caches and does not restore transient time
-history. Cumulative iteration counts report work. The native Rust models,
-SST/mesh/inlet choices and acceptance thresholds are unchanged.
+`prepare-restart` copies the final U/p/phi and, for SST, k/omega/nut of a
+completed same-mesh run into a fresh local pseudo-time zero. Failed, timed-out
+or cancelled runs are ineligible. A completed but unconverged stage is eligible
+when its final fields are finite and its stored face flux is a solver state:
+each cell's net face flux, divided by U_ref times the cell's face-area scale
+dz*sqrt(dx*dy), is at most 1e-2. That integrity check does not tighten with
+refinement. The auditor's local acceptance measure (max abs(div(phi))*H/U
+<=1e-4) is recorded but not required of a source: it follows the last pressure
+solve's relative tolerance, and the cold start of every run fails it by four
+orders of magnitude. The final stage is accepted only with the unchanged gates.
 
-The sealed initial-state receipt records parent manifest/case hashes, source
-acceptance and work, exact fields including phi, fixed physics inputs, actual
-mesh files and runtime identity. The rebuilt mesh and exact runtime must match
-before solving; the archive verifier checks the receipt against consumed
-inputs and records rejected initializations as failed archives. Retain parent
-archives to inspect the chain: a receipt's parent hash alone is not a substitute
-for those bytes, and unkeyed checksums do not establish authenticity.
+The sealed initial-state receipt records the parent manifest and case hashes,
+source acceptance and work, the source metadata and controls, exact fields
+including phi, fixed physics inputs, actual mesh files and runtime identity.
+The rebuilt mesh and exact runtime must match before solving. The stage's
+controls may differ from the source's only in endTime and writeInterval, and
+each copied field must carry the source time in its header. The archive
+verifier rechecks the receipt and, for a stage that solved, its runtime and
+mesh; a rejected initialization is recorded as a failed archive. Retain parent
+archives to inspect the chain; unkeyed checksums do not establish authenticity.
+
+Restarting resets the solver's residual history. In the laminar cavity a split
+stage reproduces the uninterrupted run to round-off. In the SST backstep the
+restarted iteration's residuals differ by about 1e-4 relative, consistent with
+turbulence-model state that the fields do not carry; the final-field difference
+after 250 further iterations is about 1e-6 of the field magnitudes.
 
 The resolution tutorial can continue up to `--max-stages 8` (default 1) with
-unchanged per-stage limits. It stops at numerical convergence or a stopped
-execution; wall-y+/measurement gates still decide final acceptance. Each stage
-is retained. The final report distinguishes local iterations from cumulative
-work and never substitutes a source's acceptance for the new stage's result.
+unchanged per-stage limits. It stops at numerical acceptance, at a converged
+but unaccepted stage, at a stopped execution, at an ineligible source and at
+the stage limit, and records the reason; the wall-y+ and measurement gates
+still decide final acceptance. Every stage is retained, and the report keeps
+the final stage's iterations apart from cumulative work.
 
-For normally completed iteration-limited runs, preparation chooses the largest
-writeInterval <=250 that divides the iteration limit. The defaults 6000 and
-20000 retain cadence 250. Prime limits can require writes every iteration;
-choose composite stage lengths for lower I/O overhead. This fixes missing final
-snapshots when an endTime falls between scheduled writes. It does not promote
-stopped snapshots or change numerical thresholds. See the
+A run that stops at its iteration limit writes a final field only when the
+limit is a multiple of the write cadence. Preparation uses the largest divisor
+of the limit up to 250, and rejects limits without a divisor between 50 and 250;
+6000 and 20000 keep cadence 250. See the
 [guide](../../integrations/STEADY_RESTART.md) and
 [continuation results](../../validation/RESTART_RESULTS.md).
 

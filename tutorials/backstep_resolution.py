@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "integrations"))
 sys.path.insert(0, str(ROOT / "validation"))
 import openfoam_backend as backend
-from openfoam_restart import prepare as prepare_restart
+from openfoam_restart import IneligibleSource, prepare as prepare_restart
 from backstep_data import fetch, load, sha256
 from compare_backstep import assess, save
 from audit_openfoam_mesh import audit
@@ -71,6 +71,12 @@ def study(
         "study.iterations",
         "expected 50..20000",
     )
+    try:
+        backend.snapshot_interval(iterations)
+    except ValueError as exc:
+        raise ValueError(
+            str(exc).replace("CFD-X001 iterations", "CFD-X001 study.iterations")
+        ) from exc
     backend.require(
         type(max_stages) is int and 1 <= max_stages <= 8,
         "study.max_stages",
@@ -136,8 +142,10 @@ def study(
             # its archive is row evidence.
             row["stages"] = []
             run_directory = None
+            reason = "stage_limit"
             for stage in range(1, max_stages + 1):
                 if stop.cancelled:
+                    reason = "cancelled"
                     break
                 stage_name = name if stage == 1 else f"{name}-stage{stage}"
                 prepared = output / (stage_name + "-input")
@@ -148,15 +156,11 @@ def study(
                 else:
                     try:
                         prepare_restart(run_directory, iterations, prepared)
-                    except ValueError as exc:
-                        if not str(exc).startswith(
-                            "CFD-X012 initial_state.phi.local_continuity:"
-                        ):
-                            raise
-                        # A valid completed stage can still fail this scientific
-                        # prerequisite. Assess it, stop continuation and retain
-                        # normal unaccepted-row/finer-grid gating semantics.
-                        row["continuation_stop_reason"] = str(exc)
+                    except IneligibleSource as exc:
+                        # A completed stage whose stored state cannot seed the
+                        # next one: assess it and keep the unaccepted-row and
+                        # finer-mesh gating. Other errors stop the workflow.
+                        reason = "source_ineligible: " + str(exc)
                         break
                 run_directory = output / stage_name
                 execution = backend.run(
@@ -184,12 +188,22 @@ def study(
                     for s in row["stages"]
                 )
                 backend.write_json(output / "report.json", report)
-                if (
-                    execution["passed"]
-                    or execution["execution_status"] != "completed"
-                    or execution["numerical"] is None
-                ):
+                numerical = execution["numerical"]
+                if execution["passed"]:
+                    reason = "numerically_accepted"
                     break
+                if execution["execution_status"] != "completed":
+                    reason = "execution_" + execution["execution_status"]
+                    break
+                if numerical is None:
+                    reason = "no_final_field"
+                    break
+                if numerical["solver_reported_convergence"]:
+                    # Residuals carry across a restart: a further stage would
+                    # report convergence again at its first iteration.
+                    reason = "converged_without_numerical_acceptance"
+                    break
+            row["continuation_stop_reason"] = reason
             if not row["stages"]:
                 break
             if execution["numerical"] is not None:

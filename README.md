@@ -93,8 +93,9 @@ See the [plan](docs/iterations/03-wall-resolution-plan.md) and the
 The [continuation workflow](integrations/STEADY_RESTART.md) starts a fresh
 bounded stage from the verified final fields and face flux of a completed
 same-mesh run. Initial-state provenance, runtime and rebuilt mesh are checked;
-staged work counts and final convergence remain distinct. This supports long
-cloud solves without changing the numerical gates or requiring a workstation.
+staged work counts and final convergence remain distinct, and the numerical
+gates are unchanged. See the [plan](docs/iterations/04-steady-continuation-plan.md)
+and the [continuation results](validation/RESTART_RESULTS.md).
 
 ## Ecosystem
 

@@ -43,8 +43,23 @@ def backstep_lines(row):
     if "stages" in row:
         lines.append(
             f"stages {len(row['stages'])}; completed solver iterations across stages "
-            f"{row.get('completed_solver_iterations')}; started {row.get('started_iterations')}"
+            f"{row.get('completed_solver_iterations')}; started {row.get('started_iterations')}; "
+            f"stop {row.get('continuation_stop_reason')}"
         )
+        for stage in row["stages"]:
+            run = stage.get("execution") or {}
+            work = run.get("numerical") or {}
+            state = run.get("initial_state") or {}
+            balance = (state.get("source_flux_balance") or {}).get(
+                "maximum_face_scaled_balance"
+            )
+            lines.append(
+                f"stage {stage.get('stage')}: {run.get('execution_status')}; iterations "
+                f"{work.get('iterations')}; converged {work.get('solver_reported_convergence')}; "
+                f"wall {number(run.get('wall_s'), 5)} s"
+                + (f"; source balance {number(balance, 3)}" if state else "")
+                + (f"; error {run['error']}" if run.get("error") else "")
+            )
     comparison = row.get("comparison") or {}
     if comparison.get("status") != "evaluated":
         lines.append(
@@ -115,7 +130,8 @@ def resolution(report):
         notice(title, "\n".join(lines))
     notice(
         "resolution study",
-        f"preset {report.get('preset')}; passed {report.get('passed')}; "
+        f"preset {report.get('preset')}; stage limits {json.dumps(report.get('stage_limits'))}; "
+        f"passed {report.get('passed')}; "
         f"workflow completed {report.get('workflow_completed')}; error {report.get('error')}; "
         f"mesh sensitivity {json.dumps(report.get('mesh_sensitivity'))}\n"
         + "\n".join(
@@ -125,10 +141,56 @@ def resolution(report):
     return 0
 
 
+def restart_comparison(report, title):
+    if report.get("status") == "invalid":
+        notice(title, f"invalid: {report.get('error')}")
+        return 0
+    lines = [
+        f"mode {report['mode']}; passed {report['passed']}; checks {json.dumps(report['checks'])}",
+        f"work {json.dumps(report['work'])}; numerical passed {json.dumps(report['numerical_passed'])}",
+    ]
+    for name, field in report["fields"].items():
+        lines.append(
+            f"{name}: max abs {number(field['maximum_absolute'])}, over control max "
+            f"{number(field['maximum_over_control_maximum'])}, max cell relative "
+            f"{number(field['maximum_cell_relative'])}"
+        )
+    for side, found in (report.get("metrics") or {}).items():
+        lines.append(
+            f"{side}: reattachment {number(found['reattachment_x_over_h'], 8)} H; Cf RMSE "
+            f"{number(found['cf_rmse'], 8)}; profiles "
+            + ", ".join(f"{k} {number(v, 8)}" for k, v in found["profile_rmse"].items())
+            + "; max y+ "
+            + ", ".join(
+                f"{k} {number(v, 6)}" for k, v in found["maximum_y_plus"].items()
+            )
+        )
+    lines.append(f"implementation {report.get('implementation_sha256')}")
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
+    title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
     if "rows" in report:
         return resolution(report)
+    if str(report.get("schema_version", "")).startswith(
+        "cfd-craft.restart-equivalence"
+    ):
+        notice(
+            title + " runs",
+            f"{report['case']} {report['mesh_family']}/{report['solver_profile']}; "
+            f"iterations {json.dumps(report['iterations'])}; runs {json.dumps(report['runs'])}; "
+            f"error {report.get('error')}",
+        )
+        if report.get("comparison"):
+            return restart_comparison(report["comparison"], title)
+        return 0
+    if str(report.get("schema_version", "")).startswith(
+        "cfd-craft.restart-comparison"
+    ) or ("mode" not in report and report.get("status") == "invalid"):
+        return restart_comparison(report, title)
     cavity = report.get("cavity") or {}
     errors = cavity.get("maximum_absolute_errors_lid_speed") or {}
     notice(

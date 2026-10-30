@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "validation"))
 from backstep_data import load, sha256
-from openfoam_cases import build
+from openfoam_cases import build, control_dict
 
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 
@@ -74,8 +74,20 @@ def inventory(directory, symlinks=None):
 
 
 def snapshot_interval(iterations):
-    """Largest cadence <=250 that writes the requested final iteration."""
-    return max(n for n in range(1, min(iterations, 250) + 1) if iterations % n == 0)
+    """Largest cadence <=250 that writes the requested final iteration.
+
+    A run that stops at its iteration limit writes a final field only when the
+    limit is a multiple of the cadence. Limits without a divisor in 50..250
+    would need near per-iteration writes (8 MB per snapshot at level 1), so they
+    are rejected rather than slowing a bounded stage into a timeout.
+    """
+    interval = max(n for n in range(1, min(iterations, 250) + 1) if iterations % n == 0)
+    require(
+        interval >= min(iterations, 50),
+        "iterations",
+        "choose a limit with a divisor between 50 and 250, such as a multiple of 50",
+    )
+    return interval
 
 
 def prepare(
@@ -97,10 +109,8 @@ def prepare(
     files, metadata = build(
         kind, level, iterations, dataset, mesh_family, solver_profile
     )
-    files["system/controlDict"] = re.sub(
-        r"\bwriteInterval\s+\d+;",
-        f"writeInterval {snapshot_interval(iterations)};",
-        files["system/controlDict"],
+    files["system/controlDict"] = control_dict(
+        iterations, snapshot_interval(iterations)
     )
     output = Path(output)
     claim_directory(output)

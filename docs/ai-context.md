@@ -18,11 +18,11 @@ local-flux and all-wall y+ audit. Never turn a saved pre-failure snapshot into
 a final result.
 
 For long steady solves use [verified continuation](../integrations/STEADY_RESTART.md)
-and the [iteration 04 plan](iterations/04-steady-continuation-plan.md).
-`prepare-restart` accepts a completed finite snapshot with conservative stored
-phi; unconverged completed stages are eligible, failed/timeout/cancelled ones
-are not. It preserves physics and mesh, resets local pseudo-time and records
-source fields/runtime/mesh. `--max-stages` defaults to 1. These are steady field
+and its [results](../validation/RESTART_RESULTS.md). `prepare-restart` accepts a
+completed run with finite final fields whose stored face flux is a solver state;
+unconverged completed stages are eligible, failed/timeout/cancelled ones are
+not. It preserves physics and mesh, resets local pseudo-time and records source
+fields, runtime and mesh. `--max-stages` defaults to 1. These are steady field
 initializations, not transient-history restarts or cross-mesh mappings.
 
 1. Build with cargo build --release --locked. Inspect cfd-craft describe.

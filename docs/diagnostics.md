@@ -92,7 +92,7 @@ evidence, and 1 for a failed execution or invalid input
 
 | Code | Meaning |
 |---|---|
-| CFD-X001 | Invalid external case/input identity or execution-limit field |
+| CFD-X001 | Invalid external case/input identity or execution-limit field, including an iteration limit without a divisor between 50 and 250 (`iterations`) |
 | CFD-X002 | Missing/unsupported runtime, version, package identity or installer dependency |
 | CFD-X003 | A child command exited unsuccessfully; the actual return code and log are retained |
 | CFD-X004 | External execution wall deadline reached |
@@ -103,5 +103,6 @@ evidence, and 1 for a failed execution or invalid input
 | CFD-X009 | A cross-solver comparison exceeds its frozen target |
 | CFD-X010 | The solver log shows a numerical breakdown: `execution.solve.residual` for a NaN/Inf residual or continuity value, `execution.solve.continuity` for a reported mean continuity error (`sum local`, in units of U_ref/H) of at least 1. The process group is stopped and the failure archive retained |
 | CFD-X011 | The independent Cartesian audit rejects `mesh.*` (points, faces, owner/neighbour order and orientation, boundary ranges, volume, first-cell heights), `fields.phi.*` or `wallShearStress.*` (missing, malformed, nonfinite, or zero traction on a wall); `run.numerical` marks an archive without a final field, which is not assessed |
+| CFD-X012 | `initial_state.*`: an ineligible or changed restart source (`source.*`), a receipt that is incomplete or disagrees with the consumed inputs (fields, fixed inputs, metadata, controls, field header times), a runtime or rebuilt mesh that differs from the source (`runtime`, `mesh.*`), or a stored face flux that is not a solver state (`phi.cell_balance`) |
+| CFD-X013 | `comparison.*`: a restart comparison of two archives from different cases, recipes, meshes or runtimes, or without final fields |
 | CFD-D001 | Reference/protocol hash, measurement identity, pairing or metric input invalid |
-| CFD-X012 | `initial_state.*`: ineligible source, invalid restart receipt, copied-field/physics identity change, mismatched runtime/mesh or failed initial local-flux check; the field names the failed check |

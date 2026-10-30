@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 import openfoam_backend as backend
+from openfoam_cases import control_dict
 
 SCHEMA = "cfd-craft.openfoam-initial-state/0.1"
 MESH_FILES = ("points", "faces", "owner", "neighbour", "boundary")
@@ -26,10 +27,20 @@ FIXED = {
     "system/fvSolution",
     "system/sampleProfiles",
 }
+# Integrity limit for a stored phi: a cell's net face flux over U_ref times its
+# face-area scale. Solver states, converged or not, lie orders of magnitude
+# below it (about 5e-5 for an early SIMPLEC iterate, 1e-14 for a PCG profile);
+# an edited, flipped or permuted face flux gives order one.
+BALANCE_TARGET = 1e-2
 
 
-def require(ok, field, message):
-    backend.require(ok, "initial_state." + field, message, "CFD-X012")
+class IneligibleSource(ValueError):
+    """A verified, completed source whose stored state cannot seed a stage."""
+
+
+def require(ok, field, message, error=ValueError):
+    if not ok:
+        raise error(f"CFD-X012 initial_state.{field}: {message}")
 
 
 def identity(value):
@@ -45,32 +56,55 @@ def file_identity(path):
 
 
 def fixed_names(kind):
-    return FIXED | ({"system/wallStress"} if kind == "backstep" else set())
+    return sorted(FIXED | ({"system/wallStress"} if kind == "backstep" else set()))
 
 
-def local_flux(case, time_name, metadata, kind):
-    # These independent readers check face ordering/orientation and every phi.
+def flux_balance(case, time_name, metadata, kind, text=None):
+    """The stored phi must be a solver state: independent face-flux integrity.
+
+    The auditor's acceptance measure, max abs(div(phi))*H/U, tracks the last
+    pressure solve's tolerance and tightens like H/dx with refinement; it is
+    reported here and still decides the final stage. Eligibility needs only the
+    scale-free balance below.
+    """
     from audit_openfoam_mesh import (
         cartesian_mesh,
         patches,
         face_fluxes,
+        face_scaled_balance,
         local_continuity,
     )
 
     mesh = cartesian_mesh(case)
     require(mesh["cells"] == metadata["cells"], "mesh.cells", "metadata mismatch")
-    flux = face_fluxes(
-        mesh, patches(mesh, kind), (Path(case) / time_name / "phi").read_text()
-    )
-    result = local_continuity(
-        mesh, flux, metadata.get("height_m", 1), metadata.get("reference_speed_m_s", 1)
-    )
+    if text is None:
+        text = (Path(case) / time_name / "phi").read_text()
+    flux = face_fluxes(mesh, patches(mesh, kind), text)
+    speed = metadata.get("reference_speed_m_s", 1)
+    balance = face_scaled_balance(mesh, flux, speed)
+    result = {
+        "maximum_face_scaled_balance": balance,
+        "target_max": BALANCE_TARGET,
+        "passed": balance <= BALANCE_TARGET,
+        "local_continuity": local_continuity(
+            mesh, flux, metadata.get("height_m", 1), speed
+        ),
+    }
     require(
         result["passed"],
-        "phi.local_continuity",
-        "stored initial flux fails the independent local gate",
+        "phi.cell_balance",
+        f"stored face flux is not a solver state (cell balance {balance:.3g} > "
+        f"{BALANCE_TARGET:g})",
+        IneligibleSource,
     )
     return result
+
+
+def header_location(path):
+    with Path(path).open(errors="replace") as stream:
+        head = stream.read(4096)
+    match = re.search(r"\blocation\s+\"([^\"]*)\"\s*;", head)
+    return match[1] if match else None
 
 
 def validate(case, definition):
@@ -90,6 +124,7 @@ def validate(case, definition):
             "source_manifest_sha256",
             "source_case_sha256",
             "source_runtime_sha256",
+            "source_metadata_sha256",
         ]:
             require(
                 isinstance(state[name], str)
@@ -114,6 +149,11 @@ def validate(case, definition):
             "source_numerical_passed",
             "expected boolean",
         )
+        require(
+            identity(definition["metadata"]) == state["source_metadata_sha256"],
+            "source_metadata_sha256",
+            "case metadata differs from the source",
+        )
         kind = definition["kind"]
         require(
             type(definition["max_iterations"]) is int
@@ -133,7 +173,7 @@ def validate(case, definition):
             "incomplete mesh identity",
         )
         require(
-            set(state["fixed_inputs"]) == fixed_names(kind),
+            set(state["fixed_inputs"]) == set(fixed_names(kind)),
             "fixed_inputs",
             "unexpected physics inputs",
         )
@@ -144,16 +184,18 @@ def validate(case, definition):
         ]:
             for name, entry in entries.items():
                 require(
-                    set(entry) == {"bytes", "sha256"}
+                    isinstance(entry, dict)
+                    and set(entry) == {"bytes", "sha256"}
                     and type(entry["bytes"]) is int
                     and entry["bytes"] > 0
+                    and isinstance(entry["sha256"], str)
                     and re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]),
                     prefix + "." + name,
                     "invalid file identity",
                 )
         expected = (
             {"0/" + name for name in fields}
-            | fixed_names(kind)
+            | set(fixed_names(kind))
             | {"system/controlDict"}
         )
         require(
@@ -167,33 +209,45 @@ def validate(case, definition):
                 "source_fields." + name,
                 "copied field differs from the source identity",
             )
+            require(
+                header_location(Path(case) / "0" / name) == state["source_time"],
+                "source_fields." + name,
+                "copied field does not come from the source's final snapshot",
+            )
         for name, entry in state["fixed_inputs"].items():
             require(
                 definition["inputs"][name] == entry,
                 "fixed_inputs." + name,
                 "physics or mesh recipe changed",
             )
+        iterations = definition["max_iterations"]
         controls = (Path(case) / "system/controlDict").read_text()
-        for key, value in [
-            ("startFrom", "startTime"),
-            ("startTime", "0"),
-            ("endTime", str(definition["max_iterations"])),
-            ("deltaT", "1"),
-            (
-                "writeInterval",
-                str(backend.snapshot_interval(definition["max_iterations"])),
-            ),
-        ]:
-            require(
-                re.findall(r"\b" + key + r"\s+([^;]+);", controls) == [value],
-                "controls." + key,
-                "unexpected stage control",
-            )
+        interval = re.findall(r"\bwriteInterval\s+(\d+);", controls)
+        require(
+            len(interval) == 1
+            and 0 < int(interval[0]) <= 250
+            and iterations % int(interval[0]) == 0
+            and controls
+            == stage_controls(state["source_controls"], iterations, int(interval[0])),
+            "controls",
+            "stage controls are not the source's with a new endTime and writeInterval",
+        )
         backend.final_field_checks(case, "0", kind)
-    except (KeyError, TypeError, AttributeError, IndexError) as exc:
+    except KeyError as exc:
+        raise ValueError(f"CFD-X012 initial_state.{exc.args[0]}: missing") from exc
+    except (TypeError, AttributeError, IndexError) as exc:
         raise ValueError(
             f"CFD-X012 initial_state: malformed receipt ({type(exc).__name__})"
         ) from exc
+
+
+def stage_controls(source_controls, iterations, interval):
+    """The source's controls with only endTime and writeInterval replaced."""
+    text = source_controls
+    for key, value in [("endTime", iterations), ("writeInterval", interval)]:
+        text, count = re.subn(r"\b" + key + r"\s+[^;]+;", f"{key} {value};", text)
+        require(count == 1, "controls." + key, "missing or duplicated stage control")
+    return text
 
 
 def check_runtime(state, runtime):
@@ -211,13 +265,28 @@ def check_mesh(case, state, metadata, kind):
             "mesh." + name,
             "rebuilt mesh differs from the source mesh",
         )
-    return local_flux(case, "0", metadata, kind)
+    return flux_balance(case, "0", metadata, kind)
 
 
 def verify_receipt(case, definition, report):
-    """A rejected runtime/mesh is retained as a consistent failed archive."""
+    """Recheck runtime and mesh; a pre-solve rejection is a consistent failure."""
     validate(case, definition)
     state = definition["initial_state"]
+    if any(c["program"] == "foamRun" for c in report["commands"]):
+        # A solved stage passed both checks before its solve: both are mandatory.
+        require("runtime" in report, "runtime", "solved stage lacks its runtime")
+        check_runtime(state, report["runtime"])
+        require(
+            any(
+                c["program"] == "checkMesh" and c["returncode"] == 0
+                for c in report["commands"]
+            )
+            and "Mesh OK." in (Path(case).parent / "check-mesh.log").read_text(),
+            "mesh",
+            "solved stage lacks a passed mesh check",
+        )
+        check_mesh(case, state, definition["metadata"], definition["kind"])
+        return
     try:
         if "runtime" in report:
             check_runtime(state, report["runtime"])
@@ -232,12 +301,21 @@ def verify_receipt(case, definition, report):
             check_mesh(case, state, definition["metadata"], definition["kind"])
     except ValueError as exc:
         require(
-            report["execution_status"] == "failed"
-            and report.get("error") == str(exc)
-            and not any(c["program"] == "foamRun" for c in report["commands"]),
+            report["execution_status"] == "failed" and report.get("error") == str(exc),
             "archive",
             "initial-state mismatch was not rejected before the solve",
         )
+
+
+def read_checked(path, entry, field):
+    data = Path(path).read_bytes()
+    require(
+        len(data) == entry["bytes"]
+        and hashlib.sha256(data).hexdigest() == entry["sha256"],
+        field,
+        "source changed after verification",
+    )
+    return data
 
 
 def prepare(source, iterations, output):
@@ -246,7 +324,21 @@ def prepare(source, iterations, output):
         "iterations",
         "expected 50..20000 per stage",
     )
-    source = Path(source)
+    interval = backend.snapshot_interval(iterations)
+    source, output = Path(source), Path(output)
+    try:
+        return prepared_stage(source, iterations, interval, output)
+    except KeyError as exc:
+        raise ValueError(
+            f"CFD-X012 initial_state.source.{exc.args[0]}: missing from the source"
+        ) from exc
+    except OSError as exc:
+        name = Path(exc.filename).name if exc.filename else "archive"
+        raise ValueError(f"CFD-X012 initial_state.source: cannot read {name}") from exc
+
+
+def prepared_stage(source, iterations, interval, output):
+    # Each file is read once; its verified bytes are what is checked and used.
     manifest_bytes = (source / "manifest.json").read_bytes()
     manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
     report = backend.verify(source)
@@ -260,12 +352,15 @@ def prepare(source, iterations, output):
         "source.manifest",
         "source changed during verification",
     )
+    entries = json.loads(manifest_bytes)["files"]
     case = source / "case"
-    definition = json.loads((case / "case.json").read_text())
+    definition = json.loads(
+        read_checked(case / "case.json", entries["case/case.json"], "source.case")
+    )
     require(
-        backend.sha256(case / "case.json") == report["case_sha256"],
+        entries["case/case.json"]["sha256"] == report["case_sha256"],
         "source.case",
-        "source case changed",
+        "source case differs from its summary",
     )
     require(
         definition["generator_sha256"]
@@ -275,33 +370,35 @@ def prepare(source, iterations, output):
     )
     kind = report["case"]
     time_name = report["numerical"]["final_time_directory"]
+    source_controls = read_checked(
+        case / "system/controlDict",
+        definition["inputs"]["system/controlDict"],
+        "source.controls",
+    ).decode()
+    source_interval = re.findall(r"\bwriteInterval\s+(\d+);", source_controls)
+    require(
+        len(source_interval) == 1
+        and source_controls
+        == control_dict(definition["max_iterations"], int(source_interval[0])),
+        "source.controls",
+        "source did not use the generated steady controls",
+    )
+    controls = stage_controls(source_controls, iterations, interval)
     backend.final_field_checks(case, time_name, kind)
-    local = local_flux(case, time_name, definition["metadata"], kind)
-    entries = json.loads(manifest_bytes)["files"]
+    phi = read_checked(
+        case / time_name / "phi", entries[f"case/{time_name}/phi"], "source.phi"
+    )
+    balance = flux_balance(case, time_name, definition["metadata"], kind, phi.decode())
     fields = {name: entries[f"case/{time_name}/{name}"] for name in FIELDS[kind]}
     mesh = {name: entries["case/constant/polyMesh/" + name] for name in MESH_FILES}
     fixed = {name: definition["inputs"][name] for name in fixed_names(kind)}
-    controls = (case / "system/controlDict").read_text()
-    require(
-        file_identity(case / "system/controlDict")
-        == definition["inputs"]["system/controlDict"],
-        "source.controls",
-        "source changed",
-    )
-    for key, value in [
-        ("endTime", iterations),
-        ("writeInterval", backend.snapshot_interval(iterations)),
-    ]:
-        controls, count = re.subn(
-            r"\b" + key + r"\s+[^;]+;", f"{key} {value};", controls
-        )
-        require(count == 1, "controls." + key, "missing/duplicate stage control")
     previous = definition.get("initial_state") or {}
     state = {
         "schema_version": SCHEMA,
         "method": "same_mesh_steady_field_restart",
         "source_manifest_sha256": manifest_sha,
         "source_case_sha256": report["case_sha256"],
+        "source_metadata_sha256": identity(definition["metadata"]),
         "source_time": time_name,
         "source_completed_iterations": previous.get("source_completed_iterations", 0)
         + report["numerical"]["iterations"],
@@ -310,32 +407,43 @@ def prepare(source, iterations, output):
         "source_fields": fields,
         "source_mesh": mesh,
         "fixed_inputs": fixed,
-        "source_local_continuity": local,
+        "source_controls": source_controls,
+        "source_flux_balance": balance,
         "meaning": "local steady pseudo-time and solver history reset; cumulative iterations count work, not physical time or bitwise continuation",
     }
-    output = Path(output)
     backend.claim_directory(output)
-    for name in fixed:
-        destination = output / name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(case / name, destination)
-    (output / "0").mkdir()
-    for name in fields:
-        shutil.copyfile(case / time_name / name, output / "0" / name)
-    (output / "system/controlDict").write_text(controls)
-    expected = {
-        **fixed,
-        **{"0/" + name: entry for name, entry in fields.items()},
-        "system/controlDict": {
-            "bytes": len(controls.encode()),
-            "sha256": hashlib.sha256(controls.encode()).hexdigest(),
-        },
-    }
-    require(
-        backend.inventory(output) == expected,
-        "inputs",
-        "source changed while copying or copied bytes differ",
-    )
-    definition.update(max_iterations=iterations, inputs=expected, initial_state=state)
-    backend.write_json(output / "case.json", definition)
-    return backend.check_prepared(output)
+    try:
+        for name in fixed:
+            destination = output / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(case / name, destination)
+        (output / "0").mkdir()
+        for name in fields:
+            shutil.copyfile(case / time_name / name, output / "0" / name)
+        (output / "system/controlDict").write_text(controls)
+        expected = dict(
+            sorted(
+                {
+                    **fixed,
+                    **{"0/" + name: entry for name, entry in fields.items()},
+                    "system/controlDict": {
+                        "bytes": len(controls.encode()),
+                        "sha256": hashlib.sha256(controls.encode()).hexdigest(),
+                    },
+                }.items()
+            )
+        )
+        require(
+            backend.inventory(output) == expected,
+            "inputs",
+            "source changed while copying or copied bytes differ",
+        )
+        definition.update(
+            max_iterations=iterations, inputs=expected, initial_state=state
+        )
+        backend.write_json(output / "case.json", definition)
+        return backend.check_prepared(output)
+    except BaseException:
+        # The directory was created by this call; leave no partial stage behind.
+        shutil.rmtree(output, ignore_errors=True)
+        raise

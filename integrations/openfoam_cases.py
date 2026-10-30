@@ -60,6 +60,36 @@ def first_width(length, cells, expansion):
     return length * (ratio - 1) / (ratio**cells - 1)
 
 
+def geometric_segment(first, ratio, cells):
+    """(length, cells, expansion) of a segment whose widths grow by `ratio` per cell."""
+    return first * (ratio**cells - 1) / (ratio - 1), cells, ratio ** (cells - 1)
+
+
+def grading(segments):
+    """blockMesh multi-grading; lengths and cell counts are normalized fractions."""
+    return (
+        "("
+        + " ".join(
+            f"({length:.15g} {cells} {expansion:.15g})"
+            for length, cells, expansion in segments
+        )
+        + ")"
+    )
+
+
+# Streamwise spacing of the wall-resolved family, in H at level 1; blockMesh
+# scales the cell counts with the level. Both sides of the step plane start
+# from the same 0.002 H cell. Widths grow by at most 10% per cell downstream
+# and 15% per cell upstream, without a jump between segments or blocks; the
+# spacing is uniform over the scored region 1 < x/H < 12.
+STEP_CELL_H = 0.002
+STEP_SIDE = geometric_segment(STEP_CELL_H, 1.1, 41)
+DOWNSTREAM_X = [STEP_SIDE, (12 - STEP_SIDE[0], 110, 1), (38, 201, 3)]
+APPROACH = geometric_segment(STEP_CELL_H, 1.15, 33)
+UPSTREAM_X = [(4 - APPROACH[0], 15, 1), (APPROACH[0], 33, 1 / APPROACH[2])]
+WALL_RESOLVED_CELLS = 48 * 80 + 352 * 80 + 352 * 48
+
+
 def build(
     kind, level, iterations, dataset=None, mesh_family="legacy", solver_profile="legacy"
 ):
@@ -152,11 +182,17 @@ def build(
         wall_heights = None
         if mesh_family == "wall-resolved":
             # Segment lengths and cell fractions are normalized by blockMesh.
-            streamwise = "((1 100 100) (11 100 1) (38 152 1))"
+            streamwise = grading(DOWNSTREAM_X)
             upper = "((1.5 32 200) (5 16 1) (1.5 32 0.005))"
             lower = "((0.5 24 100) (0.5 24 0.01))"
             blocks = [
-                ([0, 1, 4, 3, 8, 9, 12, 11], 32 * level, 80 * level, 0.3, upper),
+                (
+                    [0, 1, 4, 3, 8, 9, 12, 11],
+                    48 * level,
+                    80 * level,
+                    grading(UPSTREAM_X),
+                    upper,
+                ),
                 (
                     [1, 2, 5, 4, 9, 10, 13, 12],
                     352 * level,
@@ -176,7 +212,9 @@ def build(
                 "lowerWall": first_width(0.5, 24 * level, 100),
                 "upstreamWall": first_width(1.5, 32 * level, 200),
                 "upperWall": first_width(1.5, 32 * level, 200),
-                "stepWall": first_width(1, 100 * level, 100),
+                "stepWall": first_width(
+                    STEP_SIDE[0], STEP_SIDE[1] * level, STEP_SIDE[2]
+                ),
             }
         boundaries = {
             "inlet": ("patch", [[0, 3, 11, 8]]),
@@ -307,7 +345,7 @@ def build(
         metadata.update(mesh_family=mesh_family, solver_profile=solver_profile)
         if wall_heights is not None:
             metadata.update(
-                cells=47616 * level**2,
+                cells=WALL_RESOLVED_CELLS * level**2,
                 wall_first_cell_height_h=wall_heights,
                 lower_wall_first_cell_height_h=wall_heights["lowerWall"],
             )

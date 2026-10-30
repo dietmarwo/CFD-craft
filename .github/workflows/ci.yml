@@ -19,7 +19,7 @@ jobs:
   external-backend:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
       OMP_NUM_THREADS: "1"
@@ -48,12 +48,15 @@ jobs:
           test "$code" -eq 0 -o "$code" -eq 2
       - if: always()
         run: python validation/external_notices.py runs/external-study/report.json
-      # A failed coarse reference must remain visible and skip finer meshes.
+      # The wall-resolved reference at level 1 with the recorded budget, reusing the
+      # verified measurements. Exit 2 records unaccepted evidence; exit 1 fails the job.
       - run: |
           set +e
-          python tutorials/backstep_resolution.py --preset study --timeout-s 300 --foam-root "$CFD_OPENFOAM_ROOT" --output runs/resolution-study
+          python tutorials/backstep_resolution.py --preset smoke --iterations 20000 --timeout-s 3500 --data runs/external-study/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/resolution-study
           code=$?
           test "$code" -eq 0 -o "$code" -eq 2
+      - if: always()
+        run: test ! -f runs/resolution-study/report.json || python validation/external_notices.py runs/resolution-study/report.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:

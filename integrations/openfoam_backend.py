@@ -251,18 +251,49 @@ def disk_bytes(directory):
     return total
 
 
-def nonfinite_solver_log(path):
-    with Path(path).open("rb") as stream:
-        stream.seek(max(0, Path(path).stat().st_size - 16384))
-        text = stream.read().decode(errors="replace")
-    return (
-        re.search(
-            r"(?:Initial residual|Final residual|sum local|global)\s*=\s*[-+]?(?:nan|inf(?:inity)?)\b",
-            text,
-            re.I,
-        )
-        is not None
-    )
+NONFINITE_LINE = re.compile(
+    r"(?:Initial residual|Final residual|sum local|global)\s*=\s*[-+]?(?:nan|inf(?:inity)?)\b",
+    re.I,
+)
+CONTINUITY_LINE = re.compile(r"\bsum local\s*=\s*(" + NUMBER + ")")
+# The generated cases are scaled to U_ref = H = 1 and steady runs use deltaT 1,
+# so "sum local" is the volume-averaged |div(phi)| in units of U_ref/H. Converged
+# and stalled runs stay below 1e-3, also during their first iterations. A value of
+# one means the velocity field has grown by orders of magnitude.
+CONTINUITY_BREAKDOWN = 1.0
+
+
+class SolverLogScan:
+    """Reads a growing solver log once, in order. The first breakdown is kept."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.offset = 0
+        self.partial = b""
+        self.finding = None
+
+    def update(self, final=False):
+        if self.finding is not None:
+            return self.finding
+        with self.path.open("rb") as stream:
+            stream.seek(self.offset)
+            data = stream.read()
+        self.offset += len(data)
+        data = self.partial + data
+        cut = len(data) if final else data.rfind(b"\n") + 1
+        self.partial = data[cut:][-65536:]
+        for line in data[:cut].decode(errors="replace").splitlines():
+            if NONFINITE_LINE.search(line):
+                self.finding = "execution.solve.residual: nonfinite solver output"
+                break
+            values = [float(v) for v in CONTINUITY_LINE.findall(line)]
+            if any(v >= CONTINUITY_BREAKDOWN for v in values):
+                self.finding = (
+                    f"execution.solve.continuity: sum local {max(values):.6g} "
+                    f">= {CONTINUITY_BREAKDOWN:g}"
+                )
+                break
+        return self.finding
 
 
 def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
@@ -289,6 +320,7 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
     require(start < deadline, "execution.deadline", "wall-time limit", "CFD-X004")
     require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
     failure = None
+    scan = SolverLogScan(log) if label == "solve" else None
     with log.open("wb") as stream:
         process = subprocess.Popen(
             command,
@@ -302,12 +334,8 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         )
         try:
             while process.poll() is None:
-                require(
-                    label != "solve" or not nonfinite_solver_log(log),
-                    "execution.solve.residual",
-                    "nonfinite solver output",
-                    "CFD-X010",
-                )
+                if scan is not None and scan.update() is not None:
+                    raise ValueError("CFD-X010 " + scan.finding)
                 require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
                 require(
                     time.monotonic() < deadline,
@@ -333,8 +361,8 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         "wall_s": time.monotonic() - start,
         "log": log.name,
     }
-    if failure is None and label == "solve" and nonfinite_solver_log(log):
-        failure = "CFD-X010 execution.solve.residual: nonfinite solver output"
+    if failure is None and scan is not None and scan.update(final=True) is not None:
+        failure = "CFD-X010 " + scan.finding
     if failure is None and disk_bytes(output) >= max_bytes:
         failure = "CFD-X005 execution.output: output budget reached"
     if failure is None and process.returncode != 0:

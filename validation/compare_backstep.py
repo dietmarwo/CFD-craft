@@ -111,7 +111,8 @@ def crossing(x, cf):
     return crossings[-1] if crossings else None, crossings
 
 
-def assess(run, data, protocol=PROTOCOL):
+def assess(run, data, protocol=PROTOCOL, independent=None):
+    """`independent` is this archive's audit when the caller has already run it."""
     protocol = Path(protocol)
     require(
         sha256(protocol) == PROTOCOL_SHA256,
@@ -247,11 +248,19 @@ def assess(run, data, protocol=PROTOCOL):
         and reattachment["within_target"]
     )
 
-    independent = None
-    if result["case_metadata"].get("mesh_family") == "wall-resolved":
+    if result["case_metadata"].get("mesh_family") != "wall-resolved":
+        independent = None
+    elif independent is None:
         from audit_openfoam_mesh import audit
 
         independent = audit(run)
+    require(
+        independent is None
+        or independent.get("run_manifest_sha256")
+        == sha256(Path(run) / "manifest.json"),
+        "independent_mesh_audit.run_manifest_sha256",
+        "the audit belongs to another archive",
+    )
     prerequisites = numerical["passed"] and (
         independent is None or independent["passed"]
     )

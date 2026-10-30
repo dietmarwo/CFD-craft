@@ -18,21 +18,37 @@ from audit_openfoam_mesh import audit
 from external_cfd import mesh_sensitivity
 
 
+# The wall-resolved reference recipe: its mesh family and solver profile.
+REFERENCE = ("wall-resolved", "simplec")
+
+
 def scenarios(preset):
     backend.require(
         preset in {"smoke", "controls", "study"}, "study.preset", "unsupported preset"
     )
     if preset == "controls":
+        # Two meshes times two pressure-coupling profiles, all at level 1.
         return [
-            ("legacy", "legacy", 1),
-            ("legacy", "simplec", 1),
-            ("wall-resolved", "legacy", 1),
-            ("wall-resolved", "simple", 1),
+            (mesh, solver, 1)
+            for mesh in ["legacy", "wall-resolved"]
+            for solver in ["legacy", "simplec"]
         ]
     return [
-        ("wall-resolved", "simple", level)
+        (REFERENCE[0], REFERENCE[1], level)
         for level in ([1] if preset == "smoke" else [1, 2, 3])
     ]
+
+
+def checked(function, run, label, *args, **kwargs):
+    """An audit or comparison of one returned archive; its failure is recorded."""
+    try:
+        return function(run, *args, **kwargs)
+    except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
+        return {
+            "status": "invalid",
+            "passed": False,
+            "error": backend.diagnostic(exc, label),
+        }
 
 
 def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iterations=6000):
@@ -95,49 +111,52 @@ def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iteration
                 row.update(status="not_started", reason="coarser_level_not_accepted")
                 backend.write_json(output / "report.json", report)
                 continue
-            try:
-                backend.prepare(
-                    "backstep",
-                    level,
-                    iterations,
-                    output / (name + "-input"),
-                    data,
-                    mesh,
-                    solver,
-                )
-                execution = backend.run(
-                    output / (name + "-input"),
+            # Input, runtime and I/O errors stop the workflow (exit 1). A failed
+            # execution is a returned record; a failed audit or comparison of
+            # its archive is row evidence.
+            backend.prepare(
+                "backstep",
+                level,
+                iterations,
+                output / (name + "-input"),
+                data,
+                mesh,
+                solver,
+            )
+            execution = backend.run(
+                output / (name + "-input"),
+                output / name,
+                foam_root,
+                timeout_s=timeout_s,
+                output_mib=512,
+                stop=stop,
+            )
+            row["execution"] = execution
+            if execution["numerical"] is not None:
+                row["independent"] = checked(audit, output / name, "audit")
+                reuse = row["independent"]
+                row["comparison"] = checked(
+                    assess,
                     output / name,
-                    foam_root,
-                    timeout_s=timeout_s,
-                    output_mib=512,
-                    stop=stop,
+                    "comparison",
+                    data,
+                    independent=reuse if reuse["status"] == "evaluated" else None,
                 )
-                row["execution"] = execution
-                if execution["numerical"] is not None:
-                    row["independent"] = audit(output / name)
-                    row["comparison"] = assess(output / name, data)
-                    row["accepted"] = (
-                        execution["passed"] and row["independent"]["passed"]
-                    )
-                    row["passed"] = row["accepted"] and row["comparison"]["passed"]
-                    save(output / (name + "-comparison"), row["comparison"])
-                else:
-                    row["comparison"] = {
-                        "status": "not_assessed",
-                        "passed": False,
-                        "reason": "no final iteration field; execution "
-                        + execution["execution_status"],
-                    }
-            except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
-                row["error"] = backend.diagnostic(exc, "study." + name)
+                row["accepted"] = execution["passed"] and reuse["passed"]
+                row["passed"] = row["accepted"] and row["comparison"]["passed"]
+                save(output / (name + "-comparison"), row["comparison"])
+            else:
+                row["comparison"] = {
+                    "status": "not_assessed",
+                    "passed": False,
+                    "reason": "no final iteration field; execution "
+                    + execution["execution_status"],
+                }
             backend.write_json(output / "report.json", report)
         selected = [
             {"level": r["level"], "comparison": r["comparison"]}
             for r in report["rows"]
-            if r["accepted"]
-            and r["mesh_family"] == "wall-resolved"
-            and r["solver_profile"] == "simple"
+            if r["accepted"] and (r["mesh_family"], r["solver_profile"]) == REFERENCE
         ]
         report["mesh_sensitivity"] = mesh_sensitivity(selected)
         report["workflow_completed"] = not stop.cancelled and len(

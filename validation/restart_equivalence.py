@@ -56,15 +56,16 @@ def experiment(case, profile, first, second, foam_root, output, data, timeout_s)
             backend.require(
                 record["execution_status"] == "completed"
                 and record["numerical"] is not None,
-                f"equivalence.{name}",
-                "stage did not complete with a final field",
+                f"comparison.{name}",
+                "run did not complete with a final field",
+                "CFD-X013",
             )
         report["comparison"] = compare(
             output / "split", output / "continuous", "fixed-work"
         )
         report["passed"] = report["comparison"]["passed"]
     except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
-        report["error"] = backend.diagnostic(exc, "equivalence")
+        report["error"] = backend.diagnostic(exc, "comparison")
     finally:
         backend.write_json(output / "report.json", report)
     return report

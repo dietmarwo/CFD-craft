@@ -146,9 +146,9 @@ fields and face fluxes to verify rejection, and compare the actual wall-resolved
 continue actual cavity runs against uninterrupted controls. CI runs the
 boundary tests on each push/PR. A manual workflow dispatch installs the pinned
 runtime in two parallel jobs. `external-backend` runs the real backend tests,
-the external study preset with `--timeout-s 300` and two fixed-work
-continuation checks of the wall-resolved backstep (`simple` 250+250 and
-`simplec` 500+500 iterations). `external-resolution` runs the resolution smoke
+the external study preset with `--timeout-s 300` and a fixed-work
+continuation check of the wall-resolved backstep (`simple` profile, 250+250
+iterations). `external-resolution` runs the resolution smoke
 preset in one run (`--iterations 20000 --timeout-s 3500`) and in stages
 (`--iterations 6000 --max-stages 4 --timeout-s 3500`) on the same runner, then
 compares the two converged results. Both publish the key numbers as notices and

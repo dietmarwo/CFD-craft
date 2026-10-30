@@ -151,13 +151,12 @@ The [tutorial](../../tutorials/backstep-resolution-prompt.md) and
 `prepare-restart` copies the final U/p/phi and, for SST, k/omega/nut of a
 completed same-mesh run into a fresh local pseudo-time zero. Failed, timed-out
 or cancelled runs are ineligible. A completed but unconverged stage is eligible
-when its final fields are finite and its stored face flux is a solver state:
-each cell's net face flux, divided by U_ref times the cell's face-area scale
-dz*sqrt(dx*dy), is at most 1e-2. That integrity check does not tighten with
-refinement. The auditor's local acceptance measure (max abs(div(phi))*H/U
-<=1e-4) is recorded but not required of a source: it follows the last pressure
-solve's relative tolerance, and the cold start of every run fails it by four
-orders of magnitude. The final stage is accepted only with the unchanged gates.
+when its final fields are finite and its stored face flux passes the auditor's
+independent local gate, max abs(div(phi))*H/U <=1e-4. That gate follows the
+last pressure solve's relative tolerance and tightens like H/dx with
+refinement, so early stages of the GAMG profiles fail it (0.0048 at iteration
+500 of the reference recipe, 2.7e-9 at 6000). The final stage is accepted only
+with the unchanged nonlinear, independent and measurement gates.
 
 The sealed initial-state receipt records the parent manifest and case hashes,
 source acceptance and work, the source metadata and controls, exact fields
@@ -172,13 +171,15 @@ archives to inspect the chain; unkeyed checksums do not establish authenticity.
 Restarting resets the solver's residual history. In the laminar cavity a split
 stage reproduces the uninterrupted run to round-off. In the SST backstep the
 restarted iteration's residuals differ by about 1e-4 relative, consistent with
-turbulence-model state that the fields do not carry; the final-field difference
-after 250 further iterations is about 1e-6 of the field magnitudes.
+turbulence-model state that the fields do not carry. After a further 250
+iterations of the `simple` profile the fields agree to about 1e-6 of their
+magnitudes; a converged staged solve of the reference recipe reproduces the
+converged single run.
 
 The resolution tutorial can continue up to `--max-stages 8` (default 1) with
 unchanged per-stage limits. It stops at numerical acceptance, at a converged
-but unaccepted stage, at a stopped execution, at an ineligible source and at
-the stage limit, and records the reason; the wall-y+ and measurement gates
+but unaccepted stage, at a stopped execution, at a source that fails the flux
+gate and at the stage limit, and records the reason; the wall-y+ and measurement gates
 still decide final acceptance. Every stage is retained, and the report keeps
 the final stage's iterations apart from cumulative work.
 

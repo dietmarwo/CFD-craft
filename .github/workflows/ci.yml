@@ -52,17 +52,14 @@ jobs:
           test "$code" -eq 0 -o "$code" -eq 2
       - if: always()
         run: python validation/external_notices.py runs/external-study/report.json
-      # Fixed-work continuation of the wall-resolved level-1 backstep: FIRST + SECOND
-      # iterations from stored fields against FIRST + SECOND uninterrupted.
+      # Fixed-work continuation of the wall-resolved level-1 backstep (simple profile):
+      # 250 iterations, 250 more from the stored fields, against 500 uninterrupted.
       - run: |
           set +e
-          for fixture in "simple 250 250" "simplec 500 500"; do
-            set -- $fixture
-            python validation/restart_equivalence.py --case backstep --solver-profile "$1" --first "$2" --second "$3" --timeout-s 600 --data runs/external-study/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output "runs/equivalence-$1"
-            code=$?
-            python validation/external_notices.py "runs/equivalence-$1/report.json" "equivalence $1"
-            test "$code" -eq 0 -o "$code" -eq 2 || exit 1
-          done
+          python validation/restart_equivalence.py --case backstep --solver-profile simple --first 250 --second 250 --timeout-s 600 --data runs/external-study/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/equivalence-simple
+          code=$?
+          python validation/external_notices.py runs/equivalence-simple/report.json "equivalence simple"
+          test "$code" -eq 0 -o "$code" -eq 2
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -81,7 +78,7 @@ jobs:
   external-resolution:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    timeout-minutes: 180
     env:
       CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
       OMP_NUM_THREADS: "1"

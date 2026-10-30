@@ -151,7 +151,9 @@ def metrics(run, data):
         "profile_rmse": {k: v["rmse_u_ref"] for k, v in comparison["profiles"].items()},
         "maximum_y_plus": {
             k: v["maximum_y_plus"]
-            for k, v in independent["wall_resolution"]["patches"].items()
+            for k, v in (
+                (independent.get("wall_resolution") or {}).get("patches") or {}
+            ).items()
         },
     }
 
@@ -205,7 +207,8 @@ def compare(run, control, mode, data=None):
                 m["audit_passed"] and m["screen_passed"] is True for m in found.values()
             )
             checks["reattachment"] = (
-                abs(x["reattachment_x_over_h"] - y["reattachment_x_over_h"])
+                None not in (x["reattachment_x_over_h"], y["reattachment_x_over_h"])
+                and abs(x["reattachment_x_over_h"] - y["reattachment_x_over_h"])
                 <= bounds["reattachment_h"]
             )
             checks["cf_rmse"] = abs(x["cf_rmse"] - y["cf_rmse"]) <= bounds["cf_rmse"]
@@ -214,7 +217,9 @@ def compare(run, control, mode, data=None):
                 <= bounds["profile_rmse"]
                 for k in y["profile_rmse"]
             )
-            checks["y_plus"] = all(
+            checks["y_plus"] = set(x["maximum_y_plus"]) == set(
+                y["maximum_y_plus"]
+            ) and all(
                 abs(x["maximum_y_plus"][k] - y["maximum_y_plus"][k]) <= bounds["y_plus"]
                 for k in y["maximum_y_plus"]
             )

@@ -19,9 +19,9 @@ a final result.
 
 For long steady solves use [verified continuation](../integrations/STEADY_RESTART.md)
 and its [results](../validation/RESTART_RESULTS.md). `prepare-restart` accepts a
-completed run with finite final fields whose stored face flux is a solver state;
-unconverged completed stages are eligible, failed/timeout/cancelled ones are
-not. It preserves physics and mesh, resets local pseudo-time and records source
+completed run with finite final fields whose stored face flux passes the
+independent local gate; unconverged completed stages are eligible,
+failed/timeout/cancelled ones are not. It preserves physics and mesh, resets local pseudo-time and records source
 fields, runtime and mesh. `--max-stages` defaults to 1. These are steady field
 initializations, not transient-history restarts or cross-mesh mappings.
 

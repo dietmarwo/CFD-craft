@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -80,10 +81,10 @@ class Receipt(unittest.TestCase):
         }
         backend.write_json(self.source / "summary.json", self.report)
         reseal(self.source)
-        self.balance = {
+        self.local = {
             "passed": True,
-            "maximum_face_scaled_balance": 0.0,
-            "target_max": restart.BALANCE_TARGET,
+            "maximum_abs_divergence_h_over_u": 0.0,
+            "target_max": 1e-4,
         }
 
     def tearDown(self):
@@ -92,7 +93,7 @@ class Receipt(unittest.TestCase):
     def prepare(self, output=None, iterations=400):
         with (
             patch.object(backend, "verify", return_value=self.report),
-            patch.object(restart, "flux_balance", return_value=self.balance),
+            patch.object(restart, "local_flux", return_value=self.local),
         ):
             return restart.prepare(
                 self.source, iterations, output or self.root / "input"
@@ -113,8 +114,8 @@ class Receipt(unittest.TestCase):
         self.assertEqual(cold["max_iterations"], 400)
 
     def test_limits_that_would_write_every_few_iterations_are_rejected(self):
-        # 251 and 19997 are prime; 1234 = 2 * 617.
-        for steps in [251, 1234, 19997]:
+        # 251 and 19997 are prime; 1234 = 2 * 617; 11797 = 47 * 251.
+        for steps in [251, 1234, 11797, 19997]:
             with self.assertRaisesRegex(ValueError, "CFD-X001 iterations"):
                 backend.snapshot_interval(steps)
             with self.assertRaisesRegex(ValueError, "CFD-X001 iterations"):
@@ -316,7 +317,7 @@ class Receipt(unittest.TestCase):
 
         self.resealed_source(generator)
         with self.assertRaisesRegex(
-            ValueError, "CFD-X012 initial_state.source.generator"
+            ValueError, r"CFD-X012 initial_state\.source\.generator:"
         ):
             self.prepare()
         path.write_text(original)
@@ -332,7 +333,7 @@ class Receipt(unittest.TestCase):
 
         self.resealed_source(precision)
         with self.assertRaisesRegex(
-            ValueError, "CFD-X012 initial_state.source.controls"
+            ValueError, r"CFD-X012 initial_state\.source\.controls:"
         ):
             self.prepare()
         self.assertFalse((self.root / "input").exists())
@@ -353,7 +354,7 @@ class Receipt(unittest.TestCase):
 
             with (
                 patch.object(backend, "verify", side_effect=verified),
-                patch.object(restart, "flux_balance", return_value=self.balance),
+                patch.object(restart, "local_flux", return_value=self.local),
             ):
                 with self.assertRaisesRegex(
                     ValueError, "CFD-X012 initial_state." + field
@@ -414,7 +415,7 @@ class Receipt(unittest.TestCase):
                 {"program": "foamRun", "returncode": 0},
             ],
         }
-        with patch.object(restart, "flux_balance", return_value=self.balance) as flux:
+        with patch.object(restart, "local_flux", return_value=self.local) as flux:
             restart.verify_receipt(case, definition, solved)
             self.assertEqual(flux.call_count, 1)
             for change, field in [
@@ -473,7 +474,7 @@ class Receipt(unittest.TestCase):
         reseal(run)
         backend.verify(run)
 
-    def test_a_flipped_face_flux_is_not_a_solver_state(self):
+    def test_a_source_flux_must_pass_the_independent_local_gate(self):
         two_cells(self.root / "mesh")
         case = self.root / "mesh"
         (case / "constant/polyMesh/boundary").write_text(
@@ -497,18 +498,118 @@ class Receipt(unittest.TestCase):
             )
 
         metadata = {"cells": 2, "height_m": 1, "reference_speed_m_s": 1}
-        balanced = restart.flux_balance(case, "1", metadata, "cavity", phi(1.0))
+        balanced = restart.local_flux(case, "1", metadata, "cavity", phi(1.0))
         self.assertTrue(balanced["passed"])
-        self.assertLess(balanced["maximum_face_scaled_balance"], 1e-14)
-        self.assertTrue(balanced["local_continuity"]["passed"])
-        # A small solver-like imbalance passes; a flipped internal face does not.
+        self.assertLess(balanced["maximum_abs_divergence_h_over_u"], 1e-14)
+        self.assertEqual(balanced["maximum_face_scaled_balance"], 0)
         self.assertTrue(
-            restart.flux_balance(case, "1", metadata, "cavity", phi(1.001))["passed"]
+            restart.local_flux(case, "1", metadata, "cavity", phi(1.00005))["passed"]
+        )
+        for internal in [1.001, -1.0]:
+            with self.assertRaisesRegex(
+                restart.IneligibleSource, "CFD-X012 initial_state.phi.local_continuity"
+            ):
+                restart.local_flux(case, "1", metadata, "cavity", phi(internal))
+
+    def test_the_checked_phi_bytes_are_the_ones_checked_for_flux(self):
+        with (
+            patch.object(backend, "verify", return_value=self.report),
+            patch.object(restart, "local_flux", return_value=self.local) as flux,
+        ):
+            restart.prepare(self.source, 400, self.root / "input")
+        self.assertEqual(
+            flux.call_args.args[4], (self.source / "case/2/phi").read_text()
+        )
+
+    def test_a_stage_archive_failing_the_flux_gate_is_invalid_not_ineligible(self):
+        definition = self.prepare()
+        report = {
+            "execution_status": "completed",
+            "runtime": self.report["runtime"],
+            "commands": [
+                {"program": "checkMesh", "returncode": 0},
+                {"program": "foamRun", "returncode": 0},
+            ],
+        }
+        (self.root / "check-mesh.log").write_text("Mesh OK.\n")
+        failure = restart.IneligibleSource(
+            "CFD-X012 initial_state.phi.local_continuity: x"
+        )
+        with (
+            patch.object(restart, "check_mesh", side_effect=failure),
+            self.assertRaisesRegex(ValueError, "phi.local_continuity") as caught,
+        ):
+            restart.verify_receipt(self.root / "input", definition, report)
+        self.assertNotIsInstance(caught.exception, restart.IneligibleSource)
+
+    def test_a_mismatch_in_an_unsolved_archive_must_be_its_recorded_failure(self):
+        definition = self.prepare()
+        report = {
+            "execution_status": "failed",
+            "error": "CFD-X012 initial_state.runtime: runtime differs from the source stage",
+            "runtime": {"other": 1},
+            "commands": [],
+        }
+        restart.verify_receipt(self.root / "input", definition, report)
+        for change in [{"execution_status": "completed"}, {"error": "CFD-X003 other"}]:
+            with self.assertRaisesRegex(ValueError, "CFD-X012 initial_state.archive"):
+                restart.verify_receipt(
+                    self.root / "input", definition, {**report, **change}
+                )
+
+    def test_stage_controls_need_a_final_writing_cadence_and_generated_source_controls(
+        self,
+    ):
+        definition = self.prepare()
+        path = self.root / "input/system/controlDict"
+        text = path.read_text()
+        for interval in [25, 400, 300]:
+            path.write_text(
+                text.replace("writeInterval 200", f"writeInterval {interval}")
+            )
+            definition["inputs"]["system/controlDict"] = restart.file_identity(path)
+            with self.assertRaisesRegex(ValueError, "CFD-X012 initial_state.controls"):
+                restart.validate(self.root / "input", definition)
+        changed = text.replace("writePrecision 15", "writePrecision 6")
+        path.write_text(changed)
+        definition["inputs"]["system/controlDict"] = restart.file_identity(path)
+        state = definition["initial_state"]
+        state["source_controls"] = state["source_controls"].replace(
+            "writePrecision 15", "writePrecision 6"
         )
         with self.assertRaisesRegex(
-            restart.IneligibleSource, "CFD-X012 initial_state.phi.cell_balance"
+            ValueError, "CFD-X012 initial_state.source_controls"
         ):
-            restart.flux_balance(case, "1", metadata, "cavity", phi(-1.0))
+            restart.validate(self.root / "input", definition)
+
+    def test_an_unwritable_stage_and_binary_source_name_their_side(self):
+        original = shutil.copyfile
+
+        def full(source, destination):
+            if Path(destination).name == "U":
+                raise OSError(28, "No space left on device", str(destination))
+            return original(source, destination)
+
+        with patch.object(restart.shutil, "copyfile", side_effect=full):
+            with self.assertRaisesRegex(
+                ValueError, "CFD-X012 initial_state.inputs: cannot write U"
+            ):
+                self.prepare()
+        self.assertFalse((self.root / "input").exists())
+        controls = self.source / "case/system/controlDict"
+        path = self.source / "case/case.json"
+        definition = json.loads(path.read_text())
+
+        def binary():
+            controls.write_bytes(b"\xff\xfe")
+            definition["inputs"]["system/controlDict"] = restart.file_identity(controls)
+            path.write_text(json.dumps(definition))
+
+        self.resealed_source(binary)
+        with self.assertRaisesRegex(
+            ValueError, "CFD-X012 initial_state.source.controlDict: not a text file"
+        ):
+            self.prepare()
 
     def test_copy_races_leave_no_runnable_case(self):
         original = shutil.copyfile
@@ -715,7 +816,7 @@ class Stages(unittest.TestCase):
             [self.execution()],
             preset="study",
             restart_error=restart.IneligibleSource(
-                "CFD-X012 initial_state.phi.cell_balance: synthetic gate failure"
+                "CFD-X012 initial_state.phi.local_continuity: synthetic gate failure"
             ),
         )
         self.assertTrue(report["workflow_completed"])
@@ -724,7 +825,7 @@ class Stages(unittest.TestCase):
         self.assertEqual(run.call_count, 1)
         self.assertTrue(
             report["rows"][0]["continuation_stop_reason"].startswith(
-                "source_ineligible: CFD-X012 initial_state.phi.cell_balance"
+                "source_ineligible: CFD-X012 initial_state.phi.local_continuity"
             )
         )
         self.assertTrue(
@@ -842,6 +943,134 @@ class Comparison(unittest.TestCase):
             self.compare()
 
 
+class BackstepComparison(unittest.TestCase):
+    """compare_restart's backstep checks with mocked fields and metrics."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="cfd-restart-backstep-")
+        self.root = Path(self.temp.name)
+        self.metrics = {
+            "audit_passed": True,
+            "screen_passed": True,
+            "reattachment_x_over_h": 6.7064,
+            "cf_rmse": 4.17e-4,
+            "profile_rmse": {"1": 0.0449, "4": 0.0646},
+            "maximum_y_plus": {"stepWall": 0.963, "lowerWall": 0.484},
+        }
+        self.fields = {
+            name: {"maximum_absolute": 0.0, "maximum_over_control_maximum": 0.0}
+            for name in ["U", "p", "k", "omega", "nut"]
+        }
+        self.records = {
+            "run": {
+                "case": "backstep",
+                "passed": True,
+                "numerical": {"iterations": 412},
+                "initial_state": {"source_completed_iterations": 18000},
+            },
+            "control": {
+                "case": "backstep",
+                "passed": True,
+                "numerical": {"iterations": 18412},
+            },
+        }
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def compare(self, run_metrics=None, data="data", fields=None):
+        found = {"run": run_metrics or self.metrics, "control": self.metrics}
+        for name in ["run", "control"]:
+            (self.root / name).mkdir(exist_ok=True)
+            (self.root / name / "manifest.json").write_text("{}")
+        with (
+            patch.object(
+                backend, "verify", side_effect=lambda r: self.records[Path(r).name]
+            ),
+            patch.object(
+                compare_restart, "same_recipe", return_value=("backstep", {"cells": 1})
+            ),
+            patch.object(
+                compare_restart, "field_differences", return_value=fields or self.fields
+            ),
+            patch.object(
+                compare_restart, "metrics", side_effect=lambda r, d: found[Path(r).name]
+            ),
+        ):
+            return compare_restart.compare(
+                self.root / "run", self.root / "control", "converged", data
+            )
+
+    def test_equal_metrics_pass_and_each_metric_is_checked(self):
+        self.assertTrue(self.compare()["passed"])
+        for change, check in [
+            ({"reattachment_x_over_h": 6.72}, "reattachment"),
+            ({"reattachment_x_over_h": None}, "reattachment"),
+            ({"cf_rmse": 4.3e-4}, "cf_rmse"),
+            ({"profile_rmse": {"1": 0.0451, "4": 0.0646}}, "profile_rmse"),
+            ({"maximum_y_plus": {"stepWall": 0.98, "lowerWall": 0.484}}, "y_plus"),
+            ({"maximum_y_plus": {"stepWall": 0.963}}, "y_plus"),
+            ({"screen_passed": None}, "audit_and_screen"),
+            ({"audit_passed": False}, "audit_and_screen"),
+        ]:
+            result = self.compare({**self.metrics, **change})
+            self.assertFalse(result["checks"][check], check)
+            self.assertFalse(result["passed"])
+
+    def test_turbulence_fields_and_measurements_are_required(self):
+        fields = {
+            **self.fields,
+            "nut": {"maximum_absolute": 1, "maximum_over_control_maximum": 2e-3},
+        }
+        self.assertFalse(self.compare(fields=fields)["checks"]["turbulence"])
+        with self.assertRaisesRegex(ValueError, "CFD-X013 comparison.data"):
+            self.compare(data=None)
+        with self.assertRaisesRegex(ValueError, "CFD-X013 comparison.mode"):
+            compare_restart.compare(self.root, self.root, "nearby")
+
+    def test_the_command_lines_exit_one_for_invalid_input(self):
+        for script, args in [
+            (
+                "compare_restart.py",
+                [
+                    "--run",
+                    self.root / "missing",
+                    "--control",
+                    self.root / "missing",
+                    "--mode",
+                    "converged",
+                    "--output",
+                    self.root / "out.json",
+                ],
+            ),
+            (
+                "restart_equivalence.py",
+                [
+                    "--case",
+                    "cavity",
+                    "--first",
+                    "50",
+                    "--second",
+                    "50",
+                    "--foam-root",
+                    self.root,
+                    "--output",
+                    self.root,
+                ],
+            ),
+        ]:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "validation" / script), *map(str, args)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(
+                result.returncode, 1, (script, result.stdout, result.stderr)
+            )
+            self.assertIn("CFD-", result.stdout)
+
+
 class Equivalence(unittest.TestCase):
     """The fixed-work driver's sequence and verdicts, with mocked runs."""
 
@@ -852,7 +1081,7 @@ class Equivalence(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def experiment(self, status="completed", passed=True):
+    def experiment(self, status="completed", passed=True, second=250):
         record = {
             "execution_status": status,
             "numerical": {"iterations": 250} if status == "completed" else None,
@@ -870,7 +1099,7 @@ class Equivalence(unittest.TestCase):
                 "backstep",
                 "simple",
                 250,
-                250,
+                second,
                 self.root,
                 self.root / "x",
                 self.root,
@@ -879,14 +1108,14 @@ class Equivalence(unittest.TestCase):
         return report, prepare, run, continued, compare
 
     def test_source_split_and_control_are_compared_at_equal_work(self):
-        report, prepare, run, continued, compare = self.experiment()
+        report, prepare, run, continued, compare = self.experiment(second=300)
         self.assertTrue(report["passed"])
-        self.assertEqual([c.args[2] for c in prepare.call_args_list], [250, 500])
+        self.assertEqual([c.args[2] for c in prepare.call_args_list], [250, 550])
         self.assertEqual(
             [c.args[1].name for c in run.call_args_list],
             ["source", "split", "continuous"],
         )
-        self.assertEqual(continued.call_args.args[1], 250)
+        self.assertEqual(continued.call_args.args[1], 300)
         self.assertEqual(compare.call_args.args[2], "fixed-work")
         self.assertEqual(
             json.loads((self.root / "x/report.json").read_text())["solver_profile"],
@@ -901,7 +1130,7 @@ class Equivalence(unittest.TestCase):
     def test_an_incomplete_stage_is_an_error_without_a_comparison(self):
         report = self.experiment(status="timeout")[0]
         self.assertFalse(report["passed"])
-        self.assertIn("CFD-X001 equivalence.source", report["error"])
+        self.assertIn("CFD-X013 comparison.source", report["error"])
         self.assertNotIn("comparison", report)
 
 
@@ -1042,7 +1271,7 @@ class ActualRestart(unittest.TestCase):
         reseal(source)
         backend.verify(source)
         with self.assertRaisesRegex(
-            restart.IneligibleSource, "CFD-X012 initial_state.phi.cell_balance"
+            restart.IneligibleSource, "CFD-X012 initial_state.phi.local_continuity"
         ):
             restart.prepare(source, 200, self.directory / "input")
         self.assertFalse((self.directory / "input").exists())

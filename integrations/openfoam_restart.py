@@ -13,7 +13,7 @@ from pathlib import Path
 import openfoam_backend as backend
 from openfoam_cases import control_dict
 
-SCHEMA = "cfd-craft.openfoam-initial-state/0.1"
+SCHEMA = "cfd-craft.openfoam-initial-state/0.2"
 MESH_FILES = ("points", "faces", "owner", "neighbour", "boundary")
 FIELDS = {
     "cavity": ("U", "p", "phi"),
@@ -27,11 +27,6 @@ FIXED = {
     "system/fvSolution",
     "system/sampleProfiles",
 }
-# Integrity limit for a stored phi: a cell's net face flux over U_ref times its
-# face-area scale. Solver states, converged or not, lie orders of magnitude
-# below it (about 5e-5 for an early SIMPLEC iterate, 1e-14 for a PCG profile);
-# an edited, flipped or permuted face flux gives order one.
-BALANCE_TARGET = 1e-2
 
 
 class IneligibleSource(ValueError):
@@ -59,19 +54,16 @@ def fixed_names(kind):
     return sorted(FIXED | ({"system/wallStress"} if kind == "backstep" else set()))
 
 
-def flux_balance(case, time_name, metadata, kind, text=None):
-    """The stored phi must be a solver state: independent face-flux integrity.
+def local_flux(case, time_name, metadata, kind, text=None):
+    """The stored phi must pass the auditor's independent local gate (1e-4).
 
-    The auditor's acceptance measure, max abs(div(phi))*H/U, tracks the last
-    pressure solve's tolerance and tightens like H/dx with refinement; it is
-    reported here and still decides the final stage. Eligibility needs only the
-    scale-free balance below.
+    The result also reports the auditor's scale-free measures; they decide
+    nothing here.
     """
     from audit_openfoam_mesh import (
         cartesian_mesh,
         patches,
         face_fluxes,
-        face_scaled_balance,
         local_continuity,
     )
 
@@ -80,21 +72,14 @@ def flux_balance(case, time_name, metadata, kind, text=None):
     if text is None:
         text = (Path(case) / time_name / "phi").read_text()
     flux = face_fluxes(mesh, patches(mesh, kind), text)
-    speed = metadata.get("reference_speed_m_s", 1)
-    balance = face_scaled_balance(mesh, flux, speed)
-    result = {
-        "maximum_face_scaled_balance": balance,
-        "target_max": BALANCE_TARGET,
-        "passed": balance <= BALANCE_TARGET,
-        "local_continuity": local_continuity(
-            mesh, flux, metadata.get("height_m", 1), speed
-        ),
-    }
+    result = local_continuity(
+        mesh, flux, metadata.get("height_m", 1), metadata.get("reference_speed_m_s", 1)
+    )
     require(
         result["passed"],
-        "phi.cell_balance",
-        f"stored face flux is not a solver state (cell balance {balance:.3g} > "
-        f"{BALANCE_TARGET:g})",
+        "phi.local_continuity",
+        "stored initial flux fails the independent local gate "
+        f"({result['maximum_abs_divergence_h_over_u']:.3g} > {result['target_max']:g})",
         IneligibleSource,
     )
     return result
@@ -225,12 +210,18 @@ def validate(case, definition):
         interval = re.findall(r"\bwriteInterval\s+(\d+);", controls)
         require(
             len(interval) == 1
-            and 0 < int(interval[0]) <= 250
+            and 50 <= int(interval[0]) <= 250
             and iterations % int(interval[0]) == 0
             and controls
             == stage_controls(state["source_controls"], iterations, int(interval[0])),
             "controls",
-            "stage controls are not the source's with a new endTime and writeInterval",
+            "stage controls are not the source's with a new endTime and a final-writing "
+            "writeInterval between 50 and 250",
+        )
+        require(
+            generated_controls(state["source_controls"]),
+            "source_controls",
+            "the source did not use the generated steady controls",
         )
         backend.final_field_checks(case, "0", kind)
     except KeyError as exc:
@@ -238,6 +229,26 @@ def validate(case, definition):
     except (TypeError, AttributeError, IndexError) as exc:
         raise ValueError(
             f"CFD-X012 initial_state: malformed receipt ({type(exc).__name__})"
+        ) from exc
+
+
+def generated_controls(text):
+    """True for this generator's steady controls with some endTime and cadence."""
+    end = re.findall(r"\bendTime\s+(\d+);", text)
+    interval = re.findall(r"\bwriteInterval\s+(\d+);", text)
+    return (
+        len(end) == 1
+        and len(interval) == 1
+        and text == control_dict(int(end[0]), int(interval[0]))
+    )
+
+
+def text(data, name):
+    try:
+        return data.decode()
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"CFD-X012 initial_state.source.{name}: not a text file"
         ) from exc
 
 
@@ -265,11 +276,22 @@ def check_mesh(case, state, metadata, kind):
             "mesh." + name,
             "rebuilt mesh differs from the source mesh",
         )
-    return flux_balance(case, "0", metadata, kind)
+    return local_flux(case, "0", metadata, kind)
 
 
 def verify_receipt(case, definition, report):
-    """Recheck runtime and mesh; a pre-solve rejection is a consistent failure."""
+    """Recheck runtime and mesh; a pre-solve rejection is a consistent failure.
+
+    A stage archive that fails these checks is an invalid archive, never an
+    ineligible source, even when the failing check is the local flux gate.
+    """
+    try:
+        archive_receipt(case, definition, report)
+    except IneligibleSource as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def archive_receipt(case, definition, report):
     validate(case, definition)
     state = definition["initial_state"]
     if any(c["program"] == "foamRun" for c in report["commands"]):
@@ -370,16 +392,18 @@ def prepared_stage(source, iterations, interval, output):
     )
     kind = report["case"]
     time_name = report["numerical"]["final_time_directory"]
-    source_controls = read_checked(
-        case / "system/controlDict",
-        definition["inputs"]["system/controlDict"],
-        "source.controls",
-    ).decode()
-    source_interval = re.findall(r"\bwriteInterval\s+(\d+);", source_controls)
+    source_controls = text(
+        read_checked(
+            case / "system/controlDict",
+            definition["inputs"]["system/controlDict"],
+            "source.controls",
+        ),
+        "controlDict",
+    )
     require(
-        len(source_interval) == 1
-        and source_controls
-        == control_dict(definition["max_iterations"], int(source_interval[0])),
+        generated_controls(source_controls)
+        and re.findall(r"\bendTime\s+(\d+);", source_controls)
+        == [str(definition["max_iterations"])],
         "source.controls",
         "source did not use the generated steady controls",
     )
@@ -388,7 +412,7 @@ def prepared_stage(source, iterations, interval, output):
     phi = read_checked(
         case / time_name / "phi", entries[f"case/{time_name}/phi"], "source.phi"
     )
-    balance = flux_balance(case, time_name, definition["metadata"], kind, phi.decode())
+    local = local_flux(case, time_name, definition["metadata"], kind, text(phi, "phi"))
     fields = {name: entries[f"case/{time_name}/{name}"] for name in FIELDS[kind]}
     mesh = {name: entries["case/constant/polyMesh/" + name] for name in MESH_FILES}
     fixed = {name: definition["inputs"][name] for name in fixed_names(kind)}
@@ -408,19 +432,18 @@ def prepared_stage(source, iterations, interval, output):
         "source_mesh": mesh,
         "fixed_inputs": fixed,
         "source_controls": source_controls,
-        "source_flux_balance": balance,
+        "source_local_continuity": local,
         "meaning": "local steady pseudo-time and solver history reset; cumulative iterations count work, not physical time or bitwise continuation",
     }
     backend.claim_directory(output)
     try:
-        for name in fixed:
-            destination = output / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(case / name, destination)
-        (output / "0").mkdir()
-        for name in fields:
-            shutil.copyfile(case / time_name / name, output / "0" / name)
-        (output / "system/controlDict").write_text(controls)
+        try:
+            copy_inputs(case, time_name, fixed, fields, controls, output)
+        except OSError as exc:
+            name = Path(exc.filename).name if exc.filename else "input"
+            raise ValueError(
+                f"CFD-X012 initial_state.inputs: cannot write {name}"
+            ) from exc
         expected = dict(
             sorted(
                 {
@@ -447,3 +470,14 @@ def prepared_stage(source, iterations, interval, output):
         # The directory was created by this call; leave no partial stage behind.
         shutil.rmtree(output, ignore_errors=True)
         raise
+
+
+def copy_inputs(case, time_name, fixed, fields, controls, output):
+    for name in fixed:
+        destination = output / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(case / name, destination)
+    (output / "0").mkdir()
+    for name in fields:
+        shutil.copyfile(case / time_name / name, output / "0" / name)
+    (output / "system/controlDict").write_text(controls)

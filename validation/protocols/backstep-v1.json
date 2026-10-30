@@ -1,0 +1,30 @@
+{
+  "schema_version": "cfd-craft.backstep-protocol/0.1",
+  "status": "frozen_development_screen",
+  "frozen_date": "2026-10-29",
+  "reference": "Driver and Seegmiller (1985), doi:10.2514/3.8890; TMR 2DBFS",
+  "raw_sha256": {
+    "cp.expnew.dat": "2b3ec9f8d8025b958d6ddcf6767daaf3c93083d45ef350a8cf9c4b46f93a882a",
+    "cf.exp.dat": "cd9b6434b7956bc58e859de6af654cd7f891e25303babf1dd8633d6c58f74276",
+    "profiles.exp.dat": "23e8b44db52bfc36c66af6b743a4080c34f0165eb213a3db29c0914e12cf598d"
+  },
+  "input_station_x_over_h": -4,
+  "evaluation_stations_x_over_h": [1, 4, 6, 10],
+  "quantity": "mean streamwise velocity U/Uref and signed lower-wall Cf",
+  "pairing": "exact experimental station and y/H; no extrapolation",
+  "profile_rmse_max_u_ref": 0.10,
+  "lower_wall_cf_rmse_max": 0.001,
+  "reattachment_x_over_h": 6.26,
+  "reattachment_reported_uncertainty_h": 0.10,
+  "reattachment_absolute_error_max_h": 0.75,
+  "reattachment_rule": "last negative-to-positive Cf crossing in 1<x/H<12; multiple crossings are reported",
+  "cf_rule": "Cf=-2*wallShearStress_x/Uref^2; OpenFOAM kinematic traction into fluid, downstream lower wall",
+  "interpretation": "project development screening thresholds, not a published certification standard",
+  "qualification_blockers": [
+    "the profile file supplies no uncertainty for mean U",
+    "ww and inlet dissipation are not measured: ww=vv and mixing length 0.07*1.5H are assumptions",
+    "near-wall inlet endpoints and zero mean transverse inflow are assumptions",
+    "a mesh series and an inlet-turbulence sensitivity study must be assessed separately",
+    "no scalar concentration measurements and no native street-canyon validation"
+  ]
+}

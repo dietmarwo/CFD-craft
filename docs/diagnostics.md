@@ -80,3 +80,21 @@ Codes from a run, a restart or `report`, reported in `summary.json` `error` or o
 | CFD-E064 | `report` rejects the archive; the message names the failed check |
 | CFD-E065 | The restart checkpoint cannot be read or parsed, or is larger than half of `run.memory_limit_mib` |
 | CFD-E066 | The restart checkpoint lies beyond `run.max_steps` or `run.end_time_s` of the case |
+
+## External backend and reference data
+
+These Python diagnostics carry the code and offending field in the error text.
+They belong to the separate external artifact schema. E062/E063 are also used
+for occupied/unavailable external output paths.
+
+| Code | Meaning |
+|---|---|
+| CFD-X001 | Invalid external case/input identity or execution-limit field |
+| CFD-X002 | Missing/unsupported runtime, version, package identity or installer dependency |
+| CFD-X003 | A child command exited unsuccessfully; the actual return code and log are retained |
+| CFD-X004 | External execution wall deadline reached |
+| CFD-X005 | External output/per-file budget reached |
+| CFD-X006 | Invalid mesh, returned field, sample, numerical record or archive checksum |
+| CFD-X007 | A completed external solve did not reach its convergence/continuity gate |
+| CFD-X008 | External execution cancelled; process group stopped |
+| CFD-D001 | Reference/protocol hash, measurement identity, pairing or metric input invalid |

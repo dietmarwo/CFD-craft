@@ -1,6 +1,6 @@
 # CFD-craft
 
-Rust CPU research solver for incompressible flow and conservative passive-gas dispersion. Cases are strict JSON data; every run reports numerical checks, stopping reason, model scope and reproducible input/build identity.
+CFD experiment and validation workbench, with a Rust CPU research solver for incompressible flow and conservative passive-gas dispersion and a bounded OpenFOAM Foundation 13 backend. Cases are data; runs report numerical checks, stopping reason, model scope and reproducible input/build identity.
 
 Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These are recorded release gates, rather than a claim of general urban-model validation. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
 
@@ -62,6 +62,19 @@ python validation/scipy_reference.py --output runs/scipy-reference
 The independent Python checker tests archived mass, emission-rate/time accounting, positivity, current face-flux continuity and open-boundary scalar rates. It also recomputes every receptor value from the concentration field, the geometry mask from the case boxes, and the finiteness and signs of the stored fields. It does not independently reconstruct the full time history or establish turbulence-model validity.
 
 The study preset adds a larger transport grid series or a canyon resolution series. Study reports include failed rows. A failed refinement run does not become an accepted grid-convergence result.
+
+## Established-solver and experimental comparisons
+
+The [external backend](integrations/OPENFOAM.md) runs generated Foundation-13
+cases with resource limits and input/runtime hashes. Its cavity tutorial
+compares both solvers with the Ghia numerical reference. A separate backstep
+tutorial compares actual predictions with public Driver--Seegmiller measurements
+under a frozen protocol. Execution, numerical convergence, measurement screening
+and physical qualification are separate results. See the
+[model card](docs/model-cards/openfoam-backend.md),
+[iteration plan](docs/iterations/02-external-validation-plan.md) and
+[recorded results](validation/EXTERNAL_RESULTS.md). These comparisons do not
+qualify the native street-canyon model.
 
 ## Ecosystem
 

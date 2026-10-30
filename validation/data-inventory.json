@@ -43,6 +43,19 @@
       "redistribution": "not established; no raw data bundled"
     },
     {
+      "id": "driver-seegmiller-tmr-2dbfs",
+      "status": "verified_public_raw_data",
+      "url": "https://tmbwg.github.io/turbmodels/backstep_val.html",
+      "reference": "Driver and Seegmiller (1985), doi:10.2514/3.8890",
+      "download": "validation/backstep_data.py; exact raw SHA-256 values are frozen in code and the protocol",
+      "quantities": ["mean velocity profiles", "signed lower-wall Cf and its reported error", "Cp available but not scored", "reattachment 6.26 +/-0.10 H"],
+      "input_data": "x/H=-4 upstream profile",
+      "evaluation_data": "downstream x/H=1,4,6,10 profiles and lower-wall Cf",
+      "redistribution": "raw files are not bundled; fetch explicitly from the owner's public endpoints",
+      "limitations": ["no mean-U uncertainty interval in the profile file", "unmeasured inlet ww and dissipation require assumptions", "velocity evidence does not validate passive-gas dispersion"],
+      "comparison_status": "preliminary external-backend screen; see validation/EXTERNAL_RESULTS.md"
+    },
+    {
       "id": "external-solver-canyon",
       "status": "not_started",
       "purpose": "A pinned OpenFOAM run of the same finite canyon, sources, receptors and observables",
@@ -50,6 +63,7 @@
     }
   ],
   "experimental_release_gate": "blocked_data",
+  "experimental_release_gate_scope": "native finite-canyon passive-gas validation; the separate public backstep velocity benchmark does not close this gate",
   "automatic_contact": false,
   "best_practice_guideline": {
     "id": "cost-732-bpg",

@@ -2,6 +2,11 @@
 
 The first release has three executable workflows. Every run uses canonical inputs and preserves its evidence.
 
+Iteration 02 adds [established-solver and experimental comparisons](../integrations/OPENFOAM.md)
+through `external_cfd.py`, with an [agent prompt](external-cfd-prompt.md).
+The cavity is a numerical cross-check. The backstep uses real measurements but
+keeps numerical failure and incomplete physical qualification explicit.
+
 | Workflow | Command | Learning outcome |
 |---|---|---|
 | Source inference | python tutorials/source_inference.py --output runs/inference | Unit-source responses, nonnegative rates, held-out sensors, rank deficiency and model mismatch. |

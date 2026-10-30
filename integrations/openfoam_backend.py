@@ -73,6 +73,11 @@ def inventory(directory, symlinks=None):
     return entries
 
 
+def snapshot_interval(iterations):
+    """Largest cadence <=250 that writes the requested final iteration."""
+    return max(n for n in range(1, min(iterations, 250) + 1) if iterations % n == 0)
+
+
 def prepare(
     kind,
     level,
@@ -91,6 +96,11 @@ def prepare(
     dataset = load(data) if kind == "backstep" else None
     files, metadata = build(
         kind, level, iterations, dataset, mesh_family, solver_profile
+    )
+    files["system/controlDict"] = re.sub(
+        r"\bwriteInterval\s+\d+;",
+        f"writeInterval {snapshot_interval(iterations)};",
+        files["system/controlDict"],
     )
     output = Path(output)
     claim_directory(output)
@@ -134,6 +144,10 @@ def check_prepared(directory):
         "case.inputs",
         "changed, missing or additional files",
     )
+    if "initial_state" in record:
+        from openfoam_restart import validate
+
+        validate(directory, record)
     return record
 
 
@@ -738,6 +752,11 @@ def run(
             ]
         },
     }
+    if "initial_state" in record:
+        report["initial_state"] = record["initial_state"]
+        report["implementation_sha256"]["openfoam_restart.py"] = sha256(
+            ROOT / "integrations/openfoam_restart.py"
+        )
     try:
         # The copy is what the solver consumes, so it is checked, not the source.
         shutil.copytree(prepared, output / "case", symlinks=True)
@@ -751,6 +770,10 @@ def run(
         )
         binaries, env, identity = runtime(foam_root)
         report["runtime"] = identity
+        if "initial_state" in record:
+            from openfoam_restart import check_runtime
+
+            check_runtime(record["initial_state"], identity)
         deadline = start + timeout_s
 
         def command(program, label, *extra):
@@ -779,6 +802,15 @@ def run(
             "mesh quality failed",
             "CFD-X006",
         )
+        if "initial_state" in record:
+            from openfoam_restart import check_mesh
+
+            check_mesh(
+                output / "case",
+                record["initial_state"],
+                record["metadata"],
+                record["kind"],
+            )
         command("foamRun", "solve")
         report["numerical"] = numerical_assessment(
             output / "case", (output / "solve.log").read_text(), record["kind"]
@@ -984,6 +1016,16 @@ def verified(directory):
         )
         definition = json.loads((case / "case.json").read_text())
         require(
+            definition.get("initial_state") == report.get("initial_state"),
+            "archive.initial_state",
+            "summary differs from consumed initial state",
+            "CFD-X006",
+        )
+        if "initial_state" in definition:
+            from openfoam_restart import verify_receipt
+
+            verify_receipt(case, definition, report)
+        require(
             definition["kind"] == report["case"]
             and definition["metadata"] == report["case_metadata"],
             "archive.case_metadata",
@@ -1066,6 +1108,10 @@ def main():
         "--solver-profile", choices=["legacy", "simplec", "simple"], default="legacy"
     )
     p.add_argument("--output", type=Path, required=True)
+    p = sub.add_parser("prepare-restart")
+    p.add_argument("--source", type=Path, required=True)
+    p.add_argument("--iterations", type=int, default=6000)
+    p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("run")
     p.add_argument("--case", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
@@ -1092,6 +1138,10 @@ def main():
                 args.mesh_family,
                 args.solver_profile,
             )
+        elif args.command == "prepare-restart":
+            from openfoam_restart import prepare as prepare_restart
+
+            result = prepare_restart(args.source, args.iterations, args.output)
         elif args.command == "run":
             result = run(
                 args.case,

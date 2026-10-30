@@ -57,6 +57,8 @@ python validation/test_openfoam.py -v
 python -O validation/test_openfoam.py -v
 python validation/test_resolution.py -v
 python -O validation/test_resolution.py -v
+python validation/test_restart.py -v
+python -O validation/test_restart.py -v
 python validation/run_suite.py --preset smoke --output runs/verification
 python validation/flow_accuracy.py --output runs/flow-accuracy
 python validation/cavity.py --output runs/cavity
@@ -87,6 +89,12 @@ its coarse mesh the reference recipe converges, passes the audit and is screened
 against the measurements; no mesh pair or physical qualification is claimed.
 See the [plan](docs/iterations/03-wall-resolution-plan.md) and the
 [resolution results](validation/RESOLUTION_RESULTS.md).
+
+The [continuation workflow](integrations/STEADY_RESTART.md) starts a fresh
+bounded stage from the verified final fields and face flux of a completed
+same-mesh run. Initial-state provenance, runtime and rebuilt mesh are checked;
+staged work counts and final convergence remain distinct. This supports long
+cloud solves without changing the numerical gates or requiring a workstation.
 
 ## Ecosystem
 

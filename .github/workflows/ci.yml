@@ -16,6 +16,8 @@ jobs:
       - run: python -O validation/test_openfoam.py -v
       - run: python validation/test_resolution.py -v
       - run: python -O validation/test_resolution.py -v
+      - run: python validation/test_restart.py -v
+      - run: python -O validation/test_restart.py -v
   external-backend:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -37,6 +39,8 @@ jobs:
       - run: python -O validation/test_openfoam.py -v
       - run: python validation/test_resolution.py -v
       - run: python -O validation/test_resolution.py -v
+      - run: python validation/test_restart.py -v
+      - run: python -O validation/test_restart.py -v
       - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
       # The study preset: the cavity comparison and the backstep at three mesh levels,
       # each with the recorded 300-second budget. Exit 2 records unaccepted evidence;
@@ -72,9 +76,7 @@ jobs:
             runs/external-study/backstep-level*/*.log
             runs/external-study/backstep-level*-comparison/*
             runs/resolution-study/report.json
-            runs/resolution-study/wall-resolved-*/summary.json
-            runs/resolution-study/wall-resolved-*/*.log
-            runs/resolution-study/wall-resolved-*-comparison/*
+            runs/resolution-study/wall-resolved-*/**
   rust:
     runs-on: ubuntu-latest
     strategy:

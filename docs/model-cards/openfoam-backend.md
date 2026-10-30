@@ -146,6 +146,39 @@ assessed. Refinement skips finer cases after a coarse case is not accepted.
 The [tutorial](../../tutorials/backstep-resolution-prompt.md) and
 [results](../../validation/RESOLUTION_RESULTS.md) retain those failures.
 
+## Bounded steady field continuation
+
+`prepare-restart` copies the verified final U/p/phi and (for SST) k/omega/nut
+of a completed same-mesh run into a fresh local pseudo-time zero. A completed
+but unconverged stage is eligible only with finite final fields and independent
+local flux <=1e-4; failed, timed-out or cancelled snapshots are ineligible.
+This resets steady solver history/caches and does not restore transient time
+history. Cumulative iteration counts report work. The native Rust models,
+SST/mesh/inlet choices and acceptance thresholds are unchanged.
+
+The sealed initial-state receipt records parent manifest/case hashes, source
+acceptance and work, exact fields including phi, fixed physics inputs, actual
+mesh files and runtime identity. The rebuilt mesh and exact runtime must match
+before solving; the archive verifier checks the receipt against consumed
+inputs and records rejected initializations as failed archives. Retain parent
+archives to inspect the chain: a receipt's parent hash alone is not a substitute
+for those bytes, and unkeyed checksums do not establish authenticity.
+
+The resolution tutorial can continue up to `--max-stages 8` (default 1) with
+unchanged per-stage limits. It stops at numerical convergence or a stopped
+execution; wall-y+/measurement gates still decide final acceptance. Each stage
+is retained. The final report distinguishes local iterations from cumulative
+work and never substitutes a source's acceptance for the new stage's result.
+
+For normally completed iteration-limited runs, preparation chooses the largest
+writeInterval <=250 that divides the iteration limit. The defaults 6000 and
+20000 retain cadence 250. Prime limits can require writes every iteration;
+choose composite stage lengths for lower I/O overhead. This fixes missing final
+snapshots when an endTime falls between scheduled writes. It does not promote
+stopped snapshots or change numerical thresholds. See the
+[guide](../../integrations/STEADY_RESTART.md) and
+[continuation results](../../validation/RESTART_RESULTS.md).
+
 ## Interpretation and open gates (all packages)
 
 Execution, numerical convergence, measurement screening and physical

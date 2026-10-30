@@ -61,6 +61,11 @@ of serial time to finish their 6000 iterations.
 
 ## Use the individual commands
 
+For a costly steady solve, see the [continuation guide](STEADY_RESTART.md).
+`prepare-restart` accepts a complete archive and produces a fresh same-mesh
+input from its final fields and phi. The resolution tutorial's optional
+`--max-stages` preserves each bounded stage; default behavior remains one stage.
+
 The [resolution tutorial](../tutorials/backstep-resolution-prompt.md) runs
 wall-resolved backstep recipes and an independent Cartesian
 mesh/local-flux/wall-distance audit. Select a recipe explicitly, for example

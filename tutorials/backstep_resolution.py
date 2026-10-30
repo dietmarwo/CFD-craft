@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "integrations"))
 sys.path.insert(0, str(ROOT / "validation"))
 import openfoam_backend as backend
+from openfoam_restart import prepare as prepare_restart
 from backstep_data import fetch, load, sha256
 from compare_backstep import assess, save
 from audit_openfoam_mesh import audit
@@ -51,7 +52,15 @@ def checked(function, run, label, *args, **kwargs):
         }
 
 
-def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iterations=6000):
+def study(
+    foam_root,
+    output,
+    data=None,
+    preset="smoke",
+    timeout_s=900,
+    iterations=6000,
+    max_stages=1,
+):
     backend.require(
         math.isfinite(timeout_s) and 0 < timeout_s <= 3600,
         "study.timeout_s",
@@ -62,6 +71,11 @@ def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iteration
         "study.iterations",
         "expected 50..20000",
     )
+    backend.require(
+        type(max_stages) is int and 1 <= max_stages <= 8,
+        "study.max_stages",
+        "expected 1..8",
+    )
     requested = scenarios(preset)
     output = Path(output)
     backend.claim_directory(output)
@@ -71,12 +85,18 @@ def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iteration
         "rows": [],
         "workflow_completed": False,
         "passed": False,
+        "stage_limits": {
+            "max_stages_per_case": max_stages,
+            "iterations_per_stage": iterations,
+            "wall_s_per_stage": timeout_s,
+        },
         "implementation_sha256": {
             p.name: sha256(p)
             for p in [
                 Path(__file__),
                 ROOT / "integrations/openfoam_cases.py",
                 ROOT / "integrations/openfoam_backend.py",
+                ROOT / "integrations/openfoam_restart.py",
                 ROOT / "validation/audit_openfoam_mesh.py",
                 ROOT / "validation/compare_backstep.py",
             ]
@@ -114,30 +134,70 @@ def study(foam_root, output, data=None, preset="smoke", timeout_s=900, iteration
             # Input, runtime and I/O errors stop the workflow (exit 1). A failed
             # execution is a returned record; a failed audit or comparison of
             # its archive is row evidence.
-            backend.prepare(
-                "backstep",
-                level,
-                iterations,
-                output / (name + "-input"),
-                data,
-                mesh,
-                solver,
-            )
-            execution = backend.run(
-                output / (name + "-input"),
-                output / name,
-                foam_root,
-                timeout_s=timeout_s,
-                output_mib=512,
-                stop=stop,
-            )
-            row["execution"] = execution
+            row["stages"] = []
+            run_directory = None
+            for stage in range(1, max_stages + 1):
+                if stop.cancelled:
+                    break
+                stage_name = name if stage == 1 else f"{name}-stage{stage}"
+                prepared = output / (stage_name + "-input")
+                if stage == 1:
+                    backend.prepare(
+                        "backstep", level, iterations, prepared, data, mesh, solver
+                    )
+                else:
+                    try:
+                        prepare_restart(run_directory, iterations, prepared)
+                    except ValueError as exc:
+                        if not str(exc).startswith(
+                            "CFD-X012 initial_state.phi.local_continuity:"
+                        ):
+                            raise
+                        # A valid completed stage can still fail this scientific
+                        # prerequisite. Assess it, stop continuation and retain
+                        # normal unaccepted-row/finer-grid gating semantics.
+                        row["continuation_stop_reason"] = str(exc)
+                        break
+                run_directory = output / stage_name
+                execution = backend.run(
+                    prepared,
+                    run_directory,
+                    foam_root,
+                    timeout_s=timeout_s,
+                    output_mib=512,
+                    stop=stop,
+                )
+                row["execution"] = execution
+                row["stages"].append(
+                    {
+                        "stage": stage,
+                        "run_directory": stage_name,
+                        "execution": execution,
+                    }
+                )
+                row["completed_solver_iterations"] = sum(
+                    (s["execution"].get("numerical") or {}).get("iterations", 0)
+                    for s in row["stages"]
+                )
+                row["started_iterations"] = sum(
+                    (s["execution"].get("progress") or {}).get("started_iterations", 0)
+                    for s in row["stages"]
+                )
+                backend.write_json(output / "report.json", report)
+                if (
+                    execution["passed"]
+                    or execution["execution_status"] != "completed"
+                    or execution["numerical"] is None
+                ):
+                    break
+            if not row["stages"]:
+                break
             if execution["numerical"] is not None:
-                row["independent"] = checked(audit, output / name, "audit")
+                row["independent"] = checked(audit, run_directory, "audit")
                 reuse = row["independent"]
                 row["comparison"] = checked(
                     assess,
-                    output / name,
+                    run_directory,
                     "comparison",
                     data,
                     independent=reuse if reuse["status"] == "evaluated" else None,
@@ -182,6 +242,7 @@ def main():
     ap.add_argument("--preset", choices=["smoke", "controls", "study"], default="smoke")
     ap.add_argument("--timeout-s", type=float, default=900)
     ap.add_argument("--iterations", type=int, default=6000)
+    ap.add_argument("--max-stages", type=int, default=1)
     args = ap.parse_args()
     try:
         report = study(
@@ -191,6 +252,7 @@ def main():
             args.preset,
             args.timeout_s,
             args.iterations,
+            args.max_stages,
         )
     except (ValueError, OSError) as exc:
         print(json.dumps({"passed": False, "error": backend.diagnostic(exc, "study")}))

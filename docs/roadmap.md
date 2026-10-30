@@ -99,6 +99,11 @@ pair needs a larger per-case budget or a coarse-to-fine start, and inlet and
 model sensitivity remain open ([results](../validation/RESOLUTION_RESULTS.md)).
 This does not advance the native canyon's physical-validation gate.
 
+[Iteration 04](iterations/04-steady-continuation-plan.md) adds verified
+same-mesh field continuation and bounded stages, with all source fields, flux,
+runtime and mesh identities retained. This addresses the single-run budget
+limit; cross-mesh interpolation and an accepted fine/coarse pair remain work.
+
 1. **Throughput (M1b, M3b):** multigrid for the pressure equation now that the masked operator is pinned against its reference; semi-implicit diffusion for momentum, k-ε and scalars; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
 2. **Near-wall consistency (M3a):** a log-consistent velocity gradient in wall-adjacent cells, so the empty ABL also stays homogeneous below H, and a building-wall roughness specified independently of the ground and the grid.
 3. **Resolution study (M3b):** the canyon at 10 or more cells per building height, a domain that meets the COST 732 clearances, and a GCI where the sequence supports one.

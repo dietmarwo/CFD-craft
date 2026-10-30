@@ -40,6 +40,11 @@ def backstep_lines(row):
         f"p median last/previous window {number(trend.get('median_last_window'))}"
         f" / {number(trend.get('median_previous_window'))}",
     ]
+    if "stages" in row:
+        lines.append(
+            f"stages {len(row['stages'])}; completed solver iterations across stages "
+            f"{row.get('completed_solver_iterations')}; started {row.get('started_iterations')}"
+        )
     comparison = row.get("comparison") or {}
     if comparison.get("status") != "evaluated":
         lines.append(

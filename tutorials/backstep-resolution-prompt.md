@@ -42,12 +42,31 @@ The presets are:
 | controls | legacy and wall-resolved meshes, each with the legacy and simplec profiles; all level 1 | A 2x2 design: each pair changes only the mesh or only the pressure-coupling profile |
 | study | wall-resolved/simplec levels 1, 2, 3 | Same-recipe sensitivity; finer levels are skipped after a coarser level is not accepted |
 
-Each attempted case has its own wall-time budget, covering mesh generation,
+Each attempted stage has its own wall-time budget, covering mesh generation,
 solve and postprocessing. Defaults are 900 seconds and 6000 iterations; the
 CLI limits are 3600 seconds and 20000 iterations per case. Numerical acceptance
 of the reference recipe needs more than 6000 iterations, so pass the limits
 shown above. The output budget is 512 MiB and the child address-space limit
 2048 MiB. The controls preset can spend four case budgets, the study three.
+
+For bounded continuation, add `--max-stages N` (1..8, default 1). For example:
+
+```sh
+python tutorials/backstep_resolution.py --preset smoke --iterations 5000 \
+  --max-stages 4 --timeout-s 900 --foam-root ROOT --data VERIFIED_DATA \
+  --output runs/resolution-staged
+```
+
+This permits four 5000-iteration stages, each with its own 900-second run
+budget; it is not a guarantee of convergence within that budget. Preparation
+and hashing add overhead. A completed unaccepted stage may supply its verified
+fields and phi to the next stage on the same mesh. A timeout, cancellation,
+failure or failed source-flux check stops continuation. Every stage is retained;
+`execution` and comparison describe the last attempted stage, and
+`completed_solver_iterations`/`started_iterations` count work across stages.
+Finer meshes still require accepted coarser rows. Read the
+[continuation guide](../integrations/STEADY_RESTART.md) for eligibility,
+provenance, storage and pseudo-time semantics.
 
 For a completed archive, independently inspect the actual mesh and stored phi:
 

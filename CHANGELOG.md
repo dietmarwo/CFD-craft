@@ -6,6 +6,7 @@ First version, 0.1.0, a research prototype. Experimental canyon validation and a
 
 ### Added
 
+- Verified same-mesh steady field restart, source/field/runtime/mesh receipts and bounded multi-stage backstep execution with cumulative work and separate final acceptance. Completed runs retain a final snapshot for non-multiple iteration limits. Full resolution archives are retained by manual CI for later continuation.
 - Wall-resolved external backstep recipes (a graded mesh without cell-size jumps, and SIMPLEC/SIMPLE profiles), an independent Cartesian audit of mesh, local face flux and wall y+, and a gated refinement workflow. The SIMPLEC reference converges and passes the audit on its coarse mesh; no mesh pair is claimed. Solver logs with NaN/Inf values or a diverging continuity error stop execution with a preserved failure archive.
 - Bounded OpenFOAM Foundation-13 execution with hashed inputs, a checked input copy, runtime/library identity, a fixed child environment, process-group cancellation, hard address-space and per-file limits, independent stored boundary-flux checks and an archive consistency verifier.
 - A cavity comparison between the native and external solvers, a frozen Driver--Seegmiller experimental screening protocol, exact raw-data identities, paired downstream profiles, signed skin-friction/reattachment metrics, trivial-predictor baselines and a first-cell y+ estimate. The measurement screen is assessed only for a numerically accepted solve. These do not qualify the native canyon solver.

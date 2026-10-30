@@ -291,6 +291,17 @@ def relative_cell_imbalance(mesh, flux):
     return float(max(abs(net[moving]) / (gross[moving] / 2), default=0.0))
 
 
+def face_scaled_balance(mesh, flux, speed):
+    """Largest abs(net cell flux) over U_ref * dz * sqrt(dx * dy).
+
+    dz * sqrt(dx * dy) is the geometric mean area of a cell's flux-carrying faces
+    in these x-y cases, so the measure does not grow as cells shrink.
+    """
+    net = cell_divergence(mesh, flux) * mesh["volumes"]
+    dx, dy, dz = np.asarray(mesh["lengths"], dtype=float).T
+    return float(np.max(abs(net) / (speed * dz * np.sqrt(dx * dy))))
+
+
 def checked_wall_distances(mesh, parts, metadata):
     claimed = metadata["wall_first_cell_height_h"]
     require(
@@ -356,8 +367,10 @@ def local_continuity(mesh, flux, height, speed):
         "volume_weighted_rms_divergence_h_over_u": float(
             np.sqrt(np.sum(divergence**2 * mesh["volumes"]) / sum(mesh["volumes"]))
         ),
-        # Reported, not gated: unlike the gated measure it does not grow as cells shrink.
+        # Reported, not gated: unlike the gated measure these do not grow as cells
+        # shrink.
         "maximum_relative_cell_imbalance": relative_cell_imbalance(mesh, flux),
+        "maximum_face_scaled_balance": face_scaled_balance(mesh, flux, speed),
         "target_max": 1e-4,
         "passed": bool(largest <= 1e-4),
     }

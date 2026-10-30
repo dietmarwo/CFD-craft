@@ -61,6 +61,11 @@ of serial time to finish their 6000 iterations.
 
 ## Use the individual commands
 
+For a steady solve longer than one run's limits, see the
+[continuation guide](STEADY_RESTART.md). `prepare-restart` turns a completed
+archive into a fresh same-mesh input from its final fields and phi. The
+resolution tutorial's `--max-stages` chains such stages; the default is one.
+
 The [resolution tutorial](../tutorials/backstep-resolution-prompt.md) runs
 wall-resolved backstep recipes and an independent Cartesian
 mesh/local-flux/wall-distance audit. Select a recipe explicitly, for example
@@ -108,7 +113,12 @@ development screen pass, otherwise 2, and 1 when its output cannot be written.
 Both tutorials exit 0 when everything passes, 2 when they recorded failed,
 unaccepted or cancelled evidence, and 1 on a workflow error.
 `audit_openfoam_mesh.py` exits 0 when its checks pass, 2 when they fail or the
-archive has no final field, and 1 for an invalid archive or output path. **None of these exit codes sets physical
+archive has no final field, and 1 for an invalid archive or output path.
+`prepare-restart` exits 0 for a prepared stage and 1 for an ineligible source or
+invalid request. `compare_restart.py` and `restart_equivalence.py` exit 0 when
+their bounds hold, 2 when they do not and 1 for invalid input. In the resolution
+tutorial an ineligible completed stage is recorded evidence (exit 2), not a
+workflow error. **None of these exit codes sets physical
 qualification to true.** Read all four levels: execution, numerics, measurement
 screen and physical qualification.
 
@@ -118,10 +128,13 @@ screen and physical qualification.
 python validation/test_openfoam.py -v
 python -O validation/test_openfoam.py -v
 python validation/test_resolution.py -v
+python validation/test_restart.py -v
 CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
   python validation/test_openfoam.py -v
 CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
   python validation/test_resolution.py -v
+CFD_OPENFOAM_ROOT="$PWD/runs/openfoam13/runtime/opt/openfoam13" \
+  python validation/test_restart.py -v
 ~~~
 
 Unit tests have explicit synthetic fixtures, including a synthetic stand-in for
@@ -129,13 +142,19 @@ the four Foundation-13 programs that drives `run` and `report` end to end. They
 test contracts, not physical accuracy. With the environment variable set, the additional tests run actual
 OpenFOAM cavity solves, check an iteration-limit failure, corrupt returned
 fields and face fluxes to verify rejection, and compare the actual wall-resolved
-`blockMesh` output with the generated first-cell heights and spacing. CI runs
-the boundary tests on each push/PR. A manual workflow dispatch additionally
-installs the pinned runtime, runs the real backend tests, the external study
-preset with `--timeout-s 300` and the resolution smoke preset with
-`--iterations 20000 --timeout-s 3500`, publishes the key numbers of both as
-notices and uploads the reports. A recorded backstep failure keeps the job
-green; a workflow error fails it.
+`blockMesh` output with the generated first-cell heights and spacing, and
+continue actual cavity runs against uninterrupted controls. CI runs the
+boundary tests on each push/PR. A manual workflow dispatch installs the pinned
+runtime in two parallel jobs; its `external` input (`all`, `backend` or
+`resolution`) selects which of them run. `external-backend` runs the real backend tests,
+the external study preset with `--timeout-s 300` and a fixed-work
+continuation check of the wall-resolved backstep (`simple` profile, 250+250
+iterations). `external-resolution` runs the resolution smoke
+preset in one run (`--iterations 20000 --timeout-s 3500`) and in stages
+(`--iterations 6000 --max-stages 4 --timeout-s 3500`) on the same runner, then
+compares the two converged results. Both publish the key numbers as notices and
+upload the reports. A recorded backstep failure keeps a job green; a workflow
+error fails it.
 
 ## Frozen protocol
 

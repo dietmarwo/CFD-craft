@@ -17,6 +17,14 @@ at level 1 only. Its measurement screen additionally requires the independent
 local-flux and all-wall y+ audit. Never turn a saved pre-failure snapshot into
 a final result.
 
+For long steady solves use [verified continuation](../integrations/STEADY_RESTART.md)
+and its [results](../validation/RESTART_RESULTS.md). `prepare-restart` accepts a
+completed run with finite final fields whose stored face flux passes the
+independent local gate; unconverged completed stages are eligible,
+failed/timeout/cancelled ones are not. It preserves physics and mesh, resets local pseudo-time and records source
+fields, runtime and mesh. `--max-stages` defaults to 1. These are steady field
+initializations, not transient-history restarts or cross-mesh mappings.
+
 1. Build with cargo build --release --locked. Inspect cfd-craft describe.
 2. Choose a canonical case. Run check before allocating a larger simulation. Each diagnostic names its element and field (for example `geometry[1]` or `sources[0].rate_kg_s_m`); [diagnostics](diagnostics.md) lists the codes. Invalid input exits 1 from check, run and preview, with the report on stdout. A check on a host too small for the case warns with CFD-W070 and skips the grid checks; run the case on a larger host, or preview it here.
 3. Set an available thread/memory allowance, an iteration limit and a wall-time limit. Use a new output directory.

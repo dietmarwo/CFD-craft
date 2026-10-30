@@ -73,7 +73,15 @@ def inventory(directory, symlinks=None):
     return entries
 
 
-def prepare(kind, level, iterations, output, data=None):
+def prepare(
+    kind,
+    level,
+    iterations,
+    output,
+    data=None,
+    mesh_family="legacy",
+    solver_profile="legacy",
+):
     require(
         kind != "backstep" or data is not None,
         "data",
@@ -81,7 +89,9 @@ def prepare(kind, level, iterations, output, data=None):
         "CFD-D001",
     )
     dataset = load(data) if kind == "backstep" else None
-    files, metadata = build(kind, level, iterations, dataset)
+    files, metadata = build(
+        kind, level, iterations, dataset, mesh_family, solver_profile
+    )
     output = Path(output)
     claim_directory(output)
     for name, text in files.items():
@@ -241,6 +251,20 @@ def disk_bytes(directory):
     return total
 
 
+def nonfinite_solver_log(path):
+    with Path(path).open("rb") as stream:
+        stream.seek(max(0, Path(path).stat().st_size - 16384))
+        text = stream.read().decode(errors="replace")
+    return (
+        re.search(
+            r"(?:Initial residual|Final residual|sum local|global)\s*=\s*[-+]?(?:nan|inf(?:inity)?)\b",
+            text,
+            re.I,
+        )
+        is not None
+    )
+
+
 def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
     output = Path(output)
     log = output / (label + ".log")
@@ -278,6 +302,12 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         )
         try:
             while process.poll() is None:
+                require(
+                    label != "solve" or not nonfinite_solver_log(log),
+                    "execution.solve.residual",
+                    "nonfinite solver output",
+                    "CFD-X010",
+                )
                 require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
                 require(
                     time.monotonic() < deadline,
@@ -303,6 +333,8 @@ def execute(command, env, output, label, deadline, max_bytes, memory_mib, stop):
         "wall_s": time.monotonic() - start,
         "log": log.name,
     }
+    if failure is None and label == "solve" and nonfinite_solver_log(log):
+        failure = "CFD-X010 execution.solve.residual: nonfinite solver output"
     if failure is None and disk_bytes(output) >= max_bytes:
         failure = "CFD-X005 execution.output: output budget reached"
     if failure is None and process.returncode != 0:
@@ -999,6 +1031,12 @@ def main():
     p.add_argument("--level", type=int, default=1)
     p.add_argument("--iterations", type=int, default=3000)
     p.add_argument("--data", type=Path)
+    p.add_argument(
+        "--mesh-family", choices=["legacy", "wall-resolved"], default="legacy"
+    )
+    p.add_argument(
+        "--solver-profile", choices=["legacy", "simplec", "simple"], default="legacy"
+    )
     p.add_argument("--output", type=Path, required=True)
     p = sub.add_parser("run")
     p.add_argument("--case", type=Path, required=True)
@@ -1018,7 +1056,13 @@ def main():
     try:
         if args.command == "prepare":
             result = prepare(
-                args.case, args.level, args.iterations, args.output, args.data
+                args.case,
+                args.level,
+                args.iterations,
+                args.output,
+                args.data,
+                args.mesh_family,
+                args.solver_profile,
             )
         elif args.command == "run":
             result = run(

@@ -52,7 +52,17 @@ def sampled_sets(sets, fields):
     )
 
 
-def build(kind, level, iterations, dataset=None):
+def first_width(length, cells, expansion):
+    """First cell in a geometric segment; expansion is last/first width."""
+    if expansion == 1:
+        return length / cells
+    ratio = expansion ** (1 / (cells - 1))
+    return length * (ratio - 1) / (ratio**cells - 1)
+
+
+def build(
+    kind, level, iterations, dataset=None, mesh_family="legacy", solver_profile="legacy"
+):
     if (
         kind not in {"cavity", "backstep"}
         or type(level) is not int
@@ -61,6 +71,12 @@ def build(kind, level, iterations, dataset=None):
         raise ValueError("CFD-X001 case: use cavity/backstep and level 1..3")
     if type(iterations) is not int or not 50 <= iterations <= 20000:
         raise ValueError("CFD-X001 iterations: expected 50..20000")
+    if mesh_family not in {"legacy", "wall-resolved"}:
+        raise ValueError("CFD-X001 recipe.mesh_family: unsupported mesh family")
+    if solver_profile not in {"legacy", "simplec", "simple"}:
+        raise ValueError("CFD-X001 recipe.solver_profile: unsupported profile")
+    if kind != "backstep" and (mesh_family != "legacy" or solver_profile != "legacy"):
+        raise ValueError("CFD-X001 recipe: nonlegacy options apply to backstep only")
     files = {}
     if kind == "cavity":
         n = 24 * level
@@ -133,6 +149,35 @@ def build(kind, level, iterations, dataset=None):
             ([1, 2, 5, 4, 9, 10, 13, 12], 240 * level, 64 * level, 5, upper),
             ([6, 7, 2, 1, 14, 15, 10, 9], 240 * level, 24 * level, 5, 1),
         ]
+        wall_heights = None
+        if mesh_family == "wall-resolved":
+            # Segment lengths and cell fractions are normalized by blockMesh.
+            streamwise = "((1 100 100) (11 100 1) (38 152 1))"
+            upper = "((1.5 32 200) (5 16 1) (1.5 32 0.005))"
+            lower = "((0.5 24 100) (0.5 24 0.01))"
+            blocks = [
+                ([0, 1, 4, 3, 8, 9, 12, 11], 32 * level, 80 * level, 0.3, upper),
+                (
+                    [1, 2, 5, 4, 9, 10, 13, 12],
+                    352 * level,
+                    80 * level,
+                    streamwise,
+                    upper,
+                ),
+                (
+                    [6, 7, 2, 1, 14, 15, 10, 9],
+                    352 * level,
+                    48 * level,
+                    streamwise,
+                    lower,
+                ),
+            ]
+            wall_heights = {
+                "lowerWall": first_width(0.5, 24 * level, 100),
+                "upstreamWall": first_width(1.5, 32 * level, 200),
+                "upperWall": first_width(1.5, 32 * level, 200),
+                "stepWall": first_width(1, 100 * level, 100),
+            }
         boundaries = {
             "inlet": ("patch", [[0, 3, 11, 8]]),
             "outlet": ("patch", [[2, 10, 13, 5], [7, 15, 10, 2]]),
@@ -214,6 +259,14 @@ def build(kind, level, iterations, dataset=None):
             span="type empty;",
         )
         files["0/nut"] = field("nut", "[0 2 -1 0 0 0 0]", "0", patches)
+        if mesh_family == "wall-resolved":
+            files["0/k"] = files["0/k"].replace(
+                "type kqRWallFunction; value uniform 0.001;",
+                "type fixedValue; value uniform 0;",
+            )
+            files["0/nut"] = files["0/nut"].replace(
+                "nutkWallFunction", "nutLowReWallFunction"
+            )
         files["constant/momentumTransport"] = (
             header("momentumTransport")
             + "simulationType RAS; RAS { model kOmegaSST; turbulence on; viscosityModel Newtonian; }\n"
@@ -251,6 +304,17 @@ def build(kind, level, iterations, dataset=None):
             header("wallStress")
             + 'type wallShearStress; libs ("libfieldFunctionObjects.so"); patches (lowerWall);\n'
         )
+        metadata.update(mesh_family=mesh_family, solver_profile=solver_profile)
+        if wall_heights is not None:
+            metadata.update(
+                cells=47616 * level**2,
+                wall_first_cell_height_h=wall_heights,
+                lower_wall_first_cell_height_h=wall_heights["lowerWall"],
+            )
+            files["system/wallStress"] = files["system/wallStress"].replace(
+                "patches (lowerWall)",
+                "patches (lowerWall stepWall upperWall upstreamWall)",
+            )
     files["system/sampleProfiles"] = sampled_sets(sets, sample_fields)
     metadata["expected_samples"] = {
         name: {
@@ -315,4 +379,66 @@ relaxationFactors { fields { p 0.2; } equations { U 0.5; k 0.5; omega 0.5; } }
         metadata["turbulence_package"] = (
             "Foundation 13 kOmegaSST; kqRWallFunction/omegaWallFunction/nutkWallFunction"
         )
+        if mesh_family == "wall-resolved":
+            metadata["turbulence_package"] = (
+                "Foundation 13 kOmegaSST; k=0/omegaWallFunction/nutLowReWallFunction; wall-resolved"
+            )
+        if solver_profile == "simplec":
+            files["system/fvSolution"] = files["system/fvSolution"].replace(
+                "fields { p 0.2; } equations { U 0.5; k 0.5; omega 0.5; }",
+                "fields { p 1; } equations { U 0.7; k 0.7; omega 0.7; }",
+            )
+        if solver_profile == "simple":
+            files["system/fvSolution"] = (
+                files["system/fvSolution"]
+                .replace("consistent yes", "consistent no")
+                .replace("fields { p 0.2; }", "fields { p 0.3; }")
+            )
+        if mesh_family == "wall-resolved":
+            files["system/fvSolution"] = files["system/fvSolution"].replace(
+                "smoother GaussSeidel;",
+                "smoother DICGaussSeidel; nPreSweeps 2; nPostSweeps 2; nCellsInCoarsestLevel 50; directSolveCoarsest yes;",
+            )
+            if solver_profile == "simple":
+                # An anisotropic Cartesian pressure reference: solve the
+                # symmetric system with preconditioned CG. This is an
+                # experimental reference, not a demonstrated convergence fix.
+                files["system/fvSolution"] = files["system/fvSolution"].replace(
+                    "solver GAMG;", "solver PCG; preconditioner DIC; maxIter 5000;"
+                )
+                files["system/fvSolution"] = files["system/fvSolution"].replace(
+                    "equations { U 0.5; k 0.5; omega 0.5; }",
+                    "equations { U 0.1; k 0.1; omega 0.1; }",
+                )
+                files["system/fvSolution"] = files["system/fvSolution"].replace(
+                    "fields { p 0.3; }", "fields { p 0.1; }"
+                )
+                files["system/fvSchemes"] = files["system/fvSchemes"].replace(
+                    "bounded Gauss linearUpwind grad(U)", "bounded Gauss upwind"
+                )
+                files["system/fvSchemes"] = files["system/fvSchemes"].replace(
+                    "gradSchemes { default Gauss linear; }",
+                    "gradSchemes { default Gauss linear; grad(U) cellLimited Gauss linear 1; grad(k) cellLimited Gauss linear 1; grad(omega) cellLimited Gauss linear 1; }",
+                )
+                files["0/U"] = files["0/U"].replace(
+                    "internalField uniform (1 0 0)", "internalField uniform (0 0 0)"
+                )
+                metadata.update(
+                    momentum_advection="bounded Gauss upwind (first-order reference)",
+                    initial_velocity="uniform zero; prescribed measured inlet",
+                )
+                files["system/fvSolution"] = files["system/fvSolution"].replace(
+                    "tolerance 1e-11; relTol 0.001; smoother DICGaussSeidel;",
+                    "tolerance 1e-12; relTol 0; smoother DICGaussSeidel;",
+                )
+                for unused in [
+                    " smoother DICGaussSeidel;",
+                    " nPreSweeps 2;",
+                    " nPostSweeps 2;",
+                    " nCellsInCoarsestLevel 50;",
+                    " directSolveCoarsest yes;",
+                ]:
+                    files["system/fvSolution"] = files["system/fvSolution"].replace(
+                        unused, ""
+                    )
     return files, metadata

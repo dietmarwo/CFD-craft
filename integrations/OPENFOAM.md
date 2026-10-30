@@ -61,6 +61,15 @@ of serial time to finish their 6000 iterations.
 
 ## Use the individual commands
 
+The [resolution tutorial](../tutorials/backstep-resolution-prompt.md) adds an
+experimental wall-resolved backstep recipe and an independent Cartesian
+mesh/local-flux/wall-distance audit. It is not numerically accepted. Select it
+explicitly with `prepare --mesh-family wall-resolved --solver-profile simple`;
+the legacy recipe remains the default. The `backstep_resolution.py` study
+preset skips finer meshes when a coarse case fails acceptance. Read the
+[iteration 03 results](../validation/RESOLUTION_RESULTS.md) before allocating
+a larger run.
+
 ~~~sh
 python integrations/openfoam_backend.py prepare --case backstep --level 1 \
   --iterations 6000 --data runs/backstep-measurements --output runs/backstep-input

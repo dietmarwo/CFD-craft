@@ -462,12 +462,7 @@ def internal_values(path, count, vector=False):
                 "CFD-X006",
             )
             return [x for row in re.findall(group, body) for x in row]
-        require(
-            "(" not in body and ")" not in body,
-            f"fields.{name}",
-            "unexpected parentheses in a scalar field",
-            "CFD-X006",
-        )
+        # A parenthesis in a scalar list fails the numeric parse below.
         return body.split()
 
     uniform = re.search(r"\binternalField\s+uniform\s+([^;]+);", text)

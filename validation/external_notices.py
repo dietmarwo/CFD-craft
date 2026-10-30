@@ -212,7 +212,8 @@ def mapped_start(report, title):
         f"accepted {source.get('numerically_accepted')}) -> level {target.get('level')}, "
         f"{target.get('iterations')} iterations, {target.get('timeout_s')} s each; "
         f"preparation {number(report.get('preparation_wall_s'), 4)} s; "
-        f"workflow completed {report.get('workflow_completed')}; error {report.get('error')}"
+        f"workflow completed {report.get('workflow_completed')}; error {report.get('error')}",
+        f"mapNearest replay {json.dumps(report.get('nearest_replay'))}",
     ]
     for name, run in (report.get("runs") or {}).items():
         residuals = run.get("initial_residuals_final_iteration") or {}

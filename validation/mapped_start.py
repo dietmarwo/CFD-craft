@@ -125,7 +125,7 @@ def experiment(source, iterations, foam_root, output, data=None, timeout_s=3500)
     old = {s: signal.signal(s, stop.signal) for s in [signal.SIGINT, signal.SIGTERM]}
     try:
         began = time.monotonic()
-        mapping.prepare(
+        prepared = mapping.prepare(
             source,
             level,
             iterations,
@@ -138,6 +138,7 @@ def experiment(source, iterations, foam_root, output, data=None, timeout_s=3500)
             stop=stop,
         )
         report["preparation_wall_s"] = time.monotonic() - began
+        report["nearest_replay"] = prepared["mesh_initialization"]["nearest_replay"]
         backend.prepare(
             parent["case"],
             level,

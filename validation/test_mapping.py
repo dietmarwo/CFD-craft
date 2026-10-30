@@ -305,6 +305,7 @@ class Receipts(unittest.TestCase):
     def test_vector_lists_must_hold_whole_vectors(self):
         path = self.root / "U"
         for internal in [
+            "nonuniform List<vector> 2 ((1 2 3) 4 (5 6 7))",
             "nonuniform List<vector> 2 ((1 2) (3 4 5 6))",
             "nonuniform List<vector> 2 (1 2 3 4 5 6)",
             "uniform (1 2)",
@@ -1418,6 +1419,10 @@ class Reports(unittest.TestCase):
                 self.assertEqual(mapping_equivalence.main(), code)
 
     def mapped_start(self, prepare=None):
+        replay = {"candidates": 27, "nearest_source": 3, "other_candidate": 1}
+        prepare = prepare or (
+            lambda *a, **k: {"mesh_initialization": {"nearest_replay": replay}}
+        )
         source = self.root / "source"
         (source / "case").mkdir(parents=True)
         metadata = {"mesh_family": "wall-resolved", "solver_profile": "simplec"}
@@ -1493,6 +1498,8 @@ class Reports(unittest.TestCase):
         self.assertIn("source level 1 (9 iterations", text)
         self.assertIn("cold%3A completed; iterations 50", text.replace(":", "%3A"))
         self.assertIn("final iterate reattachment 6.6 H", text)
+        self.assertEqual(report["nearest_replay"]["other_candidate"], 1)
+        self.assertIn('"other_candidate"%3A 1', text.replace(":", "%3A"))
 
     def test_a_failed_preparation_is_a_workflow_error(self):
         def failed(*args, **kwargs):

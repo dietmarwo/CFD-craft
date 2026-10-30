@@ -92,6 +92,12 @@ The steady canyon cost grows roughly with the sixth power of the refinement rati
 
 ## Next steps, in order
 
+The [mesh-initialization plan](iterations/05-mesh-initialization-plan.md)
+provides an explicit accepted-coarse-to-new-fine start, verified against a cold
+fine cavity ([results](../validation/MAPPING_RESULTS.md)). An accepted fine
+backstep, mesh sensitivity and inlet and model uncertainty still need a bounded
+campaign; a prepared mapped case is not a fine solution.
+
 The external-backend track has a separate
 [wall-resolution plan](iterations/03-wall-resolution-plan.md). Its wall-resolved
 SST reference converges and passes the independent audit at level 1; a mesh
@@ -103,9 +109,11 @@ The [continuation plan](iterations/04-steady-continuation-plan.md) provides
 verified same-mesh field continuation in bounded stages, which lets a solve
 exceed one run's 3600 s limit; staged, the coarse reference reaches the same
 converged solution as one run. A level-2 mesh still needs several stages of
-roughly an hour each, whose sources must pass the source flux gate, an open
-decision in the [continuation results](../validation/RESTART_RESULTS.md); a
-coarse-to-fine start, cross-mesh interpolation and an accepted fine/coarse pair
+roughly an hour each, whose sources must pass the source flux gate as
+preregistered; whether that gate suits continuation is an open decision in the
+[continuation results](../validation/RESTART_RESULTS.md). Nearest-cell
+coarse-to-fine initialization exists for accepted cold sources; conservative
+interpolation, chained sources and an accepted fine/coarse turbulent pair
 remain work.
 
 1. **Throughput (M1b, M3b):** multigrid for the pressure equation now that the masked operator is pinned against its reference; semi-implicit diffusion for momentum, k-ε and scalars; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.

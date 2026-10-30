@@ -1,6 +1,6 @@
 # Recorded external-backend results
 
-These numbers were produced by the commands below. The implementation files had the SHA-256 identities listed at the end. The run used OpenFOAM Foundation 13 package `20260407` (build `13-441953dfbb42`, serial, f64, 32-bit labels) on a GitHub-hosted ubuntu-24.04 runner with four cores of an AMD EPYC 7763, using Python 3.12. The `external-backend` job of the CI workflow runs exactly these commands on manual dispatch. Rerun them and read the reports rather than treating these values as targets; wall times and the iterations reached within a time budget depend on the machine.
+These numbers were produced by the commands below. The implementation files had the SHA-256 identities listed at the end. The run used OpenFOAM Foundation 13 package `20260407` (build `13-441953dfbb42`, serial, f64, 32-bit labels) on a GitHub-hosted ubuntu-24.04 runner with four cores of an AMD EPYC 9V45, using Python 3.12. The `external-backend` job of the CI workflow runs exactly these commands on manual dispatch. Rerun them and read the reports rather than treating these values as targets; wall times and the iterations reached within a time budget depend on the machine.
 
 The cavity comparison passes. The backstep does **not** pass its numerical gate: the coarse solve stalls, and the finer meshes time out. Its measurement screen is therefore not assessed. Nothing here qualifies the native canyon model or passive-gas transport.
 
@@ -25,7 +25,7 @@ Re=100. The native case advances to 30 s; OpenFOAM solves the steady equations a
 
 The raw [TMR measurements](https://tmbwg.github.io/turbmodels/backstep_val.html) are fetched with frozen SHA-256 identities. The x/H=-4 profile defines the inlet; the 112 downstream velocity samples and 17 lower-wall Cf values are evaluation data. No case parameter is fitted to them.
 
-**Numerical status, level 1 (22,656 cells):** all 6000 iterations ran in 260 s, with no convergence report. The final pressure initial residual is 1.19e-3, against the gate of 1e-7. Over the last 600 iterations its median is 1.492e-3, against 1.488e-3 over the 600 before: the solve is stalled, not slowly converging. Local continuity and the stored boundary-flux imbalance are small, but every pressure solve makes them small, so they do not show a steady solution.
+**Numerical status, level 1 (22,656 cells):** all 6000 iterations ran in 165 s, with no convergence report. The final pressure initial residual is 1.19e-3, against the gate of 1e-7. Over the last 600 iterations its median is 1.492e-3, against 1.488e-3 over the 600 before: the solve is stalled, not slowly converging. Local continuity and the stored boundary-flux imbalance are small, but every pressure solve makes them small, so they do not show a steady solution.
 
 The first lower-wall cell centre lies at y+ 13 (median; range 2.4–16.7) in the scored region 1 < x/H < 12. That is the buffer layer, where the k-based wall function switches.
 
@@ -47,8 +47,8 @@ Lower-wall Cf RMSE is 0.000491 against a target of 0.001; Cf=0 everywhere would 
 | Level | Cells | Execution | Iterations started in 300 s | Numerically accepted |
 |---|---:|---|---:|---|
 | 1 | 22,656 | completed | 6000 | no (stalled) |
-| 2 | 90,624 | timeout | 1456 | no |
-| 3 | 203,904 | timeout | 572 | no |
+| 2 | 90,624 | timeout | 2192 | no |
+| 3 | 203,904 | timeout | 854 | no |
 
 Levels 2 and 3 reached about 24 % and 9 % of their 6000 iterations; finishing them needs roughly 20 and 55 minutes of serial time. Their final iteration was not written, so they are marked not evaluable rather than given a score. With no two accepted levels there is no mesh sensitivity and no GCI.
 
@@ -65,7 +65,7 @@ Before the recorded configuration, the level-1 backstep was run with four recipe
 | 3, first-order momentum advection | — | — | timeout at 600 s (CFD-X004) |
 | 4, the recorded configuration | 6000 | 1.19e-3 | gate not reached (CFD-X007) |
 
-Earlier runs of the recorded configuration, on another runner of the same type and on an eight-core cloud machine, gave the same level-1 metrics and cavity errors to the digits shown here; levels 2 and 3 reached 1458/570 and 1406/522 iterations there. The previous record, at a revision of the backend and case generator that generates the same dictionaries, reached 1418/554 in 265 s of level-1 wall time. A second run at the recorded implementation, on a runner with four cores of an AMD EPYC 9V74, gave the same metrics; its level 1 took 224 s, and levels 2 and 3 reached 1672/663 iterations.
+Earlier runs of the recorded configuration gave the same level-1 metrics and cavity errors to the digits shown here; how far levels 2 and 3 get in 300 s depends on the runner. At revisions of the backend and case generator that generate the same dictionaries, they reached 1418/554, 1456/572 and 1443/568 iterations on runners with an AMD EPYC 7763 (level 1 in 265, 260 and 266 s) and 1672/663 on an AMD EPYC 9V74 (224 s); still earlier runs, on another EPYC 7763 runner and on an eight-core cloud machine, reached 1458/570 and 1406/522.
 
 ## What is needed next
 
@@ -83,7 +83,7 @@ Reproduction: [OPENFOAM.md](../integrations/OPENFOAM.md). Assumptions: [external
 
 | File | SHA-256 |
 |---|---|
-| integrations/openfoam_backend.py | `5c75ea48aae2fd8ffb7339182c918c10ea0c8da4f310a666b8fdef3c03e1ec98` |
+| integrations/openfoam_backend.py | `1f733f86f08acfe5d87b514678c67ec718ce7b72cb3019779ded7405a7c91969` |
 | integrations/openfoam_cases.py | `f0e79c2e8054884c56e38e740b8dcc5708134fb44fbbe379ca6ed22ec6a38860` |
 | validation/backstep_data.py | `736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d` |
 | validation/compare_backstep.py | `5141c2e7e9b22850e6a7143dab21dcb28002c527740257c1097c569e0d9a4a3e` |

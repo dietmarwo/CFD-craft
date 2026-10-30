@@ -190,6 +190,48 @@ of the limit up to 250, and rejects limits without a divisor between 50 and 250;
 [guide](../../integrations/STEADY_RESTART.md) and
 [continuation results](../../validation/RESTART_RESULTS.md).
 
+## Coarse-to-fine volume initialization
+
+`prepare-mapped` maps an accepted run to the next finer existing level of the
+same generated case, mesh family and solver profile. The source must be a
+cold-generated case built by the current generator, numerically accepted and
+passing the independent audit; restarted and mapped sources are not accepted.
+Its inputs must equal the generator's, including the measured inlet and the
+controls.
+
+The separately licensed Foundation-13 `mapFields` utility runs on checked copies
+with `mapNearest`. Only internal U and p and, for SST, k, omega and nut are
+imported; the generated target boundary dictionaries, dimensions and controls
+are kept exactly. Nearest-cell initialization is not conservative interpolation
+and makes no accuracy claim. Coarse phi and wall stress are not transferred:
+the target solver builds a new phi from its U and corrects it as usual.
+Preparation establishes no initial conservation, fine-grid convergence or
+measurement screen.
+
+The `mesh_initialization` receipt (schema 0.2) binds the source case, manifest,
+summary, audit, fields and work, the target metadata, templates, mapper output
+and mesh, the utility arguments and logs, and the runtime identity; it records
+the `mapFields` hash at preparation. Validation, before every solve and when an
+archive is verified, rechecks that chain and replays the mapping with the
+independent mesh reader: each consumed cell value must come, in every field,
+from one source cell among the 27 with the nearest centres. On the uniformly
+refined cavity that is always the nearest cell; on the graded backstep meshes
+Foundation 13 takes another nearby cell for some cells, and the replay reports
+how many and how far. Solved runs also require the recorded runtime and the
+identical rebuilt mesh. Unkeyed hashes remain consistency checks, not
+authenticity of an untrusted case. The runtime programs remain external GPL
+executables; no implementation code is copied into the MIT core.
+
+After a mapped solve completes, same-mesh continuation uses its actual final
+fields and phi under the existing gate. The new stage's receipt names the mapped
+parent and replaces the mapping receipt; source-grid work is not fine-grid
+work. No source-flux, final nonlinear, wall-y+ or measurement threshold changes.
+See the [guide](../../integrations/MESH_INITIALIZATION.md),
+[plan](../iterations/05-mesh-initialization-plan.md) and
+[results](../../validation/MAPPING_RESULTS.md). The cavity comparison is
+numerical verification, the SST mapping check uses synthetic fields, and no
+accepted fine backstep is claimed.
+
 ## Interpretation and open gates (all packages)
 
 Execution, numerical convergence, measurement screening and physical

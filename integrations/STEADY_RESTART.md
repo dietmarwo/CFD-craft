@@ -46,7 +46,9 @@ Fresh output paths are required; occupied paths are preserved, and a failed
 preparation leaves no partial stage. The exact runtime and rebuilt mesh must
 match the recorded identities before the solve. No physics, mesh or profile
 change is accepted by `prepare-restart`; prepare an ordinary cold case for
-another model. Cross-mesh mapping is not implemented.
+another model. One-level refinement uses the separate
+[mesh initialization](MESH_INITIALIZATION.md) operation, which requires an
+accepted cold-generated source rather than a continued chain.
 
 ## What is carried forward
 
@@ -109,6 +111,11 @@ snapshots, which can push a stage into its timeout. Multiples of 50 are always
 accepted; 6000 and 20000 keep cadence 250.
 
 ## Check continuation
+
+A completed mapped run can supply a same-mesh continuation when it meets the
+existing source gate. The new stage's parent case/manifest identify that mapped
+history; its own continuation receipt replaces the old mapping receipt. Coarse
+initialization work is not counted as fine-grid solver iterations.
 
 `validation/restart_equivalence.py` runs FIRST iterations, continues them for
 SECOND, runs FIRST + SECOND uninterrupted, and compares the two final fields.

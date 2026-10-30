@@ -25,6 +25,14 @@ failed/timeout/cancelled ones are not. It preserves physics and mesh, resets loc
 fields, runtime and mesh. `--max-stages` defaults to 1. These are steady field
 initializations, not transient-history restarts or cross-mesh mappings.
 
+For one-level refinement use [mesh initialization](../integrations/MESH_INITIALIZATION.md)
+and its [plan](iterations/05-mesh-initialization-plan.md). It is a different
+operation: accepted, independently audited cold-generated source only; target
+BCs preserved, internal volume fields mapped, coarse phi never copied, and the
+mapping replayed independently. Fine-grid work starts at zero and needs the
+unchanged final gates; same-mesh source-flux eligibility is unchanged. A mapped
+run can later supply an ordinary continuation.
+
 1. Build with cargo build --release --locked. Inspect cfd-craft describe.
 2. Choose a canonical case. Run check before allocating a larger simulation. Each diagnostic names its element and field (for example `geometry[1]` or `sources[0].rate_kg_s_m`); [diagnostics](diagnostics.md) lists the codes. Invalid input exits 1 from check, run and preview, with the report on stdout. A check on a host too small for the case warns with CFD-W070 and skips the grid checks; run the case on a larger host, or preview it here.
 3. Set an available thread/memory allowance, an iteration limit and a wall-time limit. Use a new output directory.

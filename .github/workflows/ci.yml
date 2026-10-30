@@ -5,9 +5,9 @@ name: CFD checks
   workflow_dispatch:
     inputs:
       external:
-        description: External-runtime jobs to run
+        description: "External-runtime work: all, backend, resolution (single and staged level 1) or mapping (single level 1, then the mapped and cold level-2 starts)"
         type: choice
-        options: [all, backend, resolution]
+        options: [all, backend, resolution, mapping]
         default: all
 permissions:
   contents: read
@@ -27,8 +27,10 @@ jobs:
       - run: python -O validation/test_resolution.py -v
       - run: python validation/test_restart.py -v
       - run: python -O validation/test_restart.py -v
+      - run: python validation/test_mapping.py -v
+      - run: python -O validation/test_mapping.py -v
   external-backend:
-    if: github.event_name == 'workflow_dispatch' && inputs.external != 'resolution'
+    if: github.event_name == 'workflow_dispatch' && (inputs.external == 'all' || inputs.external == 'backend')
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -44,12 +46,23 @@ jobs:
       - run: cargo build --release --locked
       - run: python -m pip install -r requirements-validation.txt
       - run: mkdir -p runs && python integrations/install_openfoam13.py --output runs/openfoam13
-      - run: python validation/test_openfoam.py -v
-      - run: python -O validation/test_openfoam.py -v
-      - run: python validation/test_resolution.py -v
-      - run: python -O validation/test_resolution.py -v
-      - run: python validation/test_restart.py -v
-      - run: python -O validation/test_restart.py -v
+      # Each runner prints failing tests as error annotations, with their tracebacks.
+      - run: python validation/unittest_notices.py validation/test_openfoam.py
+      - run: python validation/unittest_notices.py validation/test_openfoam.py -O
+      - run: python validation/unittest_notices.py validation/test_resolution.py
+      - run: python validation/unittest_notices.py validation/test_resolution.py -O
+      - run: python validation/unittest_notices.py validation/test_restart.py
+      - run: python validation/unittest_notices.py validation/test_restart.py -O
+      - run: python validation/unittest_notices.py validation/test_mapping.py
+      - run: python validation/unittest_notices.py validation/test_mapping.py -O
+      # The cavity mapped from level 1 against a cold level-2 control, with the bounds
+      # of the mapping results. Exit 2 records unaccepted evidence.
+      - run: |
+          set +e
+          python validation/mapping_equivalence.py --foam-root "$CFD_OPENFOAM_ROOT" --timeout-s 180 --output runs/mapping-cavity
+          code=$?
+          test ! -f runs/mapping-cavity/report.json || python validation/external_notices.py runs/mapping-cavity/report.json "mapping cavity"
+          test "$code" -eq 0 -o "$code" -eq 2
       - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
       # The study preset: the cavity comparison and the backstep at three mesh levels,
       # each with the recorded 300-second budget. Exit 2 records unaccepted evidence;
@@ -84,10 +97,11 @@ jobs:
             runs/external-study/backstep-level*/*.log
             runs/external-study/backstep-level*-comparison/*
             runs/equivalence-*/report.json
+            runs/mapping-cavity/**
   external-resolution:
     if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend'
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     env:
       CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
       OMP_NUM_THREADS: "1"
@@ -111,22 +125,33 @@ jobs:
           test "$code" -eq 0 -o "$code" -eq 2
       - if: always()
         run: test ! -f runs/resolution-study/report.json || python validation/external_notices.py runs/resolution-study/report.json
-      - run: |
+      - if: inputs.external != 'mapping'
+        run: |
           set +e
           python tutorials/backstep_resolution.py --preset smoke --iterations 6000 --max-stages 4 --timeout-s 3500 --data runs/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/resolution-staged
           code=$?
           test "$code" -eq 0 -o "$code" -eq 2
-      - if: always()
+      - if: always() && inputs.external != 'mapping'
         run: test ! -f runs/resolution-staged/report.json || python validation/external_notices.py runs/resolution-staged/report.json
       # The staged chain's final stage against the single run: work, fields, audit and
       # measurement metrics, with the bounds of the continuation results.
-      - run: |
+      - if: inputs.external != 'mapping'
+        run: |
           set +e
           final=$(python -c "import json; print(json.load(open('runs/resolution-staged/report.json'))['rows'][0]['stages'][-1]['run_directory'])")
           python validation/compare_restart.py --run "runs/resolution-staged/$final" --control runs/resolution-study/wall-resolved-simplec-level1 --mode converged --data runs/measurements --output runs/staged-comparison.json > /dev/null
           code=$?
           python validation/external_notices.py runs/staged-comparison.json "staged against single run"
           test "$code" -eq 0 -o "$code" -eq 2
+      # The accepted single run initializes level 2; a cold level-2 case is the control.
+      # Both run 3000 iterations within 3500 s. Report only: no gate is applied.
+      - if: inputs.external != 'resolution'
+        run: |
+          set +e
+          python validation/mapped_start.py --source runs/resolution-study/wall-resolved-simplec-level1 --iterations 3000 --timeout-s 3500 --data runs/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/mapped-start
+          code=$?
+          test ! -f runs/mapped-start/report.json || python validation/external_notices.py runs/mapped-start/report.json "mapped start level 2"
+          test "$code" -eq 0
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -137,6 +162,10 @@ jobs:
             runs/resolution-staged/report.json
             runs/resolution-staged/wall-resolved-*/**
             runs/staged-comparison.json
+            runs/mapped-start/report.json
+            runs/mapped-start/*-input/case.json
+            runs/mapped-start/*/summary.json
+            runs/mapped-start/*/*.log
   rust:
     runs-on: ubuntu-latest
     strategy:

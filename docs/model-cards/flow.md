@@ -20,7 +20,7 @@ guess, arithmetic order, compatibility test or residual tolerance. The
 [performance plan](../iterations/07-14-performance-plan.md) separates kernel cost
 from fixed-work and accepted-run throughput.
 
-IC(0) triangular sweeps use contiguous row offsets, column indices and values.
+IC(0) construction and triangular sweeps use contiguous row offsets, column indices and values. Construction coalesces duplicate periodic edges in face order, sorts each row in place and intersects sorted prefixes without per-row heap allocations. The zero-fill pattern and regularizing shift are unchanged.
 The memory estimator includes a conservative extra 112 bytes/cell before its
 existing safety margin for factor-construction and compact pressure work.
 

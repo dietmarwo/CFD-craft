@@ -21,7 +21,22 @@ pub struct Factor {
 }
 impl Factor {
     fn build(g: &Grid) -> Self {
-        let mut lower = vec![Vec::<(usize, f64)>::new(); g.count()];
+        // Reserve row segments with two linear face passes. A short periodic
+        // direction can connect a pair twice, so capacity and live count differ.
+        let mut row_offsets = vec![0; g.count() + 1];
+        for f in &g.faces {
+            if f.kind == FaceKind::Interior {
+                let row = f.lo.unwrap().max(f.hi.unwrap());
+                row_offsets[row + 1] += 1;
+            }
+        }
+        for row in 0..g.count() {
+            row_offsets[row + 1] += row_offsets[row];
+        }
+        let capacity = row_offsets[g.count()];
+        let mut columns = vec![0; capacity];
+        let mut lower = vec![0.0; capacity];
+        let mut counts = vec![0; g.count()];
         let mut diag = vec![0.0; g.count()];
         for f in &g.faces {
             let w = f.area / (f.distance * g.volume);
@@ -32,51 +47,78 @@ impl Factor {
                     diag[i] += w;
                     diag[j] += w;
                     let (row, col) = if i > j { (i, j) } else { (j, i) };
-                    if let Some((_, v)) = lower[row].iter_mut().find(|(c, _)| *c == col) {
-                        *v -= w;
+                    let start = row_offsets[row];
+                    let end = start + counts[row];
+                    if let Some(offset) = (start..end).find(|&k| columns[k] == col) {
+                        lower[offset] -= w;
                     } else {
-                        lower[row].push((col, -w));
+                        columns[end] = col;
+                        lower[end] = -w;
+                        counts[row] += 1;
                     }
                 }
-                FaceKind::Outlet => {
-                    diag[f.lo.or(f.hi).unwrap()] += w;
-                }
+                FaceKind::Outlet => diag[f.lo.or(f.hi).unwrap()] += w,
                 _ => {}
             }
         }
+        // Sort each tiny row in place, then close duplicate-capacity gaps.
+        // Diagonal and duplicate accumulation above retain the original face order.
+        let mut write = 0;
+        let mut read = 0;
+        for row in 0..g.count() {
+            let next = row_offsets[row + 1];
+            let end = read + counts[row];
+            for offset in read + 1..end {
+                let (column, value) = (columns[offset], lower[offset]);
+                let mut at = offset;
+                while at > read && columns[at - 1] > column {
+                    columns[at] = columns[at - 1];
+                    lower[at] = lower[at - 1];
+                    at -= 1;
+                }
+                columns[at] = column;
+                lower[at] = value;
+            }
+            row_offsets[row] = write;
+            for offset in read..end {
+                columns[write] = columns[offset];
+                lower[write] = lower[offset];
+                write += 1;
+            }
+            read = next;
+        }
+        row_offsets[g.count()] = write;
+        columns.truncate(write);
+        lower.truncate(write);
         let maxdiag = diag.iter().copied().fold(1.0, f64::max);
         for row in 0..g.count() {
-            lower[row].sort_by_key(|x| x.0);
-            for offset in 0..lower[row].len() {
-                let (col, value) = lower[row][offset];
+            let start = row_offsets[row];
+            let end = row_offsets[row + 1];
+            for offset in start..end {
+                let col = columns[offset];
                 let mut dot = 0.0;
-                for &(k, lik) in &lower[row][..offset] {
-                    if let Some((_, ljk)) = lower[col].iter().find(|(j, _)| *j == k) {
-                        dot += lik * ljk;
+                let mut other = row_offsets[col];
+                let other_end = row_offsets[col + 1];
+                for previous in start..offset {
+                    let k = columns[previous];
+                    while other < other_end && columns[other] < k {
+                        other += 1;
+                    }
+                    if other < other_end && columns[other] == k {
+                        dot += lower[previous] * lower[other];
                     }
                 }
-                lower[row][offset].1 = (value - dot) / diag[col];
+                lower[offset] = (lower[offset] - dot) / diag[col];
             }
-            let squared = lower[row].iter().map(|(_, v)| v * v).sum::<f64>();
+            let squared = lower[start..end].iter().map(|v| v * v).sum::<f64>();
             diag[row] = (diag[row] + 1e-6 * maxdiag - squared)
                 .max(1e-12 * maxdiag)
                 .sqrt();
         }
-        let mut row_offsets = Vec::with_capacity(g.count() + 1);
-        let mut columns = Vec::new();
-        let mut values = Vec::new();
-        row_offsets.push(0);
-        for row in lower {
-            for (column, value) in row {
-                columns.push(column);
-                values.push(value);
-            }
-            row_offsets.push(columns.len());
-        }
         Self {
             row_offsets,
             columns,
-            lower: values,
+            lower,
             diagonal: diag,
         }
     }

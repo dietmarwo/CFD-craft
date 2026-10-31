@@ -11,14 +11,42 @@ use std::{collections::BTreeMap, sync::Mutex};
 
 const COARSE_CELLS: usize = 32;
 const SWEEPS: usize = 2;
+mod line;
+use line::BlockSmoother;
+pub use line::BlockSmootherStats;
+
+/// A weak invariant span is retained by interpolation, whereas a stiff short
+/// axis still needs line relaxation. Selection is fixed for the whole solve.
+pub(crate) fn line_axes(n: [usize; 3], dx: [f64; 3]) -> Vec<usize> {
+    let weights = dx.map(|d| 1.0 / (d * d));
+    if weights.iter().any(|w| !w.is_finite() || *w <= 0.0) {
+        return vec![];
+    }
+    let minimum = (0..3)
+        .filter(|a| n[*a] > 2)
+        .map(|a| weights[a])
+        .fold(f64::INFINITY, f64::min);
+    let maximum = weights.into_iter().fold(0.0, f64::max);
+    if maximum / minimum <= 25.0 {
+        return vec![];
+    }
+    (0..3).filter(|a| weights[*a] >= maximum / 4.0).collect()
+}
+fn zero(value: &u64) -> bool {
+    *value == 0
+}
 
 /// Retained hierarchy and scratch storage, excluding allocator overhead, the
 /// grid, outer PCG vectors and temporary hierarchy-construction storage.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MultigridStats {
     pub level_cells: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub level_dimensions: Vec<[usize; 3]>,
     pub level_nonzeros: Vec<usize>,
     pub allocated_bytes: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub block_smoothers: Vec<BlockSmootherStats>,
 }
 
 /// Attempted work, accumulated locally without timers or locks inside PCG.
@@ -37,6 +65,12 @@ pub struct MultigridWork {
     pub restriction_cell_updates: u64,
     pub prolongation_cell_updates: u64,
     pub coarse_solves: u64,
+    #[serde(default, skip_serializing_if = "zero")]
+    pub block_smoothing_cell_updates: u64,
+    #[serde(default, skip_serializing_if = "zero")]
+    pub block_solves: u64,
+    #[serde(default, skip_serializing_if = "zero")]
+    pub block_level_cell_visits: u64,
 }
 impl MultigridWork {
     pub(crate) fn merge(&mut self, other: &Self) {
@@ -51,6 +85,9 @@ impl MultigridWork {
         self.restriction_cell_updates += other.restriction_cell_updates;
         self.prolongation_cell_updates += other.prolongation_cell_updates;
         self.coarse_solves += other.coarse_solves;
+        self.block_smoothing_cell_updates += other.block_smoothing_cell_updates;
+        self.block_solves += other.block_solves;
+        self.block_level_cell_visits += other.block_level_cell_visits;
     }
 }
 
@@ -99,6 +136,7 @@ fn face_entry(g: &Grid, f: &crate::grid::Face) -> Option<(u8, usize, usize, u64)
 pub(crate) struct Signature {
     n: [usize; 3],
     anchored: bool,
+    spacing: [u64; 3],
     faces: Vec<(u8, usize, usize, u64)>,
 }
 impl Signature {
@@ -117,11 +155,13 @@ impl Signature {
         Ok(Self {
             n: g.n,
             anchored: g.anchored[0],
+            spacing: g.dx.map(f64::to_bits),
             faces,
         })
     }
     pub(crate) fn matches(&self, g: &Grid) -> bool {
-        if self.n != g.n || self.anchored != g.anchored[0] {
+        if self.n != g.n || self.anchored != g.anchored[0] || self.spacing != g.dx.map(f64::to_bits)
+        {
             return false;
         }
         let mut stored = self.faces.iter();
@@ -238,9 +278,18 @@ impl Transfer {
         periodic: [bool; 3],
         extent: [f64; 3],
     ) -> (Self, [Vec<f64>; 3]) {
+        Self::build_selected(n, centers, periodic, extent, n.map(|v| v > 2))
+    }
+    fn build_selected(
+        n: [usize; 3],
+        centers: &[Vec<f64>; 3],
+        periodic: [bool; 3],
+        extent: [f64; 3],
+        coarsen: [bool; 3],
+    ) -> (Self, [Vec<f64>; 3]) {
         let coarse: [Vec<f64>; 3] = std::array::from_fn(|a| {
             centers[a]
-                .chunks(if n[a] <= 2 { 1 } else { 2 })
+                .chunks(if coarsen[a] { 2 } else { 1 })
                 .map(|s| s.iter().sum::<f64>() / s.len() as f64)
                 .collect()
         });
@@ -345,6 +394,7 @@ struct Level {
     // Dense lower Cholesky at the terminal level, with one gauge removed if closed.
     cholesky: Vec<f64>,
     anchored: bool,
+    lines: Vec<BlockSmoother>,
 }
 fn center(x: &mut [f64], anchored: bool) {
     if !anchored {
@@ -365,6 +415,7 @@ impl Level {
             residual: vec![0.0; n],
             cholesky: vec![],
             anchored,
+            lines: vec![],
         }
     }
     fn factor(&mut self) -> Result<()> {
@@ -430,6 +481,7 @@ pub(crate) struct Hierarchy {
 impl Hierarchy {
     pub fn build(g: &Grid, control: &Control) -> Result<Self> {
         let mut n = g.n;
+        let axes = line_axes(g.n, g.dx);
         let mut centers: [Vec<f64>; 3] =
             std::array::from_fn(|a| (0..n[a]).map(|i| i as f64 + 0.5).collect());
         let extent = n.map(|v| v as f64);
@@ -450,7 +502,9 @@ impl Hierarchy {
             }
         }
         let mut levels = Vec::new();
+        let mut dimensions = Vec::new();
         loop {
+            dimensions.push(n);
             control.check()?;
             let matrix = Matrix::build(&edges, &anchors);
             let count = anchors.len();
@@ -460,16 +514,50 @@ impl Hierarchy {
                 levels.push(last);
                 break;
             }
-            let (transfer, coarse) = Transfer::build(n, &centers, periodic, extent);
+            let (transfer, coarse) = if axes.is_empty() {
+                Transfer::build(n, &centers, periodic, extent)
+            } else {
+                // Preserve weak-axis modes until stiff directions have collapsed.
+                // Once they have only two cells, exact small line/plane blocks
+                // allow the remaining weak directions to coarsen safely.
+                let stiff_can_coarsen = axes.iter().any(|a| n[*a] > 2);
+                let coarsen =
+                    std::array::from_fn(|a| n[a] > 2 && (!stiff_can_coarsen || axes.contains(&a)));
+                Transfer::build_selected(n, &centers, periodic, extent, coarsen)
+            };
+            let groups = if axes.is_empty() {
+                vec![]
+            } else if axes.len() > 1 && axes.iter().map(|a| n[*a]).product::<usize>() <= 16 {
+                vec![axes.clone()]
+            } else {
+                vec![vec![
+                    *axes
+                        .iter()
+                        .min_by(|a, b| g.dx[**a].total_cmp(&g.dx[**b]))
+                        .unwrap(),
+                ]]
+            };
+            let lines = groups
+                .iter()
+                .map(|a| BlockSmoother::build(&matrix, n, a, periodic, control))
+                .collect::<Result<Vec<_>>>()?;
             n = coarse.each_ref().map(|v| v.len());
             let (coarse_edges, coarse_anchors) =
                 transfer.galerkin(&edges, &anchors, n.iter().product());
             edges = coarse_edges;
             centers = coarse;
-            levels.push(Level::new(matrix, transfer, anchored));
+            let mut level = Level::new(matrix, transfer, anchored);
+            level.lines = lines;
+            levels.push(level);
             anchors = coarse_anchors;
         }
         let stats = MultigridStats {
+            level_dimensions: dimensions,
+            block_smoothers: levels
+                .iter()
+                .enumerate()
+                .flat_map(|(i, l)| l.lines.iter().map(move |s| s.stats(i)))
+                .collect(),
             level_cells: levels.iter().map(|l| l.x.len()).collect(),
             level_nonzeros: levels
                 .iter()
@@ -480,6 +568,11 @@ impl Hierarchy {
                     .iter()
                     .map(|l| {
                         l.matrix.allocated_bytes()
+                            + l.lines.capacity() * std::mem::size_of::<BlockSmoother>()
+                            + l.lines
+                                .iter()
+                                .map(BlockSmoother::allocated_bytes)
+                                .sum::<usize>()
                             + l.transfer.allocated_bytes()
                             + 8 * (l.rhs.capacity()
                                 + l.x.capacity()
@@ -516,8 +609,19 @@ fn cycle(levels: &mut [Level], work: &mut MultigridWork) {
         return;
     }
     level.x.fill(0.0);
-    for _ in 0..SWEEPS {
-        level.matrix.sweep(&level.rhs, &mut level.x, false);
+    let sweeps = if level.lines.is_empty() { SWEEPS } else { 1 };
+    if !level.lines.is_empty() {
+        work.block_level_cell_visits += level.x.len() as u64;
+    }
+    for pass in 0..sweeps {
+        if level.lines.is_empty() {
+            level.matrix.sweep(&level.rhs, &mut level.x, false);
+        } else {
+            let i = pass % level.lines.len();
+            work.block_solves +=
+                level.lines[i].sweep(&level.matrix, &level.rhs, &mut level.x, false);
+            work.block_smoothing_cell_updates += level.x.len() as u64;
+        }
     }
     center(&mut level.x, level.anchored);
     level.matrix.product(&level.x, &mut level.residual);
@@ -539,12 +643,19 @@ fn cycle(levels: &mut [Level], work: &mut MultigridWork) {
             .map(|(j, w)| w * rest[0].x[j])
             .sum::<f64>();
     }
-    for _ in 0..SWEEPS {
-        level.matrix.sweep(&level.rhs, &mut level.x, true);
+    for pass in 0..sweeps {
+        if level.lines.is_empty() {
+            level.matrix.sweep(&level.rhs, &mut level.x, true);
+        } else {
+            let i = (sweeps - 1 - pass) % level.lines.len();
+            work.block_solves +=
+                level.lines[i].sweep(&level.matrix, &level.rhs, &mut level.x, true);
+            work.block_smoothing_cell_updates += level.x.len() as u64;
+        }
     }
     center(&mut level.x, level.anchored);
     let cells = level.x.len() as u64;
-    work.smoothing_cell_updates += 2 * SWEEPS as u64 * cells;
+    work.smoothing_cell_updates += 2 * sweeps as u64 * cells;
     work.residual_cell_updates += cells;
     work.restriction_cell_updates += cells;
     work.prolongation_cell_updates += cells;
@@ -669,59 +780,135 @@ mod tests {
     #[test]
     fn the_fixed_cycle_is_linear_symmetric_and_positive_on_its_entire_subspace() {
         for boundary in [Boundary::Wall, Boundary::Periodic, Boundary::Open] {
-            let g = grid([5, 3, 3], boundary);
-            let mut h = Hierarchy::build(&g, &Control::new(20.0)).unwrap();
-            let n = g.count();
-            let mut m = vec![vec![0.0; n]; n];
-            // Form the complete projected preconditioner, not just random probes.
-            for j in 0..n {
-                let mut e = vec![0.0; n];
-                let mut y = e.clone();
-                e[j] = 1.0;
-                center(&mut e, g.anchored[0]);
-                h.apply(&e, &mut y, &mut MultigridWork::default());
-                for i in 0..n {
-                    m[i][j] = y[i];
+            for scales in [[1., 1., 1.], [0.02, 1., 1.], [0.02, 1., 0.02]] {
+                let mut g = grid([5, 3, 3], boundary);
+                for (d, s) in g.dx.iter_mut().zip(scales) {
+                    *d *= s;
                 }
-            }
-            for (i, row) in m.iter().enumerate() {
-                for (j, &mij) in row.iter().enumerate() {
-                    close(mij, m[j][i]);
+                g.volume = g.dx.iter().product();
+                for f in &mut g.faces {
+                    f.area = g.volume / g.dx[f.axis];
+                    f.distance = g.dx[f.axis]
+                        * if f.kind == FaceKind::Interior {
+                            1.
+                        } else {
+                            0.5
+                        };
                 }
-            }
-            let anchored = g.anchored[0];
-            let rank = n - usize::from(!anchored);
-            let mut a = vec![vec![0.0; rank]; rank];
-            for i in 0..rank {
-                for j in 0..rank {
-                    // Basis e_i-e_last spans the closed compatible subspace.
-                    a[i][j] = if anchored {
-                        m[i][j]
-                    } else {
-                        m[i][j] - m[i][n - 1] - m[n - 1][j] + m[n - 1][n - 1]
-                    };
-                }
-            }
-            for i in 0..rank {
-                for j in 0..=i {
-                    let v = a[i][j] - (0..j).map(|k| a[i][k] * a[j][k]).sum::<f64>();
-                    if i == j {
-                        assert!(v > 0.0);
-                        a[i][j] = v.sqrt();
-                    } else {
-                        a[i][j] = v / a[j][j];
+
+                let mut h = Hierarchy::build(&g, &Control::new(20.0)).unwrap();
+                let n = g.count();
+                let mut m = vec![vec![0.0; n]; n];
+                // Form the complete projected preconditioner, not just random probes.
+                for j in 0..n {
+                    let mut e = vec![0.0; n];
+                    let mut y = e.clone();
+                    e[j] = 1.0;
+                    center(&mut e, g.anchored[0]);
+                    h.apply(&e, &mut y, &mut MultigridWork::default());
+                    for i in 0..n {
+                        m[i][j] = y[i];
                     }
                 }
+                for (i, row) in m.iter().enumerate() {
+                    for (j, &mij) in row.iter().enumerate() {
+                        close(mij, m[j][i]);
+                    }
+                }
+                let anchored = g.anchored[0];
+                let rank = n - usize::from(!anchored);
+                let mut a = vec![vec![0.0; rank]; rank];
+                for i in 0..rank {
+                    for j in 0..rank {
+                        // Basis e_i-e_last spans the closed compatible subspace.
+                        a[i][j] = if anchored {
+                            m[i][j]
+                        } else {
+                            m[i][j] - m[i][n - 1] - m[n - 1][j] + m[n - 1][n - 1]
+                        };
+                    }
+                }
+                for i in 0..rank {
+                    for j in 0..=i {
+                        let v = a[i][j] - (0..j).map(|k| a[i][k] * a[j][k]).sum::<f64>();
+                        if i == j {
+                            assert!(v > 0.0);
+                            a[i][j] = v.sqrt();
+                        } else {
+                            a[i][j] = v / a[j][j];
+                        }
+                    }
+                }
+                let r: Vec<_> = (0..n).map(|i| (0.73 * i as f64).sin()).collect();
+                let mut compatible = r.clone();
+                center(&mut compatible, anchored);
+                let mut y = vec![0.0; n];
+                h.apply(&compatible, &mut y, &mut MultigridWork::default());
+                for i in 0..n {
+                    close(y[i], (0..n).map(|j| m[i][j] * r[j]).sum());
+                }
+                assert!(compatible.iter().zip(y).map(|(a, b)| a * b).sum::<f64>() > 0.0);
             }
-            let r: Vec<_> = (0..n).map(|i| (0.73 * i as f64).sin()).collect();
-            let mut compatible = r.clone();
-            center(&mut compatible, anchored);
-            let mut y = vec![0.0; n];
-            h.apply(&compatible, &mut y, &mut MultigridWork::default());
-            for i in 0..n {
-                close(y[i], (0..n).map(|j| m[i][j] * r[j]).sum());
+        }
+    }
+    #[test]
+    fn semicoarse_operators_match_dense_galerkin_and_preserve_weak_axis_modes() {
+        for boundary in [Boundary::Wall, Boundary::Periodic, Boundary::Open] {
+            for scales in [[1., 1., 0.02], [0.02, 1., 0.02]] {
+                let mut g = grid([9, 3, 7], boundary);
+                for (dx, scale) in g.dx.iter_mut().zip(scales) {
+                    *dx *= scale;
+                }
+                g.volume = g.dx.iter().product();
+                for f in &mut g.faces {
+                    f.area = g.volume / g.dx[f.axis];
+                    f.distance = g.dx[f.axis]
+                        * if f.kind == FaceKind::Interior {
+                            1.
+                        } else {
+                            0.5
+                        };
+                }
+                let h = Hierarchy::build(&g, &Control::new(20.)).unwrap();
+                let axes = line_axes(g.n, g.dx);
+                let mut a = dense(&g);
+                for (number, l) in h.levels.iter().enumerate() {
+                    let scale = a.iter().flatten().copied().map(f64::abs).fold(1., f64::max);
+                    for j in 0..a.len() {
+                        let mut x = vec![0.; a.len()];
+                        let mut y = x.clone();
+                        x[j] = 1.;
+                        l.matrix.product(&x, &mut y);
+                        for (row, value) in a.iter().zip(y) {
+                            assert!((row[j] - value).abs() <= 1e-12 * scale);
+                        }
+                    }
+                    if !l.transfer.offsets.is_empty() {
+                        let n = h.stats.level_dimensions[number];
+                        let next = h.stats.level_dimensions[number + 1];
+                        if axes.iter().any(|a| n[*a] > 2) {
+                            for a in 0..3 {
+                                if !axes.contains(&a) {
+                                    assert_eq!(n[a], next[a]);
+                                }
+                            }
+                        }
+                        let nc = next.iter().product();
+                        let mut coarse = vec![vec![0.; nc]; nc];
+                        for (i, row) in a.iter().enumerate() {
+                            for (j, &value) in row.iter().enumerate() {
+                                for (ci, wi) in l.transfer.row(i) {
+                                    for (cj, wj) in l.transfer.row(j) {
+                                        coarse[ci][cj] += wi * value * wj;
+                                    }
+                                }
+                            }
+                        }
+                        a = coarse;
+                    }
+                }
+                assert!(!h.stats.block_smoothers.is_empty());
             }
-            assert!(compatible.iter().zip(y).map(|(a, b)| a * b).sum::<f64>() > 0.0);
         }
     }
     #[test]

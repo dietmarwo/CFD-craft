@@ -475,6 +475,63 @@ def pressure_performance(report, title):
     return 0
 
 
+def anisotropy_performance(report, title):
+    lines = [
+        f"workflow valid {report.get('workflow_valid')}; candidate passed {report.get('candidate_passed')}",
+        "rough manufactured pressure; ratios require independent field recovery",
+    ]
+    for name, result in (report.get("results") or {}).items():
+        for method, group in (result.get("groups") or {}).items():
+            lines.append(
+                f"{name} {method}: qualifying {group.get('qualifying')}; "
+                f"iterations {group.get('iterations')}; cold/reused "
+                f"{number(group.get('cold_s'))}/{number(group.get('reused_s'))} s; "
+                f"RMS error {number(group.get('rms_error'), 12)}"
+            )
+        lines.append(
+            f"{name}: reused speedup {json.dumps(result.get('reused_speedup'))}"
+        )
+    lines += [
+        f"unaccepted {r.get('directory')}: {r.get('error') or r.get('errors')}"
+        for r in report.get("rows") or []
+        if not r.get("accepted")
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
+def anisotropic_flow(report, title):
+    lines = [
+        f"workflow valid {report.get('workflow_valid')}; passed {report.get('passed')}"
+    ]
+    for mode, result in (report.get("results") or {}).items():
+        meaning = (
+            "steady discrete solution"
+            if mode == "steady"
+            else "transient interval completion"
+        )
+        lines.append(
+            f"{mode}: {meaning}; stopped after warmup {result.get('stopped_after_unaccepted_warmup')}"
+        )
+        for method, group in (result.get("groups") or {}).items():
+            lines.append(
+                f"{method}: qualifying {group.get('qualifying')}; steps {group.get('steps')}; "
+                f"pressure iterations {group.get('iterations')}; solver/workflow "
+                f"{number(group.get('solver_s'))}/{number(group.get('workflow_s'))} s; "
+                f"Ghia error {number(group.get('reference_error'))}"
+            )
+        lines.append(
+            f"{mode}: IC(0)/multigrid {json.dumps(result.get('ic0_over_multigrid'))}"
+        )
+    lines += [
+        f"unaccepted {r.get('directory')}: {r.get('error') or r.get('equivalence_error')}"
+        for r in report.get("rows") or []
+        if not r.get("accepted")
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def evidence_archive(report, title):
     lines = [
         f"round trip identical {report.get('round_trip_identical')}; "
@@ -512,6 +569,10 @@ def main():
         return evidence_archive(report, title)
     if schema.startswith("cfd-craft.pressure-performance"):
         return pressure_performance(report, title)
+    if schema.startswith("cfd-craft.anisotropy-performance"):
+        return anisotropy_performance(report, title)
+    if schema.startswith("cfd-craft.anisotropic-flow"):
+        return anisotropic_flow(report, title)
     if "rows" in report:
         return resolution(report)
     if schema.startswith("cfd-craft.backend-performance"):

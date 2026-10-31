@@ -44,7 +44,7 @@ Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid c
 ## What is implemented
 
 - Uniform Cartesian finite volumes; staggered face velocities; deterministic box masks and fluid-component discovery.
-- Matrix-free pressure projection, one gauge per unanchored fluid component, cached IC(0) preconditioning (default), opt-in symmetric multigrid on unmasked grids, and an independent residual check.
+- Matrix-free pressure projection, one gauge per unanchored fluid component, cached IC(0) preconditioning (default), opt-in symmetric multigrid on unmasked grids with anisotropic line blocks/semicoarsening, and an independent residual check.
 - Laminar flow, moving tangential walls, donor-cell momentum advection and SSPRK2 stepping.
 - One neutral equilibrium k–epsilon package with rough-wall stress, k-based wall dissipation and a matching upper-boundary treatment.
 - Passive gas with linear upwind or bounded MUSCL/MC transport, diffusion, point/line/volume sources, and point or volume-average receptors.
@@ -58,12 +58,15 @@ The [native CPU performance results](docs/iterations/07-14-performance-results.m
 give paired pressure, stencil, step and CLI timings at fixed work, with the
 fields compared against the previous implementation and the memory cost. The
 paired runner is `validation/benchmark_native.py`; the frozen cases are in
-`cases/performance/`. On the recorded IC(0) lid-driven cavity workflow, timed
+`cases/performance/`. On the earlier IC(0) lid-driven cavity workflow, timed
 on one machine with one thread each, OpenFOAM is 4.7–5.5 times faster than
 native steady mode and closer to the reference
 ([backend comparison](validation/BACKEND_COMPARISON.md)). Opt-in multigrid
 reduces accepted native 48² cavity solver time by 2.44× in the
-[new pressure comparison](validation/PRESSURE_MULTIGRID_RESULTS.md).
+[original pressure comparison](validation/PRESSURE_MULTIGRID_RESULTS.md).
+The next iteration adds [anisotropic pressure results](validation/ANISOTROPIC_PRESSURE_RESULTS.md).
+The [current performance-gap status](validation/PERFORMANCE_GAP_STATUS.md)
+reports fresh native/OpenFOAM timings, accuracy and the remaining iterations.
 The opt-in [`profile` command and accuracy sweep](docs/PROFILING.md) attribute
 actual solver phases, retain incomplete grid-sweep rows and report cost at a
 declared error only when the target is reached. See the

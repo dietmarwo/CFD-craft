@@ -110,3 +110,14 @@ explicit, checkpoint-hashed selection. Masks are rejected, without fallback.
 Keep the fine operator, true residual and numerical gates unchanged. Use
 `validation/benchmark_pressure.py` to separate cold setup, reused pressure and
 accepted coupled cost; retain nonrepeating/unaccepted rows without a ratio.
+
+P2a adds spacing-selected exact principal line/small-plane blocks and
+semicoarsening above weight ratio 25; isotropic point arithmetic is retained.
+Cache identity compares spacing bits as well as faces; statistics keep their
+separate mutex. `benchmark_anisotropy.py` compares IC(0), merged point MG and
+the candidate on rough fields, including failures. `benchmark_anisotropic_flow.py`
+distinguishes steady acceptance from transient interval completion. See
+[results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md) and the
+[remaining P2b–P6 work](../validation/PERFORMANCE_GAP_STATUS.md).
+The accuracy sweep supports an explicitly recorded native preconditioner;
+do not confuse a same-grid ratio with cost at matched accuracy.

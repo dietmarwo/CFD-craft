@@ -4,10 +4,15 @@ name: CFD checks
   pull_request:
   workflow_dispatch:
     inputs:
-      external:
-        description: "External work: all existing checks, backend, resolution, mapping, refinement (accepted level 1, then up to three mapped/continued level-2 stages), comparison (same-host cavity timing of both backends), accuracy (24/48 cost/error sweep), or pressure (native IC(0)/multigrid campaign)"
+      native_pressure:
+        description: "Native preconditioner for the accuracy sweep"
         type: choice
-        options: [all, backend, resolution, mapping, refinement, comparison, accuracy, pressure]
+        options: [ic0, multigrid]
+        default: ic0
+      external:
+        description: "External work: all existing checks, backend, resolution, mapping, refinement, comparison, accuracy (24/48 cost/error), pressure (isotropic IC(0)/MG), or anisotropy (point/line MG kernels and coupled flow)"
+        type: choice
+        options: [all, backend, resolution, mapping, refinement, comparison, accuracy, pressure, anisotropy]
         default: all
 permissions:
   contents: read
@@ -176,7 +181,7 @@ jobs:
       # 600 s so the 48² baseline completes; the acceptance gates are unchanged.
       - run: |
           set +e
-          python validation/compare_backends.py --grid-sweep --levels 1 2 --sweep-rounds 3 --native-wall-s 600 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/accuracy-sweep
+          python validation/compare_backends.py --grid-sweep --levels 1 2 --sweep-rounds 3 --native-wall-s 600 --native-pressure-preconditioner "${{ inputs.native_pressure }}" --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/accuracy-sweep
           code=$?
           test ! -f runs/accuracy-sweep/report.json || python validation/external_notices.py runs/accuracy-sweep/report.json "cavity accuracy sweep"
           test "$code" -eq 0 -o "$code" -eq 2
@@ -239,8 +244,61 @@ jobs:
             runs/pressure/report.json
             runs/pressure-evidence.zip
             runs/pressure-archive.json
+  anisotropic-pressure:
+    if: github.event_name == 'workflow_dispatch' && inputs.external == 'anisotropy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python -m pip install -r requirements-validation.txt
+      - run: cargo build --release --locked --examples && cargo build --release --locked
+      - run: |
+          mkdir -p runs
+          git fetch --no-tags origin 2ddf17d617812940a26acf535d931f1353e98e65
+          git worktree add --detach runs/point-baseline 2ddf17d617812940a26acf535d931f1353e98e65
+          cp crates/cfd-craft/examples/pressure_probe.rs runs/point-baseline/crates/cfd-craft/examples/pressure_probe.rs
+          mkdir -p runs/point-baseline/crates/cfd-craft/src/multigrid
+          touch runs/point-baseline/crates/cfd-craft/src/multigrid/line.rs
+          cargo build --release --locked --manifest-path runs/point-baseline/Cargo.toml --example pressure_probe
+      - run: lscpu
+      - run: |
+          set +e
+          python validation/benchmark_anisotropy.py --baseline-probe runs/point-baseline/target/release/examples/pressure_probe --output runs/anisotropy/kernels
+          code=$?
+          test ! -f runs/anisotropy/kernels/report.json || python validation/external_notices.py runs/anisotropy/kernels/report.json "anisotropic pressure kernels"
+          test "$code" -eq 0
+      - run: |
+          set +e
+          python validation/benchmark_anisotropic_flow.py --output runs/anisotropy/flow
+          code=$?
+          test ! -f runs/anisotropy/flow/report.json || python validation/external_notices.py runs/anisotropy/flow/report.json "anisotropic coupled flow"
+          test "$code" -eq 0
+      - if: always()
+        run: |
+          test -d runs/anisotropy || exit 0
+          set +e
+          python validation/archive_evidence.py runs/anisotropy runs/anisotropy-evidence.zip > runs/anisotropy-archive.json
+          code=$?
+          python validation/external_notices.py runs/anisotropy-archive.json "anisotropy evidence archive"
+          test "$code" -eq 0
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: anisotropic-pressure-evidence
+          path: |
+            runs/anisotropy/kernels/report.json
+            runs/anisotropy/flow/report.json
+            runs/anisotropy-evidence.zip
+            runs/anisotropy-archive.json
   external-resolution:
-    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'pressure'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'pressure' && inputs.external != 'anisotropy'
     runs-on: ubuntu-24.04
     # Coarse reference + up to three fine executions, with audit/upload overhead.
     timeout-minutes: 360
@@ -380,6 +438,10 @@ jobs:
       - run: python -O validation/test_benchmark_native.py -v
       - run: python validation/test_benchmark_pressure.py -v
       - run: python -O validation/test_benchmark_pressure.py -v
+      - run: python validation/test_benchmark_anisotropy.py -v
+      - run: python -O validation/test_benchmark_anisotropy.py -v
+      - run: python validation/test_benchmark_anisotropic_flow.py -v
+      - run: python -O validation/test_benchmark_anisotropic_flow.py -v
       - run: cargo build --release --locked --example performance_probe
       - run: target/release/examples/performance_probe cases/verification/periodic-tracer.json pressure 2 2 1 json runs/native-pressure-probe.json
       # The paired runner against the real probe in every mode: a self-comparison

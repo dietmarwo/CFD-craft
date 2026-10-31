@@ -236,12 +236,54 @@ def check(root):
         ]
         require(isinstance(multigrid, dict), "work.multigrid", "expected object")
         require(
-            set(multigrid) == set(fields),
+            set(fields).issubset(multigrid)
+            and set(multigrid).issubset(
+                set(fields)
+                | {
+                    "block_smoothing_cell_updates",
+                    "block_solves",
+                    "block_level_cell_visits",
+                }
+            ),
             "work.multigrid",
             "unexpected or missing fields",
         )
         for field in fields:
             number(multigrid[field], f"work.multigrid.{field}", integer=True)
+        line_fields = [
+            "block_smoothing_cell_updates",
+            "block_solves",
+            "block_level_cell_visits",
+        ]
+        require(
+            all(f in multigrid for f in line_fields)
+            or all(f not in multigrid for f in line_fields),
+            "work.multigrid.block",
+            "block counters must occur together",
+        )
+        for field in line_fields:
+            number(multigrid.get(field, 0), f"work.multigrid.{field}", integer=True)
+        line_updates = multigrid.get("block_smoothing_cell_updates", 0)
+        line_solves = multigrid.get("block_solves", 0)
+        block_visits = multigrid.get("block_level_cell_visits", 0)
+        require(
+            (line_updates == line_solves == 0)
+            or (
+                0
+                < 2 * line_solves
+                <= line_updates
+                <= multigrid["smoothing_cell_updates"]
+            ),
+            "work.multigrid.block",
+            "block work exceeds total smoothing or has no solves",
+        )
+
+        require(
+            line_updates == 2 * block_visits
+            and block_visits <= multigrid["residual_cell_updates"],
+            "work.multigrid.block",
+            "block passes differ from fixed two-sweep work",
+        )
         require(
             multigrid["cycles"]
             == linear.get("preconditioner_applications", 0)
@@ -260,7 +302,7 @@ def check(root):
             == multigrid["restriction_cell_updates"]
             == multigrid["prolongation_cell_updates"]
             and multigrid["smoothing_cell_updates"]
-            == 4 * multigrid["residual_cell_updates"],
+            == 4 * multigrid["residual_cell_updates"] - 2 * block_visits,
             "work.multigrid.updates",
             "fixed-cycle work differs",
         )

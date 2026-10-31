@@ -402,7 +402,13 @@ impl Case {
         // This is a conservative preflight allowance, not measured process RSS.
         let multigrid_bytes =
             if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid {
+                let dx = std::array::from_fn(|a| self.domain.size_m[a] / self.grid.cells[a] as f64);
                 1024.0
+                    + if crate::multigrid::line_axes(self.grid.cells, dx).is_empty() {
+                        0.0
+                    } else {
+                        512.0
+                    }
             } else {
                 0.0
             };
@@ -486,31 +492,18 @@ impl Case {
             );
         }
         if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid {
-            // Point smoothing with full coarsening degrades when face weights 1/dx^2
-            // differ strongly between coarsened axes (more than two cells): in a
-            // shape sweep, multigrid was slower than IC(0) above a ratio of 25.
-            let weights: Vec<f64> = (0..3)
-                .filter(|&a| self.grid.cells[a] > 2)
-                .map(|a| {
-                    let dx = self.domain.size_m[a] / self.grid.cells[a] as f64;
-                    1.0 / (dx * dx)
-                })
-                .collect();
-            if weights.len() >= 2 && weights.iter().all(|w| w.is_finite() && *w > 0.0) {
-                let ratio = weights.iter().cloned().fold(0.0, f64::max)
-                    / weights.iter().cloned().fold(f64::INFINITY, f64::min);
-                if ratio > 25.0 {
-                    add(
-                        "CFD-W004",
-                        "warning",
-                        "numerics.pressure_preconditioner",
-                        &format!(
-                            "Pressure face weights differ by a factor of {ratio:.0} between axes of more than two cells; multigrid can then be slower than ic0 or stop at the pressure iteration limit (CFD-E033). Compare with ic0."
-                        ),
-                    );
-                }
+            let dx = std::array::from_fn(|a| self.domain.size_m[a] / self.grid.cells[a] as f64);
+            let axes = crate::multigrid::line_axes(self.grid.cells, dx);
+            if !axes.is_empty() {
+                add(
+                    "CFD-W004",
+                    "warning",
+                    "numerics.pressure_preconditioner",
+                    "Strong pressure anisotropy selects symmetric line-block smoothing with additional setup and memory; compare measured cost with ic0. Extreme anisotropy can still reach the pressure limit (CFD-E033).",
+                );
             }
         }
+
         for a in 0..3 {
             if !(self.domain.size_m[a].is_finite()
                 && self.domain.size_m[a] >= 1e-6

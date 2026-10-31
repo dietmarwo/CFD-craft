@@ -36,7 +36,11 @@ The [backend comparison](../validation/BACKEND_COMPARISON.md) times the cavity
 with both backends on one machine: OpenFOAM is 4.7–5.5 times faster than native
 steady mode, mostly because the native method needs about three times as many
 explicit pseudo-time steps, each with a PCG pressure solve. A steady algorithm
-and masked/anisotropy-robust extensions of the optional multigrid preconditioner are the next native candidates. Accepted
+and masked extensions of the optional multigrid preconditioner are the next
+native candidates. The anisotropic line/semicoarsening substep is implemented;
+its [results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md) and a fresh
+[gap status and iteration list](../validation/PERFORMANCE_GAP_STATUS.md)
+separate throughput from accuracy. Accepted
 fine-grid and experimental-validation gates remain open.
 
 ## First-release definition

@@ -36,8 +36,11 @@ give paired timings of these kernels at fixed work.
 Projection residuals, actual face-flux continuity and boundary balance are separate checks. An opt-in [symmetric multigrid preconditioner](../PRESSURE_MULTIGRID.md) supports
 unmasked grids with Galerkin coarse operators and a direct coarse solve. The
 fine equation, projection and residual gates are unchanged; masks still use
-IC(0). Robust anisotropy, general sparse direct factorization and MPI remain
-open. Experimental model qualification is unchanged.
+IC(0). Strong unequal spacings select symmetric principal line/small-plane
+blocks and semicoarsening, with a setup/memory warning; see the
+[measured anisotropy coverage](../../validation/ANISOTROPIC_PRESSURE_RESULTS.md).
+Component-preserving masked multigrid, general sparse direct factorization and
+MPI remain open. Experimental model qualification is unchanged.
 
 ## Neutral turbulence package
 

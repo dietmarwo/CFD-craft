@@ -42,6 +42,7 @@ fn source_identity() -> String {
         include_bytes!("../src/pressure.rs").as_slice(),
         include_bytes!("../src/grid.rs").as_slice(),
         include_bytes!("../src/multigrid.rs").as_slice(),
+        include_bytes!("../src/multigrid/line.rs").as_slice(),
         include_bytes!("../src/flow.rs").as_slice(),
         include_bytes!("../src/transport.rs").as_slice(),
         include_bytes!("../src/solver.rs").as_slice(),

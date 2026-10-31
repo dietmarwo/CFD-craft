@@ -86,6 +86,40 @@ class Profiling(unittest.TestCase):
                 (self.root / "plain-mg" / name).read_bytes(),
             )
 
+    def test_anisotropic_block_work_is_recorded_and_validated(self):
+        self.case = json.loads(
+            (ROOT / "cases/verification/lid-cavity.json").read_text()
+        )
+        self.case["grid"]["cells"] = [12, 4, 12]
+        self.case["domain"]["size_m"] = [1.0, 1.0, 0.1]
+        self.case["run"].update(threads=1, end_time_s=0.002)
+        self.case["numerics"]["pressure_preconditioner"] = "multigrid"
+        out = self.profile()
+        self.assertTrue(check(out)["integrity_passed"])
+        path = out / "profile.json"
+        original = json.loads(path.read_text())
+        work = original["timing"]["phases"]["pressure_solve"]["multigrid"]
+        self.assertGreater(work["block_solves"], 0)
+        self.assertEqual(
+            work["block_smoothing_cell_updates"], work["smoothing_cell_updates"]
+        )
+        for field, value in [
+            ("block_solves", 0),
+            ("block_smoothing_cell_updates", True),
+            ("block_smoothing_cell_updates", work["smoothing_cell_updates"] + 1),
+        ]:
+            changed = copy.deepcopy(original)
+            changed["timing"]["phases"]["pressure_solve"]["multigrid"][field] = value
+            path.write_text(json.dumps(changed))
+            with self.assertRaisesRegex(ValueError, "CFD-B003 profile.work.multigrid"):
+                check(out)
+        changed = copy.deepcopy(original)
+        del changed["timing"]["phases"]["pressure_solve"]["multigrid"]["block_solves"]
+        path.write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ValueError, "CFD-B003 profile.work.multigrid"):
+            check(out)
+        path.write_text(json.dumps(original))
+
     def test_profile_and_plain_return_identical_archived_fields(self):
         plain = self.invoke("run", "plain")
         self.assertEqual(plain.returncode, 0, plain.stderr)

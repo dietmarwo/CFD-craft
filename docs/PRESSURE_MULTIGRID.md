@@ -5,12 +5,12 @@ Multigrid currently accepts unmasked Cartesian cases. A geometry mask is a case
 error (`CFD-E034`), with no automatic fallback. Laminar and neutral-RANS pressure
 use the same constant-density operator; no flow, scalar or turbulence model is
 changed. Prescribed-flow runs bypass pressure and gain no acceleration from this
-selection. Unequal spacings are correct algebraically, but the point smoother
-and full coarsening are not robust to strong anisotropy: when face weights 1/dx²
-differ by more than 25 between axes of more than two cells, `check` warns
-(`CFD-W004`). Such cases were slower than IC(0), and extreme ones can stop at the
-pressure iteration limit (`CFD-E033`); see the
-[shape sweep](../validation/PRESSURE_MULTIGRID_RESULTS.md#shape-sweep-where-multigrid-is-slower).
+selection. Strong anisotropy now selects exact principal-line/small-plane
+relaxation and semicoarsening. `check` warns (`CFD-W004`) about its extra setup
+and memory cost; compare total time with IC(0). This extends the original point
+smoother, whose [historical shape sweep](../validation/PRESSURE_MULTIGRID_RESULTS.md#shape-sweep-where-multigrid-is-slower)
+showed poor convergence. Read the [anisotropy results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md)
+for measured coverage and limitations; extreme aspect ratios are not guaranteed.
 
 ## Use it
 
@@ -62,7 +62,7 @@ independent final face-by-face residual use current grid coefficients, including
 duplicate two-cell periodic faces. The final tolerance remains
 `10 * pressure_relative_tolerance + 1e-12`, relative to the compatible RHS.
 
-The hierarchy groups consecutive cells in pairs along each axis; an odd last
+The point hierarchy groups consecutive cells in pairs along each axis; an odd last
 group has one cell. Directions with at most two cells are retained, so the two
 span layers of the cavity keep separate coarse degrees of freedom. Coarse
 centers are the pair's mean location. Transfers are tensor products of linear
@@ -83,11 +83,41 @@ couplings can have either sign: treating every coarse edge as a positive physica
 face would be incorrect. Coarse diagonal positivity follows from Galerkin, not
 from an assumption that every coarse off-diagonal is negative.
 
-Every application starts from zero and uses exactly:
+Every application starts from zero. Point levels use exactly:
 
 1. Two forward Gauss–Seidel sweeps.
 2. A residual, transpose restriction and one recursive coarse correction.
 3. Linear prolongation and two backward Gauss–Seidel sweeps.
+
+### Anisotropic levels
+
+At setup, calculate fine weights `w[a] = 1/dx[a]^2`. Compare their largest value
+(including two-cell axes) with the smallest value among axes having more than
+two cells. If the ratio exceeds 25, select stiff axes within a factor four of
+the largest weight. A weak two-cell span alone therefore does not trigger
+blocks; a stiff two-cell span does. This policy uses declared uniform spacings,
+not an adaptive residual estimate, and selects at most two stiff axes.
+
+Coarsen the stiff axes first, retaining every weak-axis sample. When those
+axes reach two cells, coarsen the remaining weak axes. Transfers still interpolate
+linearly, restrict by their exact transpose and form the Galerkin operator.
+The policy and hierarchy remain fixed during PCG. It is a conservative first
+policy, not an automatically tuned optimal hierarchy.
+
+On each nonterminal anisotropic level, one forward block sweep and one backward
+block sweep surround the coarse correction. Normally a block is a full line in
+the strongest direction. When two stiff axes together have at most 16 unknowns,
+use their joint small plane instead, so both retained stiff directions can be
+solved together. Each block solves the **actual principal matrix**, including
+Galerkin fill and duplicate periodic contributions, against the latest outside
+values. The fine equation is never replaced by a line approximation.
+
+Factor each band block once by Cholesky; retain outside-block CSR rows and reuse
+scratch. Fold periodic ordering `0, n-1, 1, n-2, ...` to avoid a dense cyclic band.
+Determine the bandwidth from actual entries. Both adjoint triangular solves use
+the same stored diagonal reciprocals. A nonpositive/nonfinite pivot is
+`CFD-E036`, with no shift or fallback. Dense pivoted Gaussian references test
+forward and reverse sweeps on odd, periodic, outlet and small-plane fixtures.
 
 At at most 32 cells, dense Cholesky solves the anchored system directly. For a
 closed system, one pressure value is removed before factoring; compatible RHSs
@@ -115,11 +145,21 @@ PCG requires a fixed symmetric positive preconditioner on the solved subspace
   orthogonal and only remove the known constant mode.
 - All work and coefficients are fixed within each outer solve.
 
+Block levels replace positive scalar diagonals by SPD principal blocks. Exact
+block factor solves and reverse block order give the same symmetric positive
+composition. The fixed one-pair block cycle and two-pair point cycle are both
+tested as complete matrices on the compatible subspace, including periodic
+and outlet anisotropic cases. Independent dense Galerkin tests also verify
+that semicoarsening preserves the retained weak-axis modes.
+
 These are the mathematical conditions. Tests also assemble the entire small
 preconditioner and Cholesky-factor its compatible-subspace matrix; such finite
 checks supplement the argument. This cycle differs from the standalone,
 potentially nonsymmetric/scaled GAMG settings in the OpenFOAM recipe. No
 OpenFOAM or other separately licensed solver code is copied into the core.
+The line/semicoarsening approach is consistent with the numerical motivation
+in [hypre's structured multigrid documentation](https://hypre.readthedocs.io/en/latest/solvers-smg-pfmg.html);
+this implementation has its own transfers, blocks and PCG contract.
 
 ## Reuse, memory and profiling
 
@@ -129,7 +169,9 @@ grid serialize these solves. Cloned grids safely share the cache. The cache keep
 the grid size, gauge and every interior or outlet face's cells and pressure
 weight from its build (32 bytes per such face, not counted in `allocated_bytes`)
 and compares them exactly before each solve; any changed public face coefficient
-rebuilds the hierarchy. Changing topology should rebuild the grid. No cycle
+rebuilds the hierarchy. The exact cache signature now also compares spacing bits,
+which determine block selection; it does not hash the full grid per solve.
+Changing topology should rebuild the grid. No cycle
 allocates inside PCG; setup allocations are separate.
 
 `pressure::multigrid_stats` reads a separate copy of the statistics and never
@@ -137,21 +179,28 @@ waits for a running solve, so a `Control::with_poll` callback may call it. A pol
 callback must not itself run a pressure solve on the same grid or a clone of it:
 that solve would wait for the running one.
 
-Case preflight adds 1024 bytes per cell before the existing 25% safety margin
-for the hierarchy and its construction peak. This conservative allowance differs
+Case preflight adds 1024 bytes per cell for the point hierarchy, and a further
+512 bytes per cell when the block policy is active, before the existing 25%
+safety margin. These cover retained storage and construction peak conservatively.
+This allowance differs
 from `allocated_bytes`, which counts retained numeric/index vector capacities and level
 records, excludes reporting/cache handles and allocator overhead and excludes the grid/outer PCG vectors.
 The stats list per-level cells and nonzeros (including diagonals and stored
 duplicate fine entries). Sum them relative to the fine level to inspect grid
-and operator complexity. Process peak RSS includes the complete child and is
+and operator complexity. `level_dimensions` makes semicoarsening visible.
+`block_smoothers` records each level's axes, block size/count, half-bandwidth
+and retained bytes. Process peak RSS includes the complete child and is
 reported separately when GNU time is available.
 
 Profiling records `pressure_multigrid_setup` only when construction is attempted.
 The `pressure_solve.multigrid` object counts hierarchy builds, maximum hierarchy
 dimensions/storage, cycles, coarse solves and cell updates for smoothing,
 residuals, restriction and prolongation. Each coarse solve belongs to one
-cycle. Nonterminal cell updates satisfy smoothing = 4 × residual, and
-restriction = prolongation = residual. These are cell visits, not floating-point
+cycle. Point-only profiles retain their old shape and `smoothing = 4 × residual`.
+Block profiles add `block_smoothing_cell_updates`, `block_solves` and
+`block_level_cell_visits`. They satisfy `block_smoothing = 2 × block_visits` and
+`smoothing = 4 × residual - 2 × block_visits`; restriction = prolongation =
+residual still holds. These are cell visits, not floating-point
 operation or transfer-nonzero counts. The existing fine operator and PCG work
 counters keep their meanings. The profile checker validates both sets, including
 failure paths. IC(0) profiles retain their previous serialized shape.
@@ -178,10 +227,29 @@ Rows, failures, input/producer identities, work, fields and RSS are retained;
 nonrepeating or unaccepted groups have no speedup ratio. Setup and solver/workflow
 times have distinct scopes. The baseline IC(0) probe runner is unchanged.
 
-The opt-in **CFD checks** selector `external=pressure` runs this native campaign
+The opt-in **CFD checks** selector `external=pressure` runs this original campaign
 and packages evidence with directory entries and archive round-trip checks.
 See [recorded results](../validation/PRESSURE_MULTIGRID_RESULTS.md) and the
 [plan](iterations/18-pressure-multigrid-plan.md). No timing threshold is imposed
-in ordinary CI. Masked-grid multigrid, robust anisotropy, momentum accuracy and
+in ordinary CI. Masked-grid multigrid, broader anisotropy coverage, momentum accuracy and
 implicit/steady flow algorithms remain separate follow-ups. This change alone
 does not qualify a canyon model or establish OpenFOAM parity.
+
+The new selector `external=anisotropy` runs the three-method rough-pressure suite
+and the coupled 64x2x12 steady/transient checks. It builds the merged point core
+at `2ddf17d` with only the shared probe and an unused empty source marker as
+measurement overlays. Locally, pass that probe to
+`python validation/benchmark_anisotropy.py --baseline-probe PATH --output NEW_DIR`;
+run `python validation/benchmark_anisotropic_flow.py --output NEW_DIR` separately.
+The frozen rough suite uses tolerance 1e-14, RMS recovery <=1e-8, true residual
+<=1.1e-12 and at most 1200 PCG iterations. It retains every failed row and gives
+no ratio to an unqualified method. Cold setup and reused solves are distinct.
+The coupled test retains the existing flow gates and distinguishes steady
+convergence from transient interval completion.
+
+`compare_backends.py --grid-sweep --native-pressure-preconditioner multigrid`
+records this selection in its immutable accuracy plan. Its default remains
+`ic0`; the legacy comparison rejects this option outside grid-sweep mode.
+Hosted runs can select `external=accuracy, native_pressure=multigrid`.
+See the [iteration plan](iterations/19-anisotropic-pressure-plan.md) and
+[remaining gap and work](../validation/PERFORMANCE_GAP_STATUS.md).

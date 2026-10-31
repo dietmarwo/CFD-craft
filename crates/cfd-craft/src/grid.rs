@@ -37,6 +37,8 @@ pub struct Grid {
     offsets: [usize; 3],
     pub box_cells: BTreeMap<String, usize>,
     pub pressure_factor: std::sync::OnceLock<crate::pressure::Factor>,
+    pub pressure_preconditioner: PressurePreconditioner,
+    pub(crate) pressure_multigrid: std::sync::Arc<crate::multigrid::Cache>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryEvidence {
@@ -93,6 +95,8 @@ impl Grid {
             offsets: [0; 3],
             box_cells: BTreeMap::new(),
             pressure_factor: std::sync::OnceLock::new(),
+            pressure_preconditioner: c.numerics.pressure_preconditioner,
+            pressure_multigrid: Default::default(),
         };
         let mut box_cells = vec![0usize; c.geometry.len()];
         for i in 0..count {

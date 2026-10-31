@@ -174,6 +174,7 @@ fn describe() -> Result<()> {
         "source_sha256":env!("CFD_SOURCE_SHA"),"compiler":env!("CFD_RUSTC"),
         "physics":["prescribed_uniform","laminar","neutral_rans"],
         "scalar_advection":["linear_upwind","muscl"],"pressure":"matrix_free_ic0_pcg",
+        "pressure_preconditioners":["ic0","multigrid"],"default_pressure_preconditioner":"ic0",
         "case_schema":schemars::schema_for!(Case),"result_schema":schemars::schema_for!(Summary),
         "phase_profile_schema":schemars::schema_for!(Profile),
         "profiling":"profile CASE --output NEW_DIR: native archive in run/, versioned profile.json alongside it",

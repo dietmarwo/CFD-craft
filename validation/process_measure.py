@@ -8,20 +8,50 @@ import subprocess
 import time
 
 
-def members(group):
-    """Live (not zombie) processes of a process group, from /proc."""
-    found = []
-    for stat in Path("/proc").glob("[0-9]*/stat"):
+def live_processes(proc=Path("/proc")):
+    """Namespace-local (PID, process group) pairs for live processes.
+
+    A container can inherit an ancestor's procfs mount. Its stat PIDs/groups then
+    differ from getpid()/killpg(); NSpid/NSpgid provide the local IDs. Matching
+    the PID namespace first prevents aliases from another container's group.
+    """
+    try:
+        namespace = os.readlink(proc / "self/ns/pid")
+    except OSError as exc:
+        raise ValueError(
+            "CFD-B004 sweep.process.namespace: PID namespace unavailable"
+        ) from exc
+    for stat in proc.glob("[0-9]*/stat"):
         try:
+            if os.readlink(stat.parent / "ns/pid") != namespace:
+                continue
             text = stat.read_text()
+            fields = text[text.rindex(")") + 2 :].split()
+            if fields[0] in "ZX":
+                continue
+            status = {
+                line.split(":", 1)[0]: line.split(":", 1)[1].split()
+                for line in (stat.parent / "status").read_text().splitlines()
+                if line.startswith(("NSpid:", "NSpgid:"))
+            }
         except OSError:
-            continue
-        # The command name may contain spaces and parentheses; fields follow
-        # the last ")": state, parent, group.
-        fields = text[text.rindex(")") + 2 :].split()
-        if int(fields[2]) == group and fields[0] not in "ZX":
-            found.append(int(stat.parent.name))
-    return found
+            continue  # A process can disappear between any of these reads.
+        try:
+            pid, group = int(status["NSpid"][-1]), int(status["NSpgid"][-1])
+            if pid <= 0 or group < 0:
+                raise ValueError("invalid identity")
+            if group == 0:
+                continue  # An inherited ancestor group has no local group ID.
+        except (KeyError, IndexError, ValueError) as exc:
+            raise ValueError(
+                "CFD-B004 sweep.process.namespace: local PID/group metadata unavailable"
+            ) from exc
+        yield pid, group
+
+
+def members(group, proc=Path("/proc")):
+    """Live (not zombie) members, identified in the caller's PID namespace."""
+    return [pid for pid, pgid in live_processes(proc) if pgid == group]
 
 
 def stop_group(group, grace_s=5.0):

@@ -43,6 +43,49 @@ class Profiling(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         return self.root / "profile"
 
+    def test_multigrid_work_is_bound_to_the_case_and_fixed_cycle(self):
+        self.case = json.loads(
+            (ROOT / "cases/verification/lid-cavity.json").read_text()
+        )
+        self.case["grid"]["cells"] = [8, 2, 8]
+        self.case["run"]["threads"] = 1
+        self.case["run"]["end_time_s"] = 0.02
+        self.case["numerics"]["pressure_preconditioner"] = "multigrid"
+        out = self.profile()
+        self.assertTrue(check(out)["integrity_passed"])
+        path = out / "profile.json"
+        original = json.loads(path.read_text())
+        work = original["timing"]["phases"]["pressure_solve"]["multigrid"]
+        self.assertEqual(work["hierarchy_builds"], 1)
+        self.assertGreater(work["cycles"], 0)
+        for field in [
+            "cycles",
+            "hierarchy_builds",
+            "smoothing_cell_updates",
+            "coarse_solves",
+            "restriction_cell_updates",
+        ]:
+            with self.subTest(field=field):
+                changed = copy.deepcopy(original)
+                changed["timing"]["phases"]["pressure_solve"]["multigrid"][field] += 1
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(
+                    ValueError, "CFD-B003 profile.work.multigrid"
+                ):
+                    check(out)
+        changed = copy.deepcopy(original)
+        del changed["timing"]["phases"]["pressure_solve"]["multigrid"]
+        path.write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ValueError, "CFD-B003 profile.work.multigrid"):
+            check(out)
+        path.write_text(json.dumps(original))
+        self.assertEqual(self.invoke("run", "plain-mg").returncode, 0)
+        for name in ["fields.json", "checkpoint.json", "case.json", "probes.csv"]:
+            self.assertEqual(
+                (out / "run" / name).read_bytes(),
+                (self.root / "plain-mg" / name).read_bytes(),
+            )
+
     def test_profile_and_plain_return_identical_archived_fields(self):
         plain = self.invoke("run", "plain")
         self.assertEqual(plain.returncode, 0, plain.stderr)

@@ -211,6 +211,75 @@ def check(root):
         "a run that ended without an error retains every attempted step",
     )
     linear = phases.get("pressure_solve", {})
+    multigrid = linear.get("multigrid")
+    selected = regular(archive / "case.json")["numerics"].get(
+        "pressure_preconditioner", "ic0"
+    )
+    if multigrid is not None:
+        require(
+            selected == "multigrid",
+            "work.multigrid",
+            "case selects another preconditioner",
+        )
+        fields = [
+            "hierarchy_builds",
+            "hierarchy_levels",
+            "hierarchy_cells",
+            "hierarchy_nonzeros",
+            "hierarchy_bytes",
+            "cycles",
+            "smoothing_cell_updates",
+            "residual_cell_updates",
+            "restriction_cell_updates",
+            "prolongation_cell_updates",
+            "coarse_solves",
+        ]
+        require(isinstance(multigrid, dict), "work.multigrid", "expected object")
+        require(
+            set(multigrid) == set(fields),
+            "work.multigrid",
+            "unexpected or missing fields",
+        )
+        for field in fields:
+            number(multigrid[field], f"work.multigrid.{field}", integer=True)
+        require(
+            multigrid["cycles"]
+            == linear.get("preconditioner_applications", 0)
+            == multigrid["coarse_solves"],
+            "work.multigrid.cycles",
+            "cycle/application/coarse-solve counts differ",
+        )
+        require(
+            multigrid["hierarchy_builds"] == calls.get("pressure_multigrid_setup", 0)
+            and not calls.get("pressure_factor_setup", 0),
+            "work.multigrid.hierarchy_builds",
+            "setup counts differ or IC(0) fallback occurred",
+        )
+        require(
+            multigrid["residual_cell_updates"]
+            == multigrid["restriction_cell_updates"]
+            == multigrid["prolongation_cell_updates"]
+            and multigrid["smoothing_cell_updates"]
+            == 4 * multigrid["residual_cell_updates"],
+            "work.multigrid.updates",
+            "fixed-cycle work differs",
+        )
+        require(
+            (
+                multigrid["hierarchy_levels"] > 0
+                and multigrid["hierarchy_nonzeros"] >= multigrid["hierarchy_cells"] > 0
+                and multigrid["hierarchy_bytes"] > 0
+            )
+            or (stopped and multigrid["cycles"] == 0),
+            "work.multigrid.hierarchy",
+            "missing hierarchy dimensions/storage",
+        )
+    else:
+        require(
+            selected != "multigrid" or not calls.get("pressure_solve", 0),
+            "work.multigrid",
+            "missing selected preconditioner work",
+        )
     pressure = linear.get("work_units", 0)
     require(
         linear.get("operator_applications", 0)

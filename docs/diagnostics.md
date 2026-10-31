@@ -65,6 +65,8 @@ more than the host can hold.
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
 | CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
 | CFD-E030 | error | The geometry leaves no fluid cells |
+| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid was selected with a mask; the library also rejects a masked/disconnected grid or nonpositive/nonfinite pressure weights |
+| CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
@@ -76,6 +78,7 @@ more than the host can hold.
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
 | CFD-W002 | warning | RANS blockage ratio above the COST 732 recommendation of 3 % |
 | CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
+| CFD-W004 | warning | `numerics.pressure_preconditioner`: multigrid with pressure face weights (1/dx²) differing by more than a factor of 25 between axes of more than two cells. Point smoothing with full coarsening then converges slowly: in a shape sweep multigrid was slower than IC(0) in wall time, and on 64×8×64 with a ratio of 2500 it exceeded 1200 PCG iterations (CFD-E033) where IC(0) needed about 200. See the [multigrid results](../validation/PRESSURE_MULTIGRID_RESULTS.md) |
 | CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
 W002 and W003 encode the COST 732 best-practice guideline (Franke et al., 2007) as summarized by secondary sources that cite it. The primary document was not retrieved from its distribution share; `validation/data-inventory.json` records that. They are warnings because best-practice distances depend on the scenario: a wind-tunnel reproduction may use the tunnel's own dimensions.
@@ -135,3 +138,15 @@ evidence, and 1 for a failed execution or invalid input
 |---|---|
 | CFD-B003 | `profile.*`: an active or incorrectly nested phase snapshot (`active`, `nesting`), an unwritable profile report (`output`), or a profile/archive identity, time-accounting or attempted-work mismatch named by its field path. |
 | CFD-B004 | `sweep.*`: invalid grid/limit/target/row fields, changed inputs (`inputs`), inconsistent repeated accepted work/fields/producer (`repeat.*`), a failed bounded child (`native.execution`, `openfoam.execution`), an occupied process-log destination (`process.output`), or an evidence zip that cannot be written, contains a symlink or an unsafe member, or holds an archive of unknown schema (`archive.*`). Unaccepted numerical rows remain recorded separately. |
+
+`CFD-B005 pressure_benchmark.<field>` identifies invalid pressure-comparison
+inputs, changed producers, failed or malformed child measurements, missing
+returned arrays, inconsistent work or repeats, failed independent recovery,
+cavity numerical/archive/reference gates or pressure/velocity equivalence.
+Rows retain the original measurement when a later check rejects them. Cold setup,
+reused pressure time, accepted solver time and workflow time are separate scopes.
+
+`CFD-B004 sweep.process.namespace` reports unavailable or invalid Linux procfs
+PID/group namespace metadata. Process cleanup uses local IDs from NSpid/NSpgid
+and checks namespace identity, rather than comparing ancestor procfs IDs with
+local `killpg` IDs.

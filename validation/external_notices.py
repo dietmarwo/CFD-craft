@@ -439,6 +439,42 @@ def accuracy_sweep(report, title):
     return 0
 
 
+def pressure_performance(report, title):
+    """IC(0) against multigrid: work, medians and ratios per kernel or cavity."""
+    lines = [f"passed {report.get('passed')}; rounds {report.get('rounds')}"]
+    if report.get("error"):
+        lines.append(f"error {report['error']}")
+    failed = [
+        r.get("directory") for r in report.get("rows") or [] if not r.get("passed")
+    ]
+    if failed:
+        lines.append("failed rows: " + ", ".join(map(str, failed)))
+    for name, result in (report.get("results") or {}).items():
+        groups = result.get("groups") or {}
+        ic0, mg = groups.get("ic0") or {}, groups.get("multigrid") or {}
+        ratios = result.get("ic0_over_multigrid") or {}
+        timers = ["cold_s", "reused_s"] if "kernel" in name else ["solver_s"]
+        line = (
+            f"{name}: iterations {ic0.get('iterations')}/{mg.get('iterations')}"
+            + "".join(
+                f"; {t} {number(ic0.get(t), 5)}/{number(mg.get(t), 5)}"
+                f" (x{number(ratios.get(t), 4)})"
+                for t in timers
+            )
+        )
+        if "steps" in ic0 or "steps" in mg:
+            line += (
+                f"; steps {ic0.get('steps')}/{mg.get('steps')}"
+                f"; Ghia error {number(ic0.get('reference_error'))}"
+                f"/{number(mg.get('reference_error'))}"
+            )
+        if not all(g.get("qualifying") for g in (ic0, mg)):
+            line += "; not qualifying"
+        lines.append(line)
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def evidence_archive(report, title):
     lines = [
         f"round trip identical {report.get('round_trip_identical')}; "
@@ -474,6 +510,8 @@ def main():
         return accuracy_sweep(report, title)
     if schema.startswith("cfd-craft.evidence-archive"):
         return evidence_archive(report, title)
+    if schema.startswith("cfd-craft.pressure-performance"):
+        return pressure_performance(report, title)
     if "rows" in report:
         return resolution(report)
     if schema.startswith("cfd-craft.backend-performance"):

@@ -41,6 +41,7 @@ fn source_identity() -> String {
     for part in [
         include_bytes!("../src/pressure.rs").as_slice(),
         include_bytes!("../src/grid.rs").as_slice(),
+        include_bytes!("../src/multigrid.rs").as_slice(),
         include_bytes!("../src/flow.rs").as_slice(),
         include_bytes!("../src/transport.rs").as_slice(),
         include_bytes!("../src/solver.rs").as_slice(),
@@ -213,6 +214,7 @@ fn probe(c: &Case, mode: &str, repeats: usize, steps: usize) -> Result<Value> {
         "threads":c.run.threads,"cells":g.count(),"faces":g.faces.len(),
         "grid_setup_s":setup_s,"wall_s":times,"result_sha256":signature(&result),
         "result":result,"physical_qualification":false,
+        "pressure_multigrid":pressure::multigrid_stats(&g),
         "meaning":"fixed work/kernel cost, not a converged or physically qualified CFD archive"}))
 }
 fn run() -> Result<()> {

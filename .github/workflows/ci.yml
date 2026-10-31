@@ -5,9 +5,9 @@ name: CFD checks
   workflow_dispatch:
     inputs:
       external:
-        description: "External work: all existing checks, backend, resolution, mapping, or refinement (accepted level 1, then up to three mapped/continued level-2 stages)"
+        description: "External work: all existing checks, backend, resolution, mapping, refinement (accepted level 1, then up to three mapped/continued level-2 stages), or comparison (same-host cavity timing of both backends)"
         type: choice
-        options: [all, backend, resolution, mapping, refinement]
+        options: [all, backend, resolution, mapping, refinement, comparison]
         default: all
 permissions:
   contents: read
@@ -31,6 +31,8 @@ jobs:
       - run: python -O validation/test_mapping.py -v
       - run: python validation/test_refinement.py -v
       - run: python -O validation/test_refinement.py -v
+      - run: python validation/test_compare_backends.py -v
+      - run: python -O validation/test_compare_backends.py -v
   external-backend:
     if: github.event_name == 'workflow_dispatch' && (inputs.external == 'all' || inputs.external == 'backend')
     runs-on: ubuntu-24.04
@@ -102,8 +104,43 @@ jobs:
             runs/external-study/backstep-level*-comparison/*
             runs/equivalence-*/report.json
             runs/mapping-cavity/**
+  # Same-host timing of the cavity with both backends; explicit opt-in only.
+  backend-comparison:
+    if: github.event_name == 'workflow_dispatch' && inputs.external == 'comparison'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked
+      - run: python -m pip install -r requirements-validation.txt
+      - run: mkdir -p runs && python integrations/install_openfoam13.py --output runs/openfoam13
+      - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
+      # One warmup per method, then two passes over all six orders. Any failed
+      # run, changed input or unrepeated work fails the job.
+      - run: |
+          set +e
+          python validation/compare_backends.py --foam-root "$CFD_OPENFOAM_ROOT" --repeats 2 --output runs/backend-comparison
+          code=$?
+          test ! -f runs/backend-comparison/report.json || python validation/external_notices.py runs/backend-comparison/report.json "cavity backends"
+          test "$code" -eq 0
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-comparison
+          path: |
+            runs/backend-comparison/report.json
+            runs/backend-comparison/*/measurement.json
+            runs/backend-comparison/*/native-result.json
   external-resolution:
-    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison'
     runs-on: ubuntu-24.04
     # Coarse reference + up to three fine executions, with audit/upload overhead.
     timeout-minutes: 360

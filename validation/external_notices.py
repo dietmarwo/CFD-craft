@@ -377,12 +377,42 @@ def refinement(report, title):
     return 0
 
 
+def backend_performance(report, title):
+    """Workflow and solver medians of the same-host cavity comparison."""
+    lines = [
+        f"passed {report.get('passed')}; error {report.get('error')}; "
+        f"rounds {len(report.get('rounds') or [])}; "
+        f"orders {json.dumps([o[0] for o in (report.get('plan') or {}).get('orders') or []])} first"
+    ]
+    for method, s in (report.get("summary") or {}).items():
+        lines.append(
+            f"{method}: workflow median {number(s['workflow_median_s'], 5)} s "
+            f"({number(s['workflow_min_s'], 5)}-{number(s['workflow_max_s'], 5)}); "
+            f"solver median {number(s['solver_median_s'], 5)} s; steps {s['steps']}; "
+            f"cells {s['cells']}; Ghia error {number(s['reference_error'])}; {s['assessment']}"
+        )
+    for method, r in (report.get("native_over_openfoam") or {}).items():
+        lines.append(
+            f"{method}/openfoam: workflow {number(r['workflow_ratio_of_medians'], 4)} "
+            f"(within-round median {number(r['workflow_median_within_round'], 4)}); "
+            f"solver {number(r['solver_ratio_of_medians'], 4)}"
+        )
+    lines += [
+        f"{k} {v}"
+        for k, v in ((report.get("plan") or {}).get("input_sha256") or {}).items()
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
     if "rows" in report:
         return resolution(report)
     schema = str(report.get("schema_version", ""))
+    if schema.startswith("cfd-craft.backend-performance"):
+        return backend_performance(report, title)
     if schema.startswith("cfd-craft.refinement-campaign"):
         return refinement(report, title)
     if schema.startswith("cfd-craft.mapping-experiment"):

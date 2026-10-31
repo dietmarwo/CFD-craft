@@ -2,7 +2,7 @@
 
 Declared before implementation on merged PR #7,
 `402a15036636d8f48591a2d9b5f4ed203cb5ab91`.
-Date: 30 October 2026 (America/La_Paz).
+Date: 30 October 2026.
 
 ## Baseline review
 
@@ -14,9 +14,9 @@ stall or an accepted mesh pair. The source-flux decision and physical-validation
 gates remain open and unchanged.
 
 The native roadmap identifies repeated IC(0)-PCG projection and explicit stepping
-as the throughput limit. This series improves implementation cost without a new
-pressure equation, turbulence closure, advection scheme or convergence policy.
-It requires serial/cloud CPU validation, not owner workstations, GPU or MPI.
+as the throughput limit. The increments below reduce implementation cost without
+a new pressure equation, turbulence closure, advection scheme or convergence
+policy. They need serial CPU validation only, not GPU or MPI.
 
 ## Eight increments
 
@@ -31,7 +31,7 @@ It requires serial/cloud CPU validation, not owner workstations, GPU or MPI.
 | 13 | Duplicate staggered-face lookup in momentum sampling and viscosity | Share each face-neighbor lookup between advective sampling and viscous coefficients | Laminar/channel/cavity and oblique/canyon RANS fixtures |
 | 14 | State copies immediately discarded by SSPRK stages | Build a candidate state only for needed fields, move monitor history only after all fallible checks | Transactional failure/cancellation, scalar mass/positivity/superposition and identical accepted results |
 
-Each increment is a separate local commit/patch with its own measurements.
+Each increment is a separate commit with its own measurements.
 If a proposed change does not help its measured target, retain that negative
 finding and revise or replace the implementation before calling it a gain.
 Do not reduce accuracy, use fewer required solver iterations, or remove checks.
@@ -69,12 +69,9 @@ these requirements is rejected.
 Update the memory estimate if caches/workspaces raise the bound. Report measured
 RSS alongside it; do not trade an unreported memory regression for speed.
 
-## Delivery
+## Record
 
-Provide one ZIP with eight ordered repository patches, the plan, reproducible
-benchmark/test tooling, measurements, source/binary identities and an
-implementation log. Check sequential application to the exact base and final
-source equality. No remote push, CI dispatch, release or branch deletion is
-included. Keep the native canyon's physical/model limits and the external fine
-backstep gate explicit. Report actual results, including slower cases and any
-remaining throughput limits.
+Record the source and binary identities, the frozen cases, every paired
+measurement and the test results. Keep the native canyon's physical and model
+limits and the external fine backstep gate explicit. Report actual results,
+including slower cases, the memory cost and any remaining throughput limits.

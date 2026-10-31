@@ -27,13 +27,12 @@ wall and throughput tasks below remain.
 | M6 Mitigation optimization | Budget-matched baseline, held-out scenarios, fine-grid replay | Not started; needs M4 and validated physics |
 | M7 Neighborhood and climatology | City geometry, conditional scenario maps, separate annual gate | Not started |
 | M8 Time-resolved turbulence | LES with spin-up and averaging studies | Not started |
-| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU implementation experiment complete: [iterations 07–14](iterations/07-14-performance-results.md) measure pressure/storage/stencil improvements at fixed work with unchanged fields and gates. Multigrid and semi-implicit diffusion remain later algorithms |
+| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](iterations/07-14-performance-results.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Multigrid and semi-implicit diffusion remain later algorithms |
 
-The [native performance results](iterations/07-14-performance-results.md) update
-CPU and memory observations after eight implementation increments. Use their
-matched baseline/candidate tables for version comparisons; hardware differs
-from the original resource measurements in RESULTS. Accepted fine-grid and
-experimental-validation gates remain open.
+The [performance results](iterations/07-14-performance-results.md) give paired
+CPU and memory measurements of the current implementation against the previous
+one. Their hardware differs from that of the resource measurements in RESULTS.
+Accepted fine-grid and experimental-validation gates remain open.
 
 ## First-release definition
 

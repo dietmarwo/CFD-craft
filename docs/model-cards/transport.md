@@ -18,10 +18,8 @@ For exact response matrices, use fixed flow/diffusivity and linear_upwind. A non
 
 The independent SciPy reference assembles the steady uniform-flow matrix and compares the full concentration field with a direct sparse solve. This is numerical verification, not measured atmospheric validation.
 
-Stepping builds an unpublished candidate with only the state fields it needs.
-Projected velocities/pressures and updated scalar arrays are constructed by
-their stages instead of cloned and discarded. Existing monitor history is
-validated by reference and transferred only after every state, velocity and
-positivity gate succeeds. Pressure failure, cancellation or a late validation
-failure leaves all original State fields intact. Transport arithmetic and
-accounting are unchanged.
+A step builds its candidate state separately, from only the fields it changes,
+and replaces the state only after the state, velocity and positivity checks
+pass; the monitor history is checked in place and moved over last. A pressure
+failure, a cancellation or a late check failure leaves the whole state
+unchanged, and constituents without a supplied source array keep their values.

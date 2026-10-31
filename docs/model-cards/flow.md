@@ -4,9 +4,9 @@
 
 Constant-density incompressible flow, flat ground, uniform Cartesian cells, box masks, CPU f64. Face velocities and cell pressure share the same divergence/gradient definition. Local coordinates are east/north/up. Pressure is kinematic pressure in m2/s2; the isotropic 2k/3 contribution is absorbed in RANS pressure.
 
-Momentum sampling and viscous coefficients share each staggered neighbor lookup
-within a face evaluation. Wall ghosts, periodic wrapping, blocked faces and
-outlet sampling keep their existing treatment.
+Within one face evaluation, the advective samples and the viscous coefficients
+use the same staggered neighbor faces: wall ghosts at wall and blocked faces,
+periodic wrapping and outlet sampling.
 
 The momentum predictor uses first-order donor-cell advection of each staggered velocity component and an explicit variable-viscosity stencil. The extra variable-viscosity symmetric-stress contribution is reconstructed from cell gradients under the incompressibility assumption. It is not a claim of globally second-order momentum accuracy.
 
@@ -18,24 +18,20 @@ The matrix-free operator is minus divergence times gradient. Internal faces have
 
 PCG uses a cached incomplete Cholesky factor with zero fill. A tiny shift regularizes only the preconditioner, not the solved operator. Recomputed residuals use the compatible mean-zero right-hand side in closed components. The nominal recurrent tolerance is checked against an independently formed operator residual, allowing a documented round-off margin of ten times the target plus 1e-12.
 
-The preconditioned residual buffer is reused within a solve. This removes an
-allocation from each IC(0) application; it does not change the factor, initial
-guess, arithmetic order, compatibility test or residual tolerance. The
-[performance plan](../iterations/07-14-performance-plan.md) separates kernel cost
-from fixed-work and accepted-run throughput.
+The IC(0) factor is stored as contiguous row offsets, column indices and values.
+Construction sums duplicate periodic edges in face order, sorts each row and
+intersects sorted rows without per-row allocations. Each solve builds a compact
+list of interior and outlet face weights in face order for its PCG products; the
+list is local to the solve, so changed grid coefficients take effect at the next
+solve, and the final residual check uses the face-by-face operator instead. PCG
+keeps the preconditioned residual in one buffer, so nothing is allocated per
+iteration. The memory estimate includes 112 bytes per cell for factor
+construction and the face list, before its 25% margin.
 
-IC(0) construction and triangular sweeps use contiguous row offsets, column indices and values. Construction coalesces duplicate periodic edges in face order, sorts each row in place and intersects sorted prefixes without per-row heap allocations. The zero-fill pattern and regularizing shift are unchanged.
-The memory estimator includes a conservative extra 112 bytes/cell before its
-existing safety margin for factor-construction and compact pressure work.
-
-Each pressure solve forms compact active-face entries in the original face order,
-precomputing weights for repeated PCG products. The plan is local to that solve,
-so changes to public grid coefficients are observed. The final true residual
-uses the original uncompressed face operator, independently of this plan.
-
-Projection forms its RHS and compatibility scales in one cell pass and applies
-the correction directly to faces, avoiding temporary divergence and gradient
-arrays. Axis order, boundary gradients and round-off scales are unchanged.
+Projection forms its right-hand side and the per-cell round-off scale in one
+cell pass, in the axis order of the divergence, and applies the correction
+gradient directly to the faces. [Performance results](../iterations/07-14-performance-results.md)
+give paired timings of these kernels at fixed work.
 
 Projection residuals, actual face-flux continuity and boundary balance are separate checks. There is no multigrid, sparse direct factorization or MPI implementation in 0.1.
 
@@ -62,10 +58,11 @@ That building-wall adaptation depends on cell width. A future qualification stud
 
 The upper boundary has zero normal velocity, the equilibrium tangential stress and reference k/epsilon diffusion treatment. That stress closure is what makes `ground_open_top` an open top, so laminar cases may not use it (CFD-E023): without the closure the top would act as a no-slip lid. This is a particular neutral-domain closure, not a reproduction of an arbitrary tunnel ceiling. Side faces are classified from the prescribed wind as inlet, pressure outlet or impermeable slip.
 
-Production and variable-viscosity cross terms resolve the six cell neighbors
-once per local evaluation and reuse those indices across tensor components.
-The fallback at blocked/boundary neighbors, gradient arithmetic order, wall
-production and epsilon laws are unchanged; this is a stencil-cost change.
+Production and the variable-viscosity cross terms look up the six cell
+neighbors once per cell and use them for every tensor component; a missing
+neighbor at a blocked or boundary face falls back to the cell itself. A
+regression test pins the bit patterns of the momentum, production and
+turbulence-step results on an open and a periodic canyon grid.
 
 Turbulence destruction terms use positive implicit denominators. Wall epsilon is an explicit algebraic constraint; tiny k/epsilon floors are counted. Any floor event prevents numerical acceptance. Excessive eddy viscosity causes a reported divergence instead of silent clipping.
 

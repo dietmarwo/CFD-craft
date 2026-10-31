@@ -1,0 +1,95 @@
+{
+  "schema_version": "cfd-craft.case/0.1",
+  "name": "performance-periodic-27k",
+  "domain": {
+    "size_m": [
+      12.0,
+      6.0,
+      6.0
+    ]
+  },
+  "grid": {
+    "cells": [
+      48,
+      24,
+      24
+    ]
+  },
+  "boundaries": {
+    "x": "periodic",
+    "y": "periodic",
+    "z": "periodic"
+  },
+  "flow": {
+    "kind": "prescribed_uniform",
+    "velocity_m_s": [
+      0.5,
+      0.0,
+      0.0
+    ]
+  },
+  "geometry": [],
+  "constituents": [
+    {
+      "id": "tracer",
+      "diffusivity_m2_s": 0.05
+    }
+  ],
+  "initial_conditions": [
+    {
+      "kind": "periodic_gaussian",
+      "constituent": "tracer",
+      "center_m": [
+        3.0,
+        3.0,
+        3.0
+      ],
+      "sigma_m": [
+        0.7,
+        0.7,
+        0.7
+      ],
+      "total_mass_kg": 1e-06
+    }
+  ],
+  "sources": [],
+  "receptors": [
+    {
+      "kind": "volume_average",
+      "id": "R1",
+      "min_m": [
+        4.5,
+        2.5,
+        2.5
+      ],
+      "max_m": [
+        5.5,
+        3.5,
+        3.5
+      ]
+    }
+  ],
+  "numerics": {
+    "transport": "muscl",
+    "max_time_step_s": 0.1,
+    "advective_cfl_max": 0.4,
+    "pressure_relative_tolerance": 1e-10,
+    "pressure_max_iterations": 1200,
+    "steady_residual_tolerance": 1e-05,
+    "steady_monitor_tolerance": 0.001,
+    "monitor_window": 30
+  },
+  "run": {
+    "mode": "transient",
+    "end_time_s": 2.0,
+    "max_steps": 20000,
+    "wall_time_limit_s": 120.0,
+    "threads": 1,
+    "memory_limit_mib": 4096
+  },
+  "output": {
+    "fields": true,
+    "checkpoint": true,
+    "max_total_mib": 1024
+  }
+}

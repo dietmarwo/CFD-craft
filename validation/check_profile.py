@@ -34,7 +34,9 @@ def number(value, field, integer=False):
         "invalid numeric type",
     )
     require(
-        math.isfinite(value) and value >= 0, field, "finite nonnegative value required"
+        (type(value) is int or math.isfinite(value)) and value >= 0,
+        field,
+        "finite nonnegative value required",
     )
     return value
 
@@ -89,7 +91,21 @@ def check(root):
     )
     require(p["summary"] == summary, "summary", "differs from retained archive")
     for field in ["source_sha256", "case_sha256", "threads"]:
-        require(p[field] == summary[field], field, "differs from retained summary")
+        require(
+            type(p[field]) is type(summary[field]) and p[field] == summary[field],
+            field,
+            "differs from retained summary",
+        )
+    omitted = manifest.get("omitted", {})
+    require(isinstance(omitted, dict), "manifest.omitted", "object required")
+    require(
+        type(p["omitted"]) is list and p["omitted"] == sorted(omitted),
+        "omitted",
+        "differs from the manifest's omitted artifacts",
+    )
+    require(type(p["passed"]) is bool, "passed", "boolean required")
+    # A sealed archive means the solve returned and its archive was written.
+    require(p["error"] is None, "error", "a sealed archive reports no error")
     require(
         p["input_sha256"] == manifest["input_case_sha256"],
         "input_sha256",
@@ -170,6 +186,30 @@ def check(root):
     delta_steps = summary["steps"] - initial_steps
     delta_pressure = summary["pressure_iterations"] - initial_pressure
     steps = phases.get("step", {}).get("calls", 0)
+    calls = {name: phases.get(name, {}).get("calls", 0) for name in phases}
+    # Every committed step is monitored once; an error ends the loop after at
+    # most one uncommitted step, whose time-step phase precedes it.
+    require(
+        calls.get("monitor", 0) == delta_steps,
+        "work.monitor",
+        "monitor calls differ from newly retained steps",
+    )
+    require(
+        steps - delta_steps in (0, 1),
+        "work.steps",
+        "more than one attempted step was not retained",
+    )
+    require(
+        calls.get("timestep", 0) - steps in (0, 1),
+        "work.timestep",
+        "time-step and step calls differ by more than one",
+    )
+    stopped = summary["termination"] in ["cancelled", "wall_time_limit", "diverged"]
+    require(
+        stopped or (steps == delta_steps and calls.get("timestep", 0) == steps),
+        "work.steps",
+        "a run that ended without an error retains every attempted step",
+    )
     linear = phases.get("pressure_solve", {})
     pressure = linear.get("work_units", 0)
     require(
@@ -186,11 +226,11 @@ def check(root):
         "work.pressure_iterations",
         "retained work exceeds attempted work",
     )
-    if summary["termination"] == "completed":
+    if not stopped:
         require(
             delta_steps == steps and delta_pressure == pressure,
             "work.completed",
-            "completed work differs",
+            "completed or iteration-limited work differs",
         )
     accepted = summary["assessment"] in [
         "steady_discrete_solution",
@@ -219,7 +259,10 @@ def main():
     args = ap.parse_args()
     try:
         print(json.dumps(check(args.directory), indent=2))
-    except (ValueError, OSError, KeyError, TypeError) as exc:
+    except KeyError as exc:
+        print(f"CFD-B003 profile.{exc.args[0]}: missing field")
+        return 1
+    except (ValueError, OSError, TypeError, AttributeError, ArithmeticError) as exc:
         print(
             str(exc)
             if str(exc).startswith("CFD-")

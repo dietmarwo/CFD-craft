@@ -2,9 +2,11 @@
 """Real CLI profiles and fault injection against returned archives."""
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -188,6 +190,106 @@ class Profiling(unittest.TestCase):
         fields.write_bytes(fields.read_bytes() + b" ")
         with self.assertRaisesRegex(ValueError, "profile.manifest.files.fields.json"):
             check(out)
+
+    def reseal(self, out, manifest):
+        """Rewrite the archive manifest and the two records that name its hash."""
+        run = out / "run"
+        (run / "manifest.json").write_text(json.dumps(manifest, indent=2))
+        digest = hashlib.sha256((run / "manifest.json").read_bytes()).hexdigest()
+        marker = json.loads((run / "complete.json").read_text())
+        marker["manifest_sha256"] = digest
+        (run / "complete.json").write_text(json.dumps(marker))
+        envelope = json.loads((out / "profile.json").read_text())
+        envelope["archive_manifest_sha256"] = digest
+        (out / "profile.json").write_text(json.dumps(envelope))
+
+    def edit(self, out, **changes):
+        envelope = json.loads((out / "profile.json").read_text())
+        envelope.update(changes)
+        (out / "profile.json").write_text(json.dumps(envelope))
+
+    def test_omitted_artifacts_and_the_verdict_are_bound_to_the_archive(self):
+        out = self.profile()
+        original = (out / "profile.json").read_text()
+        for changes, field in [
+            (dict(omitted=["fields.json"]), "profile.omitted"),
+            (dict(passed=1), "profile.passed"),
+            (dict(threads=1.0), "profile.threads"),
+            (dict(error="CFD-E033: invented"), "profile.error"),
+        ]:
+            with self.subTest(changes=changes):
+                (out / "profile.json").write_text(original)
+                self.edit(out, **changes)
+                with self.assertRaisesRegex(ValueError, field):
+                    check(out)
+        # An archive whose fields were omitted for the output budget: the
+        # envelope must not call it a complete accepted result.
+        (out / "profile.json").write_text(original)
+        manifest = json.loads((out / "run/manifest.json").read_text())
+        del manifest["files"]["fields.json"]
+        manifest["omitted"]["fields.json"] = "CFD-E061: over the output budget"
+        (out / "run/fields.json").unlink()
+        self.reseal(out, manifest)
+        with self.assertRaisesRegex(ValueError, "profile.omitted"):
+            check(out)
+        self.edit(out, omitted=["fields.json"])
+        with self.assertRaisesRegex(ValueError, "profile.passed"):
+            check(out)
+        self.edit(out, passed=False)
+        result = check(out)
+        self.assertTrue(result["integrity_passed"])
+        self.assertIsNone(result["independent"])
+
+    def test_attempted_work_of_an_iteration_limited_run_is_all_retained(self):
+        self.case["run"]["end_time_s"] = 2.0
+        self.case["run"]["max_steps"] = 3
+        p = self.invoke("profile")
+        self.assertEqual(p.returncode, 2, p.stderr)
+        out = self.root / "profile"
+        self.assertEqual(
+            json.loads((out / "run/summary.json").read_text())["termination"],
+            "iteration_limit",
+        )
+        check(out)
+        original = json.loads((out / "profile.json").read_text())
+        for phases, field in [
+            (["step", "timestep"], "work.steps"),
+            (["monitor"], "work.monitor"),
+            (["timestep"], "work.steps"),
+        ]:
+            with self.subTest(phases=phases):
+                changed = copy.deepcopy(original)
+                for name in phases:
+                    changed["timing"]["phases"][name]["calls"] += 1
+                (out / "profile.json").write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, field):
+                    check(out)
+        changed = copy.deepcopy(original)
+        changed["initial_steps"] = 1
+        (out / "profile.json").write_text(json.dumps(changed))
+        with self.assertRaisesRegex(ValueError, "work.monitor"):
+            check(out)
+
+    def test_an_oversized_counter_is_a_coded_error(self):
+        out = self.profile()
+        changed = json.loads((out / "profile.json").read_text())
+        changed["timing"]["phases"]["step"]["calls"] = 10**400
+        (out / "profile.json").write_text(json.dumps(changed))
+        done = subprocess.run(
+            [sys.executable, ROOT / "validation/check_profile.py", out],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertTrue(done.stdout.startswith("CFD-B003 profile."), done.stdout)
+        del changed["timing"]
+        (out / "profile.json").write_text(json.dumps(changed))
+        done = subprocess.run(
+            [sys.executable, ROOT / "validation/check_profile.py", out],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(done.stdout.strip(), "CFD-B003 profile.timing: missing field")
 
 
 if __name__ == "__main__":

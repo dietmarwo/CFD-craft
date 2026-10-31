@@ -42,7 +42,6 @@ def manual_commands(numbers):
 class Recipes(unittest.TestCase):
     def recorded(self):
         steps = []
-        out = Path("/scratch/manual")
 
         def run(name, argv, timeout=180):
             words = []
@@ -50,14 +49,13 @@ class Recipes(unittest.TestCase):
                 value = str(value)
                 if value == sys.executable:
                     value = "python"
-                elif value.startswith(str(out) + "/"):
-                    value = "runs/" + value[len(str(out)) + 1 :]
                 elif value.startswith(str(ROOT) + "/"):
                     value = value[len(str(ROOT)) + 1 :]
                 words.append(value)
             steps.append((name, words, timeout))
 
-        manual_examples.foam_recipes(run, Path(FOAM), out)
+        # The manual's paths, relative to the repository root.
+        manual_examples.foam_recipes(run, Path(FOAM), Path("runs"))
         return steps
 
     def test_the_recipes_are_the_manual_commands_in_order(self):
@@ -133,6 +131,8 @@ class MissingRuntime(unittest.TestCase):
             self.assertEqual(done.returncode, 1, done.stderr)
             report = json.loads((out / "report.json").read_text())
             self.assertEqual(json.loads(done.stdout), report)
+            # The steps ran with output paths relative to the working directory.
+            self.assertTrue((out / "foam-cavity-input/case.json").is_file())
             self.assertEqual(report["schema_version"], manual_examples.SCHEMA)
             self.assertEqual(report["examples"], "openfoam")
             self.assertIs(report["passed"], False)

@@ -52,8 +52,10 @@ def outcome(stdout):
 def foam_recipes(run, root, out):
     """The manual's OpenFOAM recipes in order, with the same arguments.
 
-    Steps after a failure still run, so one execution shows every failing step;
-    a step that needs a failed step's output fails as well.
+    `root` and `out` are passed as given; the caller passes them relative to the
+    working directory, as the manual's commands are. Steps after a failure
+    still run, so one execution shows every failing step; a step that needs a
+    failed step's output fails as well.
     """
     adapter = [sys.executable, ROOT / "integrations/openfoam_backend.py"]
     steps = [
@@ -249,7 +251,7 @@ def main():
             return json.loads(result.stdout)
 
         if args.foam_root:
-            foam_recipes(run, args.foam_root, out)
+            foam_recipes(run, args.foam_root, Path(os.path.relpath(out)))
         else:
             native_examples(run, args, out, report)
         report["passed"] = True

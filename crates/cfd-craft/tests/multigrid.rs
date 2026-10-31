@@ -189,6 +189,62 @@ fn setup_is_reused_and_changed_face_coefficients_rebuild_before_solving() {
     assert!(pressure::multigrid_stats(&g).unwrap().allocated_bytes > 0);
 }
 #[test]
+fn a_poll_callback_can_read_multigrid_statistics_during_a_solve() {
+    // The solve holds the hierarchy while it polls; statistics must not wait for it.
+    let g = Grid::build(&case([17, 2, 13], Boundary::Wall)).unwrap();
+    let seen = Arc::new(AtomicUsize::new(0));
+    let (probe, counter) = (g.clone(), seen.clone());
+    let control = Control::with_poll(30.0, move || {
+        if pressure::multigrid_stats(&probe).is_some() {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(())
+    });
+    let mut b: Vec<_> = (0..g.count()).map(|i| (0.61 * i as f64).sin()).collect();
+    pressure::center_nullspaces(&g, &mut b);
+    let (done, result) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(pressure::solve(&g, &b, 1e-12, 200, &control).map(|r| r.1));
+    });
+    let info = result
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the solve finished instead of waiting on its own lock")
+        .unwrap();
+    assert!(info.iterations > 0);
+    assert!(seen.load(Ordering::Relaxed) > 0);
+}
+#[test]
+fn reused_hierarchies_follow_small_interior_and_outlet_weight_changes() {
+    let base = case([9, 2, 7], Boundary::Open);
+    let mut g = Grid::build(&base).unwrap();
+    let control = Control::new(20.0).with_profiling();
+    let solve = |g: &Grid| {
+        let exact: Vec<_> = (0..g.count()).map(|i| (0.37 * i as f64).sin()).collect();
+        let mut b = vec![0.0; g.count()];
+        pressure::apply(g, &exact, &mut b);
+        pressure::solve(g, &b, 1e-12, 2000, &control).unwrap();
+    };
+    solve(&g); // build
+    solve(&g); // reuse
+    let find = |g: &Grid, kind| g.faces.iter().position(|f| f.kind == kind).unwrap();
+    let wall = find(&g, cfd_craft::grid::FaceKind::Wall);
+    g.faces[wall].area *= 2.0; // walls carry no pressure weight
+    solve(&g); // reuse
+    let interior = find(&g, cfd_craft::grid::FaceKind::Interior);
+    g.faces[interior].distance *= 1.0 + 1e-15; // a few-ulp weight change
+    solve(&g); // rebuild
+    let outlet = find(&g, cfd_craft::grid::FaceKind::Outlet);
+    g.faces[outlet].area *= 2.0;
+    solve(&g); // rebuild
+    solve(&g); // reuse
+    let builds = control.profile().unwrap().unwrap().phases["pressure_solve"]
+        .multigrid
+        .as_ref()
+        .unwrap()
+        .hierarchy_builds;
+    assert_eq!(builds, 3);
+}
+#[test]
 fn cancellation_and_iteration_limits_leave_the_whole_step_unchanged() {
     let c = case([24, 2, 24], Boundary::Wall);
     let g = Grid::build(&c).unwrap();

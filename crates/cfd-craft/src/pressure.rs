@@ -44,20 +44,27 @@ fn preconditioner<'a>(
         PressurePreconditioner::Multigrid => {
             measured.multigrid = Some(Default::default());
             control.check()?;
-            let key = crate::multigrid::key(g)?;
+            crate::multigrid::validate(g)?;
             // One cache owns its reusable scratch vectors. Cloned grids can share
             // it safely; a changed operator rebuilds it before the next application.
             let mut cache = g
                 .pressure_multigrid
+                .hierarchy
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            let built = cache.as_ref().is_none_or(|c| c.key != key);
+            let built = !cache.as_ref().is_some_and(|c| c.signature.matches(g));
             if built {
+                let signature = crate::multigrid::Signature::of(g)?;
                 measured.multigrid.as_mut().unwrap().hierarchy_builds = 1;
                 let _setup = control.span(crate::profiling::Phase::PressureMultigridSetup);
+                let hierarchy = crate::multigrid::Hierarchy::build(g, control)?;
+                *g.pressure_multigrid
+                    .stats
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(hierarchy.stats.clone());
                 *cache = Some(crate::multigrid::Cached {
-                    key,
-                    hierarchy: crate::multigrid::Hierarchy::build(g, control)?,
+                    signature,
+                    hierarchy,
                 });
             }
             measured.multigrid = Some(cache.as_ref().unwrap().hierarchy.work(built));
@@ -66,12 +73,13 @@ fn preconditioner<'a>(
     }
 }
 /// Current allocated hierarchy dimensions/storage; absent before its first setup.
+/// It does not wait for a running solve, so a poll callback may call it.
 pub fn multigrid_stats(g: &Grid) -> Option<crate::multigrid::MultigridStats> {
     g.pressure_multigrid
+        .stats
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .as_ref()
-        .map(|c| c.hierarchy.stats.clone())
+        .clone()
 }
 
 /// IC(0) of a slightly shifted matrix, used only as a preconditioner.

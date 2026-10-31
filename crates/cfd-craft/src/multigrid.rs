@@ -7,8 +7,7 @@ use crate::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Mutex};
 
 const COARSE_CELLS: usize = 32;
 const SWEEPS: usize = 2;
@@ -55,39 +54,84 @@ impl MultigridWork {
     }
 }
 
+/// The grid's multigrid state. Statistics have their own lock, so they can be
+/// read (for example from a poll callback) while a solve holds the hierarchy.
+#[derive(Debug, Default)]
+pub(crate) struct Cache {
+    pub hierarchy: Mutex<Option<Cached>>,
+    pub stats: Mutex<Option<MultigridStats>>,
+}
+
 #[derive(Debug)]
 pub(crate) struct Cached {
-    pub key: [u8; 32],
+    pub signature: Signature,
     pub hierarchy: Hierarchy,
 }
 
-/// Check current public grid coefficients before reusing a hierarchy. The fine
-/// PCG operator and final residual are still built/evaluated independently.
-pub(crate) fn key(g: &Grid) -> Result<[u8; 32]> {
+/// Multigrid needs one connected, unmasked fluid component.
+pub(crate) fn validate(g: &Grid) -> Result<()> {
     if g.fluid.iter().any(|v| !v) || g.components.len() != 1 {
         return Err("CFD-E034: numerics.pressure_preconditioner: multigrid requires an unmasked connected Cartesian grid".into());
     }
-    let mut hash = Sha256::new();
-    for n in g.n {
-        hash.update((n as u64).to_le_bytes());
-    }
-    hash.update([u8::from(g.anchored[0])]);
-    for f in &g.faces {
-        let kind = match f.kind {
-            FaceKind::Interior => 1,
-            FaceKind::Outlet => 2,
-            _ => continue,
-        };
-        let weight = f.area / (f.distance * g.volume);
-        if !weight.is_finite() || weight <= 0.0 {
-            return Err("CFD-E034: numerics.pressure_preconditioner: multigrid requires finite positive pressure face weights".into());
+    Ok(())
+}
+
+fn face_entry(g: &Grid, f: &crate::grid::Face) -> Option<(u8, usize, usize, u64)> {
+    let kind = match f.kind {
+        FaceKind::Interior => 1,
+        FaceKind::Outlet => 2,
+        _ => return None,
+    };
+    let weight = f.area / (f.distance * g.volume);
+    Some((
+        kind,
+        f.lo.unwrap_or(usize::MAX),
+        f.hi.unwrap_or(usize::MAX),
+        weight.to_bits(),
+    ))
+}
+
+/// The topology and pressure face weights a hierarchy was built from. Public face
+/// coefficients can change; each solve compares them exactly, without hashing or
+/// allocating, and rebuilds on any difference. The fine PCG operator and final
+/// residual are still built/evaluated independently.
+#[derive(Debug)]
+pub(crate) struct Signature {
+    n: [usize; 3],
+    anchored: bool,
+    faces: Vec<(u8, usize, usize, u64)>,
+}
+impl Signature {
+    pub(crate) fn of(g: &Grid) -> Result<Self> {
+        validate(g)?;
+        let mut faces = Vec::with_capacity(g.faces.len());
+        for f in &g.faces {
+            if let Some(entry) = face_entry(g, f) {
+                let weight = f64::from_bits(entry.3);
+                if !weight.is_finite() || weight <= 0.0 {
+                    return Err("CFD-E034: numerics.pressure_preconditioner: multigrid requires finite positive pressure face weights".into());
+                }
+                faces.push(entry);
+            }
         }
-        hash.update([kind]);
-        hash.update((f.lo.unwrap_or(usize::MAX) as u64).to_le_bytes());
-        hash.update((f.hi.unwrap_or(usize::MAX) as u64).to_le_bytes());
-        hash.update(weight.to_bits().to_le_bytes());
+        Ok(Self {
+            n: g.n,
+            anchored: g.anchored[0],
+            faces,
+        })
     }
-    Ok(hash.finalize().into())
+    pub(crate) fn matches(&self, g: &Grid) -> bool {
+        if self.n != g.n || self.anchored != g.anchored[0] {
+            return false;
+        }
+        let mut stored = self.faces.iter();
+        for entry in g.faces.iter().filter_map(|f| face_entry(g, f)) {
+            if stored.next() != Some(&entry) {
+                return false;
+            }
+        }
+        stored.next().is_none()
+    }
 }
 
 #[derive(Debug)]

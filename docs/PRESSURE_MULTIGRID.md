@@ -125,10 +125,17 @@ OpenFOAM or other separately licensed solver code is copied into the core.
 
 One grid cache owns the hierarchy and reusable RHS, residual and correction
 vectors. A mutex holds it for a pressure solve, so concurrent callers sharing a
-grid serialize these solves. Cloned grids safely share the cache. A fingerprint
-of the current topology/face weights is checked on each solve; changed public
-face coefficients rebuild the hierarchy. Changing topology should rebuild the
-grid. No cycle allocates inside PCG; setup allocations are separate.
+grid serialize these solves. Cloned grids safely share the cache. The cache keeps
+the grid size, gauge and every interior or outlet face's cells and pressure
+weight from its build (32 bytes per such face, not counted in `allocated_bytes`)
+and compares them exactly before each solve; any changed public face coefficient
+rebuilds the hierarchy. Changing topology should rebuild the grid. No cycle
+allocates inside PCG; setup allocations are separate.
+
+`pressure::multigrid_stats` reads a separate copy of the statistics and never
+waits for a running solve, so a `Control::with_poll` callback may call it. A poll
+callback must not itself run a pressure solve on the same grid or a clone of it:
+that solve would wait for the running one.
 
 Case preflight adds 1024 bytes per cell before the existing 25% safety margin
 for the hierarchy and its construction peak. This conservative allowance differs

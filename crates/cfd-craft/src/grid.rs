@@ -38,8 +38,7 @@ pub struct Grid {
     pub box_cells: BTreeMap<String, usize>,
     pub pressure_factor: std::sync::OnceLock<crate::pressure::Factor>,
     pub pressure_preconditioner: PressurePreconditioner,
-    pub(crate) pressure_multigrid:
-        std::sync::Arc<std::sync::Mutex<Option<crate::multigrid::Cached>>>,
+    pub(crate) pressure_multigrid: std::sync::Arc<crate::multigrid::Cache>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryEvidence {

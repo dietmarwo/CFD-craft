@@ -96,3 +96,10 @@ native solver with OpenFOAM, use `validation/compare_backends.py` (same host,
 one thread, every run accepted); its ratios describe configured workflows, not
 equal work. On the cavity OpenFOAM is faster; see the
 [backend comparison](../validation/BACKEND_COMPARISON.md).
+
+For actual phase attribution use [`profile`](PROFILING.md); its envelope keeps
+the ordinary archive in `run/` and a separate versioned timing report. Read
+attempted versus retained work and add exclusive times only. The comparator's
+`--grid-sweep` mode retains incomplete rows and reports cost at an accuracy
+target only for repeated accepted qualifying configurations. An unreached
+target has no finite ratio. See the [baseline](../validation/GAP_BASELINE.md).

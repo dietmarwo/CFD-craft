@@ -22,6 +22,15 @@ the tests show and what remains unknown; the cause is not established.
   not proof. A long campaign run was executing on the same machine at the time.
 - **Repetition.** The same cavity source and campaign, regenerated under a fresh
   private path, verified at every checkpoint.
+- **Cavity accuracy sweep (31 October 2026).** In three of four 48² cavity runs
+  on a cloud machine (2132 iterations, snapshots every 250 with `purgeWrite 1`),
+  the summary written at sealing already listed an old time directory, `250` or
+  `500`, without files. The adapter records progress after `foamRun` and
+  `foamPostProcess` return, so the directory existed then. The 24² runs and the
+  48² warmup did not show it. On GitHub the same cold 48² cavity verified in the
+  mapping-equivalence runs of that day (41205137603 and 41205822597). A
+  file-only evidence copy dropped the directories, and the copies then failed
+  the progress check.
 
 The rejected archives were kept unchanged, including the empty directory; a
 file-only copy would lose this evidence.

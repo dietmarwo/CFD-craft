@@ -5,6 +5,7 @@ pub mod flow;
 pub mod grid;
 pub mod output;
 pub mod pressure;
+pub mod profiling;
 pub mod solver;
 pub mod transport;
 pub mod verification;

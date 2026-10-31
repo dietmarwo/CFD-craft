@@ -4,6 +4,7 @@ use cfd_craft::{
     case::{Case, CheckReport, Diagnostic, hash_bytes},
     grid::{GeometryEvidence, Grid},
     output,
+    profiling::{Phase, Profile},
     solver::{Control, Summary},
 };
 use std::{
@@ -174,6 +175,8 @@ fn describe() -> Result<()> {
         "physics":["prescribed_uniform","laminar","neutral_rans"],
         "scalar_advection":["linear_upwind","muscl"],"pressure":"matrix_free_ic0_pcg",
         "case_schema":schemars::schema_for!(Case),"result_schema":schemars::schema_for!(Summary),
+        "phase_profile_schema":schemars::schema_for!(Profile),
+        "profiling":"profile CASE --output NEW_DIR: native archive in run/, versioned profile.json alongside it",
         "coordinates":"local east, north, up; meteorological wind direction from",
         "pressure_units":"kinematic m2/s2; RANS isotropic 2k/3 absorbed",
         "exit_codes":{"0":"success: valid case, passed numerical assessment or verified archive",
@@ -195,7 +198,7 @@ fn execute(args: &[String]) -> Result<Outcome> {
     }
     if command == "help" || command == "--help" {
         print(&serde_json::json!({"usage":
-            "cfd-craft describe | check CASE | run CASE --output NEW_DIR [--restart CHECKPOINT] | preview CASE --output NEW_DIR [--factor N] | report DIR | verify CASE"}))?;
+            "cfd-craft describe | check CASE | run CASE --output NEW_DIR [--restart CHECKPOINT] | profile CASE --output NEW_DIR [--restart CHECKPOINT] | preview CASE --output NEW_DIR [--factor N] | report DIR | verify CASE"}))?;
         return Ok(Outcome::Success);
     }
     let p = args.get(1).ok_or("case/path required")?;
@@ -213,7 +216,7 @@ fn execute(args: &[String]) -> Result<Outcome> {
         }
         return Ok(Outcome::Success);
     }
-    if !matches!(command, "check" | "verify" | "run" | "preview") {
+    if !matches!(command, "check" | "verify" | "run" | "profile" | "preview") {
         return Err(format!("unknown command {command}"));
     }
     let (input, mut c) = match read_case(p)? {
@@ -295,6 +298,9 @@ fn execute(args: &[String]) -> Result<Outcome> {
     let state = restart
         .map(|p| output::read_checkpoint(&c, Path::new(p)))
         .transpose()?;
+    if command == "profile" {
+        return profile_case(&c, state, out, &hash_bytes(&input));
+    }
     // Claim the output directory before solving: a missing parent or an occupied
     // destination fails here, not after the work is done.
     output::create_run_dir(out)?;
@@ -335,6 +341,14 @@ fn solve(
     state: Option<cfd_craft::solver::State>,
 ) -> Result<cfd_craft::solver::RunResult> {
     let control = Control::new(c.run.wall_time_limit_s);
+    solve_with_control(c, state, &control)
+}
+
+fn solve_with_control(
+    c: &Case,
+    state: Option<cfd_craft::solver::State>,
+    control: &Control,
+) -> Result<cfd_craft::solver::RunResult> {
     for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
         signal_hook::flag::register(signal, control.cancelled.clone())
             .map_err(|e| e.to_string())?;
@@ -343,10 +357,82 @@ fn solve(
         .num_threads(c.run.threads)
         .build()
         .map_err(|e| e.to_string())?;
-    let mut result = pool.install(|| cfd_craft::solver::run(c, &control, state))?;
+    let mut result = pool.install(|| cfd_craft::solver::run(c, control, state))?;
     result.summary.source_sha256 = env!("CFD_SOURCE_SHA").into();
     result.summary.build_version = format!("{}; {}", env!("CARGO_PKG_VERSION"), env!("CFD_RUSTC"));
     Ok(result)
+}
+
+/// The profile is an envelope alongside an ordinary, independently readable
+/// native archive. It does not add unlisted files to the native manifest.
+fn profile_case(
+    c: &Case,
+    state: Option<cfd_craft::solver::State>,
+    out: &Path,
+    input_sha: &str,
+) -> Result<Outcome> {
+    output::create_run_dir(out)?;
+    let archive = out.join("run");
+    output::create_run_dir(&archive)?;
+    let control = Control::new(c.run.wall_time_limit_s).with_profiling();
+    let initial_steps = state.as_ref().map_or(0, |s| s.steps);
+    let initial_pressure_iterations = state.as_ref().map_or(0, |s| s.pressure_iterations);
+    let mut success = false;
+    let mut summary = None;
+    let mut state_sha = None;
+    let mut omitted = Vec::new();
+    let mut error = None;
+    match solve_with_control(c, state, &control) {
+        Ok(result) => {
+            state_sha = Some(hash_bytes(
+                &serde_json::to_vec(&result.state).map_err(|e| e.to_string())?,
+            ));
+            let write = {
+                let _phase = control.span(Phase::ArchiveWrite);
+                output::write_run(c, &result, &archive, input_sha)
+            };
+            match write {
+                Ok(files) => {
+                    omitted = files;
+                    success = omitted.is_empty()
+                        && matches!(
+                            result.summary.assessment.as_str(),
+                            "steady_discrete_solution" | "transient_interval_completed"
+                        );
+                }
+                Err(e) => error = Some(e),
+            }
+            summary = Some(result.summary);
+        }
+        Err(e) => error = Some(e),
+    }
+    let profile = serde_json::json!({
+        "schema_version":"cfd-craft.native-profile/0.1",
+        "passed":success,"error":error,"omitted":omitted,
+        "input_sha256":input_sha,"case_sha256":hash_bytes(&serde_json::to_vec(c).map_err(|e|e.to_string())?),
+        "source_sha256":env!("CFD_SOURCE_SHA"),"compiler":env!("CFD_RUSTC"),
+        "threads":c.run.threads,"archive_directory":"run",
+        "archive_manifest_sha256":fs::read(archive.join("manifest.json")).ok().map(|b|hash_bytes(&b)),
+        "state_sha256":state_sha,"summary":summary,"timing":control.profile()?,
+        "initial_steps":initial_steps,"initial_pressure_iterations":initial_pressure_iterations,
+        "physical_qualification":false,
+        "meaning":"attempted phase work; summary counters describe retained state; inclusive phases overlap; sum exclusive time only",
+        "timer_scope":"after preflight/checkpoint import; includes thread-pool setup, solver and archive write; excludes profile.json serialization and independent audit"
+    });
+    output::atomic_write(
+        &out.join("profile.json"),
+        &serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("CFD-B003 profile.output: {e}"))?;
+    print(&profile)?;
+    if let Some(e) = error {
+        return Err(e);
+    }
+    Ok(if success {
+        Outcome::Success
+    } else {
+        Outcome::Incomplete
+    })
 }
 
 /// The same case on a grid coarsened by `factor`, with at least 2 cells per axis.

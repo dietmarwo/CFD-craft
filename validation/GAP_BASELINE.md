@@ -32,6 +32,20 @@ The original three-method comparator was also rerun:
 
 That experiment has one warmup per method and all six method orders once. Its workflow timer has a different scope from the new sweep, so use each named experiment within its own protocol.
 
+## Hosted reproduction
+
+The manual `external=accuracy` job ran the same sweep on a GitHub runner (AMD EPYC 9V74, 4 CPUs, ubuntu-24.04). Every Ghia error equals the recorded value above. With the recorded 180 s native budget ([run 41216664708](https://github.com/dietmarwo/CFD-craft/actions/runs/41216664708)), native 48² stopped at the wall-time limit in all three timed rounds; those rows are retained as unaccepted. The job therefore declares 600 s per native run, with unchanged gates ([run 41218093307](https://github.com/dietmarwo/CFD-craft/actions/runs/41218093307)); all 20 rows were accepted:
+
+| Method | Grid | Solver median, s | Workflow median, s | Ghia error |
+|---|---:|---:|---:|---:|
+| native-steady | 12² | 0.3880 | 0.4836 | 0.0596821 |
+| native-steady | 24² | 8.2615 | 8.3596 | 0.0275613 |
+| openfoam-steady | 24² | 0.8395 | 1.5476 | 0.00896632 |
+| native-steady | 48² | 200.27 | 200.36 | 0.0169514 |
+| openfoam-steady | 48² | 7.0149 | 7.9568 | 0.00707998 |
+
+The conclusion is the same: OpenFOAM reaches 0.01 at 24² and native does not on the tested grids. The uploaded evidence zip kept its directory entries, and all 20 archives verified in its extracted copy.
+
 ## Actual phase attribution
 
 The following are medians of per-run wall-time fractions over the profiled timed controls. Pressure projection includes its linear solve/setup subphases; it is not added to those subphases again.

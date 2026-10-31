@@ -21,19 +21,43 @@ def require(ok, field, message):
         raise ValueError(f"CFD-B001 benchmark.{field}: {message}")
 
 
+PROBE_KEYS = [
+    "schema_version",
+    "source_sha256",
+    "case_sha256",
+    "case",
+    "mode",
+    "repetitions",
+    "requested_steps",
+    "threads",
+    "cells",
+    "faces",
+    "wall_s",
+    "result_sha256",
+    "result",
+]
+
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def compare(a, b, field="result"):
     """Counts/structure match exactly; finite floating values retain the frozen bound."""
+    # The probe writes NaN and infinity as JSON null; null is never a valid result.
+    require(a is not None and b is not None, field, "null (nonfinite) value")
     if isinstance(a, bool) or isinstance(b, bool):
         require(type(a) is type(b) and a == b, field, "boolean differs")
         return 0.0
-    if type(a) is int and type(b) is int:
-        require(a == b, field, "integer work/count differs")
+    if type(a) is int or type(b) is int:
+        # Work counts are integers on both sides and equal; 20 and 20.0 differ.
+        require(
+            type(a) is int and type(b) is int and a == b,
+            field,
+            "integer work/count differs",
+        )
         return 0.0
-    if isinstance(a, (float, int)) and isinstance(b, (float, int)):
+    if type(a) is float and type(b) is float:
         require(math.isfinite(a) and math.isfinite(b), field, "nonfinite value")
         error = abs(a - b)
         require(error <= 1e-13 + 1e-11 * max(abs(a), abs(b)), field, "value differs")
@@ -43,7 +67,7 @@ def compare(a, b, field="result"):
         return max((compare(a[k], b[k], field + "." + k) for k in a), default=0.0)
     if isinstance(a, list) and isinstance(b, list):
         require(len(a) == len(b), field, "length differs")
-        if a and all(type(x) in (int, float) for x in a + b):
+        if a and all(type(x) is float for x in a + b):
             left, right = np.asarray(a), np.asarray(b)
             require(
                 np.isfinite(left).all() and np.isfinite(right).all(),
@@ -174,7 +198,13 @@ def measure(binary, case, mode, inner, steps, threads, output, timeout_s):
         "child",
         f"failed; retained {output.name}",
     )
-    report = json.loads((output / "probe.json").read_text())
+    try:
+        report = json.loads((output / "probe.json").read_text())
+    except (OSError, ValueError) as exc:
+        require(False, "probe", f"unreadable report: {exc}")
+    require(isinstance(report, dict), "probe", "report must be an object")
+    for key in PROBE_KEYS:
+        require(key in report, "probe." + key, "missing")
     return report, record
 
 
@@ -211,6 +241,12 @@ def run_pair(
         "mode",
         "unsupported",
     )
+    for field, path in [
+        ("baseline", baseline),
+        ("candidate", candidate),
+        ("case", case),
+    ]:
+        require(Path(path).is_file(), field, "file required")
     output = Path(output)
     require(not output.exists(), "output", "fresh path required")
     output.mkdir()
@@ -277,6 +313,17 @@ def run_pair(
                     "compiled producer changed",
                 )
                 source_ids[label] = run["source_sha256"]
+                for key, value in [
+                    ("mode", mode),
+                    ("repetitions", inner),
+                    ("requested_steps", steps),
+                    ("threads", threads),
+                ]:
+                    require(
+                        run.get(key) == value and type(run.get(key)) is type(value),
+                        f"{label}.{key}",
+                        "child did not perform the requested work",
+                    )
                 reports[label] = run
                 if index >= 0:
                     times = run["wall_s"]
@@ -317,6 +364,14 @@ def run_pair(
         report["speedup"] = (
             report["summary"]["baseline"]["median_s"]
             / report["summary"]["candidate"]["median_s"]
+        )
+        # The same rounds paired: baseline over candidate within each round.
+        sides = {
+            label: [s["warm_median_s"] for s in report["samples"] if s["side"] == label]
+            for label in binaries
+        }
+        report["paired_speedup_median"] = statistics.median(
+            a / b for a, b in zip(sides["baseline"], sides["candidate"], strict=True)
         )
         report["passed"] = True
     except (

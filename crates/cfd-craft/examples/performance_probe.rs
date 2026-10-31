@@ -104,6 +104,7 @@ fn probe(c: &Case, mode: &str, repeats: usize, steps: usize) -> Result<Value> {
     let zeros = vec![0.0; g.count()];
     let mut times = Vec::new();
     let mut result = Value::Null;
+    let mut first_signature = None;
     for _ in 0..repeats {
         control.check()?;
         result = match mode {
@@ -148,7 +149,12 @@ fn probe(c: &Case, mode: &str, repeats: usize, steps: usize) -> Result<Value> {
                     "result.walls",
                     "nonfinite result",
                 )?;
-                json!({"values":values,"walls":walls})
+                // Cells without a wall value are listed by index, not as JSON null,
+                // so that null never stands for a valid result.
+                let wall_cells: Vec<usize> =
+                    (0..walls.len()).filter(|&i| walls[i].is_some()).collect();
+                let wall_values: Vec<f64> = walls.iter().flatten().copied().collect();
+                json!({"values":values,"wall_cells":wall_cells,"wall_values":wall_values})
             }
             "transport" => {
                 let values = timed(&mut times, || {
@@ -191,6 +197,15 @@ fn probe(c: &Case, mode: &str, repeats: usize, steps: usize) -> Result<Value> {
             }
             _ => return Err("CFD-B001 benchmark.mode: unsupported probe".into()),
         };
+        // Every repetition repeats the same work from the same input, so the cold
+        // first result and every warm result must be identical (outside timing).
+        let current = signature(&result);
+        let first = first_signature.get_or_insert_with(|| current.clone());
+        require(
+            *first == current,
+            "result.repetitions",
+            "repetitions returned different results",
+        )?;
     }
     Ok(json!({"schema_version":"cfd-craft.native-performance/0.1",
         "source_sha256":source_identity(),"case_sha256":signature(c),
@@ -217,6 +232,8 @@ fn run() -> Result<()> {
     let mut c: Case =
         serde_json::from_str(&text).map_err(|e| format!("CFD-B001 benchmark.case: {e}"))?;
     c.run.threads = threads;
+    c.validate()
+        .map_err(|e| format!("CFD-B001 benchmark.case: invalid case: {e}"))?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build()

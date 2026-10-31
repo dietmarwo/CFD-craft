@@ -1,9 +1,11 @@
 # Diagnostics
 
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
-arguments/case/output, nonfinite kernel results, changed binary/case/producer
-identities, unequal work or fields, malformed timing samples, and failed,
-cancelled or timed-out benchmark children. These research measurements are not
+arguments, case or output, missing input files, nonfinite or null results,
+repetitions that disagree, changed binary/case/producer identities, a child that
+did not perform the requested work, unequal work or fields, missing or malformed
+report fields and timing samples, and failed, cancelled or timed-out benchmark
+children. These research measurements are not
 CFD numerical-acceptance or physical-qualification verdicts.
 
 `cfd-craft check CASE` prints a `cfd-craft.check/0.1` report on stdout. Each

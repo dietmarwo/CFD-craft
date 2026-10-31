@@ -24,6 +24,11 @@ IC(0) construction and triangular sweeps use contiguous row offsets, column indi
 The memory estimator includes a conservative extra 112 bytes/cell before its
 existing safety margin for factor-construction and compact pressure work.
 
+Each pressure solve forms compact active-face entries in the original face order,
+precomputing weights for repeated PCG products. The plan is local to that solve,
+so changes to public grid coefficients are observed. The final true residual
+uses the original uncompressed face operator, independently of this plan.
+
 Projection residuals, actual face-flux continuity and boundary balance are separate checks. There is no multigrid, sparse direct factorization or MPI implementation in 0.1.
 
 ## Neutral turbulence package

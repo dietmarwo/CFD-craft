@@ -143,6 +143,50 @@ impl Factor {
     }
 }
 
+// Local to one solve: Grid's public face coefficients may be changed by callers.
+// Keep the original face order, including outlets interleaved with interiors.
+enum PressureEntry {
+    Interior { lo: usize, hi: usize, weight: f64 },
+    Outlet { cell: usize, weight: f64 },
+}
+struct Operator {
+    entries: Vec<PressureEntry>,
+}
+impl Operator {
+    fn build(g: &Grid) -> Self {
+        let mut entries = Vec::with_capacity(g.faces.len());
+        entries.extend(g.faces.iter().filter_map(|f| {
+            let weight = f.area / (f.distance * g.volume);
+            match f.kind {
+                FaceKind::Interior => Some(PressureEntry::Interior {
+                    lo: f.lo.unwrap(),
+                    hi: f.hi.unwrap(),
+                    weight,
+                }),
+                FaceKind::Outlet => Some(PressureEntry::Outlet {
+                    cell: f.lo.or(f.hi).unwrap(),
+                    weight,
+                }),
+                _ => None,
+            }
+        }));
+        Self { entries }
+    }
+    fn apply(&self, x: &[f64], y: &mut [f64]) {
+        y.fill(0.0);
+        for entry in &self.entries {
+            match *entry {
+                PressureEntry::Interior { lo, hi, weight } => {
+                    let d = weight * (x[lo] - x[hi]);
+                    y[lo] += d;
+                    y[hi] -= d;
+                }
+                PressureEntry::Outlet { cell, weight } => y[cell] += weight * x[cell],
+            }
+        }
+    }
+}
+
 pub fn apply(g: &Grid, x: &[f64], y: &mut [f64]) {
     y.fill(0.0);
     for f in &g.faces {
@@ -225,11 +269,12 @@ pub fn solve_scaled(
     let mut p = z.clone();
     let mut rz = dot(&r, &z);
     let mut ap = vec![0.0; g.count()];
+    let operator = Operator::build(g);
     for it in 0..max {
         if it % 8 == 0 {
             control.check()?;
         }
-        apply(g, &p, &mut ap);
+        operator.apply(&p, &mut ap);
         let denom = dot(&p, &ap);
         if denom <= 0.0 || !denom.is_finite() {
             return Err("CFD-E032: pressure CG lost positive definiteness".into());
@@ -421,6 +466,66 @@ mod tests {
             Factor::build(&g).apply(&r, &mut actual);
             for (a, b) in actual.iter().zip(expected) {
                 assert!((a - b).abs() <= 1e-10 * b.abs().max(1.0));
+            }
+        }
+    }
+
+    #[test]
+    fn compact_operator_retains_face_order_on_periodic_masked_and_open_grids() {
+        for periodic in [false, true] {
+            let mut c = case([6, 3, 2]);
+            if !periodic {
+                c.boundaries.x = Boundary::Open;
+                if let Flow::Laminar {
+                    initial_velocity_m_s,
+                    ..
+                } = &mut c.flow
+                {
+                    *initial_velocity_m_s = [1.0, 0.0, 0.0];
+                }
+            }
+            c.geometry.push(Block {
+                id: "barrier".into(),
+                min_m: [2.0, 0.0, 0.0],
+                max_m: [3.0, 3.0, 2.0],
+            });
+            let g = Grid::build(&c).unwrap();
+            let x: Vec<_> = (0..g.count()).map(|i| (0.73 * i as f64).sin()).collect();
+            let mut raw = vec![0.0; g.count()];
+            let mut compact = vec![42.0; g.count()];
+            apply(&g, &x, &mut raw);
+            Operator::build(&g).apply(&x, &mut compact);
+            assert_eq!(raw, compact);
+        }
+    }
+
+    #[test]
+    fn a_second_solve_uses_changed_public_face_coefficients() {
+        let mut c = case([5, 4, 3]);
+        c.boundaries.x = Boundary::Open;
+        if let Flow::Laminar {
+            initial_velocity_m_s,
+            ..
+        } = &mut c.flow
+        {
+            *initial_velocity_m_s = [1.0, 0.0, 0.0];
+        }
+        let mut g = Grid::build(&c).unwrap();
+        let exact: Vec<_> = (0..g.count()).map(|i| (0.73 * i as f64).sin()).collect();
+        for changed in [false, true] {
+            if changed {
+                // The cached factor remains an approximate preconditioner. The
+                // solved operator and independent residual must use current faces.
+                for (i, f) in g.faces.iter_mut().enumerate() {
+                    f.area *= 1.0 + (i % 7) as f64 * 0.025;
+                }
+            }
+            let mut b = vec![0.0; g.count()];
+            apply(&g, &exact, &mut b);
+            let (solved, info) = solve(&g, &b, 1e-12, 2000, &Control::new(20.0)).unwrap();
+            assert!(info.relative_residual <= 1.1e-11);
+            for (a, b) in solved.iter().zip(&exact) {
+                assert!((a - b).abs() < 1e-10);
             }
         }
     }

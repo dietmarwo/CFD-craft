@@ -70,14 +70,6 @@ Do not claim target accuracy, masked-grid improvement or OpenFOAM parity from
 this experiment. Repeating the external CFD campaign is a separate cost/error
 measurement after native pressure evidence is sound.
 
-## Delivery
-
-Record results and limitations in canonical documentation and a separate
-implementation log. Produce an applicable Git mail patch ZIP with base identity,
-checksums and instructions. Keep raw evidence separate; archive every directory
-and verify every restored sealed run with `archive_evidence.py`. Check ZIP CRC,
-patch applicability, extracted source identity and saved deliverable sizes.
-
 ## Prototype decision
 
 The first piecewise-constant prototype passed the small-matrix and projection

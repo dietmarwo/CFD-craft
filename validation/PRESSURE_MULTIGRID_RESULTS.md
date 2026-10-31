@@ -104,9 +104,10 @@ identity. A separate final-observer control validates the complete measurement
 path, without replacing the three-pair headline measurements.
 
 Use [the guide](../docs/PRESSURE_MULTIGRID.md) and
-`validation/benchmark_pressure.py` to reproduce. The delivery evidence ZIP
-preserves directory entries and verifies every restored sealed archive, rather
-[than copying only files](../docs/iterations/06-archive-investigation.md).
+`validation/benchmark_pressure.py` to reproduce. The recorded evidence was
+archived with `validation/archive_evidence.py`, which keeps directory entries
+[rather than copying only files](../docs/iterations/06-archive-investigation.md);
+all 69 sealed archives verify in its extracted copy.
 
 ## Remaining work
 

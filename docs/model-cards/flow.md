@@ -58,6 +58,11 @@ That building-wall adaptation depends on cell width. A future qualification stud
 
 The upper boundary has zero normal velocity, the equilibrium tangential stress and reference k/epsilon diffusion treatment. That stress closure is what makes `ground_open_top` an open top, so laminar cases may not use it (CFD-E023): without the closure the top would act as a no-slip lid. This is a particular neutral-domain closure, not a reproduction of an arbitrary tunnel ceiling. Side faces are classified from the prescribed wind as inlet, pressure outlet or impermeable slip.
 
+Production and variable-viscosity cross terms resolve the six cell neighbors
+once per local evaluation and reuse those indices across tensor components.
+The fallback at blocked/boundary neighbors, gradient arithmetic order, wall
+production and epsilon laws are unchanged; this is a stencil-cost change.
+
 Turbulence destruction terms use positive implicit denominators. Wall epsilon is an explicit algebraic constraint; tiny k/epsilon floors are counted. Any floor event prevents numerical acceptance. Excessive eddy viscosity causes a reported divergence instead of silent clipping.
 
 The counter covers state-update floors. The wall algebraic relation itself has a minimum epsilon of 1e-14 and is not separately counted by that field; its activity must be treated as an additional regime check before physical qualification.

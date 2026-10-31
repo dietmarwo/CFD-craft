@@ -103,14 +103,13 @@ fn sample(
     fi: usize,
     d: usize,
     side: isize,
+    neighbor: Option<usize>,
     u: &[f64],
     nut: &[f64],
     cell_u: &[[f64; 3]],
 ) -> f64 {
     let f = &g.faces[fi];
-    let mut q = f.coord.map(|v| v as isize);
-    q[d] += side;
-    if let Some(j) = g.face_at(c, f.axis, q) {
+    if let Some(j) = neighbor {
         if matches!(g.faces[j].kind, FaceKind::Wall | FaceKind::Blocked) && d != f.axis {
             wall_ghost(c, g, fi, d, side, u, nut, cell_u)
         } else {
@@ -169,8 +168,13 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
             });
             let mut rhs = 0.0;
             for d in 0..3 {
-                let lo = sample(c, g, fi, d, -1, u, nut, &cell_u);
-                let hi = sample(c, g, fi, d, 1, u, nut, &cell_u);
+                let mut q = f.coord.map(|v| v as isize);
+                q[d] -= 1;
+                let lo_face = g.face_at(c, f.axis, q);
+                q[d] += 2;
+                let hi_face = g.face_at(c, f.axis, q);
+                let lo = sample(c, g, fi, d, -1, lo_face, u, nut, &cell_u);
+                let hi = sample(c, g, fi, d, 1, hi_face, u, nut, &cell_u);
                 // Donor-cell momentum, direct second-order viscous stencil on the staggered grid.
                 rhs -= velocity[d]
                     * if velocity[d] >= 0.0 {
@@ -182,10 +186,8 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 let mu = c.flow.viscosity() + adjacent_mean(f, nut);
                 let mut mu_lo = mu;
                 let mut mu_hi = mu;
-                for (side, dst) in [(-1, &mut mu_lo), (1, &mut mu_hi)] {
-                    let mut q = f.coord.map(|v| v as isize);
-                    q[d] += side;
-                    if let Some(j) = g.face_at(c, f.axis, q)
+                for (neighbor, dst) in [(lo_face, &mut mu_lo), (hi_face, &mut mu_hi)] {
+                    if let Some(j) = neighbor
                         && g.faces[j].kind == FaceKind::Interior
                     {
                         *dst = 0.5 * (mu + c.flow.viscosity() + adjacent_mean(&g.faces[j], nut));

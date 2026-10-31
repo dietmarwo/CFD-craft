@@ -4,6 +4,10 @@
 
 Constant-density incompressible flow, flat ground, uniform Cartesian cells, box masks, CPU f64. Face velocities and cell pressure share the same divergence/gradient definition. Local coordinates are east/north/up. Pressure is kinematic pressure in m2/s2; the isotropic 2k/3 contribution is absorbed in RANS pressure.
 
+Momentum sampling and viscous coefficients share each staggered neighbor lookup
+within a face evaluation. Wall ghosts, periodic wrapping, blocked faces and
+outlet sampling keep their existing treatment.
+
 The momentum predictor uses first-order donor-cell advection of each staggered velocity component and an explicit variable-viscosity stencil. The extra variable-viscosity symmetric-stress contribution is reconstructed from cell gradients under the incompressibility assumption. It is not a claim of globally second-order momentum accuracy.
 
 An incremental projection is applied to each SSPRK2 velocity stage. Tests recover second-order decay for periodic viscous shear. General unsteady open-boundary pressure order is not established by that fixture. The intended urban use is a checked steady solution.

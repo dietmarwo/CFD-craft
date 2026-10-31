@@ -3,7 +3,9 @@ use crate::{
     case::*,
     flow,
     grid::{GeometryEvidence, Grid},
-    pressure, transport,
+    pressure,
+    profiling::{Collector, Phase, Profile, Span},
+    transport,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -21,6 +23,7 @@ pub struct Control {
     start: Instant,
     limit: Duration,
     external: Option<Box<dyn Fn() -> Result<()> + Send + Sync>>,
+    profiling: Option<Collector>,
 }
 impl Control {
     pub fn new(seconds: f64) -> Self {
@@ -29,6 +32,7 @@ impl Control {
             start: Instant::now(),
             limit: Duration::from_secs_f64(seconds),
             external: None,
+            profiling: None,
         }
     }
     /// A wall-time allowance plus an external cancellation or deadline poll.
@@ -61,6 +65,23 @@ impl Control {
     }
     pub fn elapsed(&self) -> f64 {
         self.start.elapsed().as_secs_f64()
+    }
+    /// Enable phase measurements without changing case or result schemas.
+    pub fn with_profiling(mut self) -> Self {
+        self.profiling = Some(Collector::default());
+        self
+    }
+    pub fn span(&self, phase: Phase) -> Span {
+        self.profiling
+            .as_ref()
+            .map_or_else(Span::disabled, |p| p.span(phase))
+    }
+    /// Snapshot after every span has finished; work includes failed attempts.
+    pub fn profile(&self) -> Result<Option<Profile>> {
+        self.profiling
+            .as_ref()
+            .map(|p| p.snapshot(self.elapsed()))
+            .transpose()
     }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -279,7 +300,11 @@ fn flow_euler(
     dt: f64,
     control: &Control,
 ) -> Result<(Vec<f64>, Vec<f64>, usize)> {
-    let rhs = flow::momentum_rhs(c, g, u, nut);
+    let rhs = {
+        let _phase = control.span(Phase::MomentumRhs);
+        flow::momentum_rhs(c, g, u, nut)
+    };
+    let velocity_update = control.span(Phase::VelocityUpdate);
     let grad = g.gradient(p);
     let mut v: Vec<_> = u
         .iter()
@@ -289,6 +314,7 @@ fn flow_euler(
         .collect();
     g.enforce_velocity(c, &mut v);
     let mut pp = p.to_vec();
+    drop(velocity_update);
     let info = pressure::project(
         g,
         &mut v,
@@ -309,6 +335,7 @@ pub fn step(
     dt: f64,
     control: &Control,
 ) -> Result<()> {
+    let _step = control.span(Phase::Step);
     control.check()?;
     let nut = flow::eddy_viscosity(g, &s.k, &s.epsilon);
     // Build the next state off to the side: pressure/cancellation failure cannot publish half a step.
@@ -346,11 +373,13 @@ pub fn step(
         g.enforce_velocity(c, &mut next.velocity);
         next.pressure_iterations += n1 + n2;
         if c.flow.rans() {
+            let _phase = control.span(Phase::Turbulence);
             next.floor_events +=
                 flow::turbulence_step(c, g, &next.velocity, &mut next.k, &mut next.epsilon, dt);
         }
     }
     for (j, source) in sources.iter().enumerate() {
+        let _phase = control.span(Phase::ScalarTransport);
         let d = diffusivity(c, &nut, j);
         let r1 = transport::rhs(
             g,
@@ -393,7 +422,10 @@ pub fn step(
     next.time_s += dt;
     next.steps += 1;
     // History is borrowed until every fallible gate below has passed.
-    validate_with_history(c, g, &next, &s.monitor_history)?;
+    {
+        let _phase = control.span(Phase::StateValidation);
+        validate_with_history(c, g, &next, &s.monitor_history)?;
+    }
     if next
         .velocity
         .iter()
@@ -640,17 +672,28 @@ pub struct RunResult {
     pub geometry: GeometryEvidence,
 }
 pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunResult> {
-    c.validate()?;
-    let g = Grid::build(c)?;
+    let _run = control.span(Phase::SolverRun);
+    {
+        let _phase = control.span(Phase::CaseValidation);
+        c.validate()?;
+    }
+    let g = {
+        let _phase = control.span(Phase::GridSetup);
+        Grid::build(c)?
+    };
+    let input_setup = control.span(Phase::InputSetup);
     let sources = transport::source_fields(c, &g)?;
     let weights = c
         .receptors
         .iter()
         .map(|r| transport::receptor_weights(&g, r))
         .collect::<Result<Vec<_>>>()?;
+    drop(input_setup);
+    let state_setup = control.span(Phase::StateSetup);
     let mut state = restart.unwrap_or_else(|| initial_state(c, &g));
     validate_state(c, &g, &state)?;
     let initial_state_sha256 = hash_bytes(&serde_json::to_vec(&state).map_err(|e| e.to_string())?);
+    drop(state_setup);
     let mut termination = "iteration_limit".to_string();
     let mut error = None;
     if state.steps == 0 && !c.flow.prescribed() {
@@ -667,6 +710,7 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
                 state.pressure_iterations += initial.iterations;
                 state.pressure.fill(0.0);
                 if c.flow.rans() {
+                    let _phase = control.span(Phase::Turbulence);
                     state.floor_events += flow::turbulence_step(
                         c,
                         &g,
@@ -696,6 +740,7 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
             termination = e;
             break;
         }
+        let timestep_phase = control.span(Phase::Timestep);
         let nut = flow::eddy_viscosity(&g, &state.k, &state.epsilon);
         if nut
             .iter()
@@ -715,6 +760,7 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
             error = Some("CFD-E055: the time step is not finite and positive".into());
             break;
         }
+        drop(timestep_phase);
         if let Err(e) = step(c, &g, &mut state, &sources, dt, control) {
             termination = if e == "cancelled" || e == "wall_time_limit" {
                 e.clone()
@@ -724,12 +770,15 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
             error = Some(e);
             break;
         }
+        let monitor_phase = control.span(Phase::Monitor);
         state.monitor_history.push(monitor(c, &g, &state, &weights));
         let keep = 3 * c.numerics.monitor_window;
         if state.monitor_history.len() > keep {
             state.monitor_history.remove(0);
         }
+        drop(monitor_phase);
         if c.run.mode == Mode::Steady && state.steps.is_multiple_of(c.numerics.monitor_window) {
+            let _phase = control.span(Phase::Assessment);
             let (checks, _, _, _) = assess(c, &g, &state, &sources, &weights);
             if checks.iter().all(|x| x.passed) {
                 termination = "completed".into();
@@ -740,8 +789,10 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
     if c.run.mode == Mode::Transient && state.time_s >= c.run.end_time_s * (1.0 - 1e-13) {
         termination = "completed".into();
     }
-    let (checks, constituents, momentum_residual, turbulence_residual) =
-        assess(c, &g, &state, &sources, &weights);
+    let (checks, constituents, momentum_residual, turbulence_residual) = {
+        let _phase = control.span(Phase::Assessment);
+        assess(c, &g, &state, &sources, &weights)
+    };
     let passed = checks.iter().all(|x| x.passed);
     let assessment = if termination == "completed" && passed {
         if c.run.mode == Mode::Steady {

@@ -1,10 +1,13 @@
 # Changelog
 
+
 ## [Unreleased]
 
 First version, 0.1.0, a research prototype. Experimental canyon validation and a successful fine-grid resolution study remain open gates.
 
 ### Added
+
+- Add opt-in native phase profiling and a retained-row cavity accuracy sweep, with attempted-work accounting and explicit unreached accuracy targets.
 
 - A detailed user manual with architecture, numerical/evidence concepts and 31 API examples; four executable Rust examples, native/OpenFOAM Python cookbooks and CI checks for the small native workflow. A project banner and prominent README/manual navigation make the entry points easier to find. An error from a `Control::with_poll` callback now stops a library run as `cancelled` instead of `diverged`. `validation/manual_examples.py --foam-root` runs the manual's OpenFOAM recipes in order and reports each step; `prepare-mapped` with a relative runtime root now starts the mapper instead of failing to find it from the target case directory.
 - Same-host timing of the lid-driven cavity with both backends (`validation/compare_backends.py`, CI selection `external=comparison`): one thread each, every order of the methods, every run accepted and its work repeated. OpenFOAM's steady workflow is 4.7–5.5 times faster than native steady mode on two hosts and closer to the Ghia reference; its solver process is about 9 times faster ([results](validation/BACKEND_COMPARISON.md)).

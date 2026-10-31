@@ -286,8 +286,52 @@ def main():
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--timeout-s", type=float, default=180)
+    ap.add_argument(
+        "--grid-sweep",
+        action="store_true",
+        help="Retain accepted and incomplete cost/error rows across grids",
+    )
+    ap.add_argument("--levels", type=int, nargs="+", default=[1, 2])
+    ap.add_argument("--sweep-rounds", type=int, default=3)
+    ap.add_argument("--accuracy-target", type=float, default=0.01)
+    ap.add_argument("--native-wall-s", type=float, default=180)
+    ap.add_argument("--native-max-steps", type=int, default=20000)
+    ap.add_argument("--foam-iterations", type=int, default=3000)
     args = ap.parse_args()
     try:
+        if args.grid_sweep:
+            from accuracy_sweep import sweep
+
+            report = sweep(
+                args.binary,
+                args.foam_root,
+                args.output,
+                levels=args.levels,
+                rounds=args.sweep_rounds,
+                target=args.accuracy_target,
+                native_wall_s=args.native_wall_s,
+                foam_wall_s=args.timeout_s,
+                native_max_steps=args.native_max_steps,
+                foam_iterations=args.foam_iterations,
+            )
+            print(
+                json.dumps(
+                    {
+                        k: report.get(k)
+                        for k in [
+                            "completed",
+                            "workflow_valid",
+                            "passed",
+                            "error",
+                            "groups",
+                            "cost_at_target",
+                            "native_over_openfoam_at_target",
+                        ]
+                    },
+                    indent=2,
+                )
+            )
+            return 1 if not report["workflow_valid"] else 0 if report["passed"] else 2
         report = compare(
             args.binary, args.foam_root, args.output, args.repeats, args.timeout_s
         )

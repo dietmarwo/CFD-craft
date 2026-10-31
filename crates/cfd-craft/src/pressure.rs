@@ -238,6 +238,7 @@ pub fn solve_scaled(
     max: usize,
     control: &Control,
 ) -> Result<(Vec<f64>, LinearInfo)> {
+    let mut measured = control.span(crate::profiling::Phase::PressureSolve);
     for (id, m) in g.components.iter().enumerate() {
         if !g.anchored[id] {
             let sum = m.iter().map(|i| b[*i]).sum::<f64>();
@@ -250,7 +251,10 @@ pub fn solve_scaled(
             }
         }
     }
-    let factor = g.pressure_factor.get_or_init(|| Factor::build(g));
+    let factor = g.pressure_factor.get_or_init(|| {
+        let _setup = control.span(crate::profiling::Phase::PressureFactorSetup);
+        Factor::build(g)
+    });
     let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let mut x = vec![0.0; g.count()];
     let mut r = b.to_vec();
@@ -265,16 +269,22 @@ pub fn solve_scaled(
     }
     let mut z = vec![0.0; g.count()];
     factor.apply(&r, &mut z);
+    measured.preconditioner_applications += 1;
     center_nullspaces(g, &mut z);
     let mut p = z.clone();
     let mut rz = dot(&r, &z);
     let mut ap = vec![0.0; g.count()];
-    let operator = Operator::build(g);
+    let operator = {
+        let _setup = control.span(crate::profiling::Phase::PressureOperatorSetup);
+        Operator::build(g)
+    };
     for it in 0..max {
         if it % 8 == 0 {
             control.check()?;
         }
+        measured.work_units += 1;
         operator.apply(&p, &mut ap);
+        measured.operator_applications += 1;
         let denom = dot(&p, &ap);
         if denom <= 0.0 || !denom.is_finite() {
             return Err("CFD-E032: pressure CG lost positive definiteness".into());
@@ -288,6 +298,8 @@ pub fn solve_scaled(
         if rel <= tol {
             // Recompute, do not trust only the recurrent CG residual.
             apply(g, &x, &mut ap);
+            measured.operator_applications += 1;
+            measured.true_residual_checks += 1;
             let true_rel = ap
                 .iter()
                 .zip(&compatible_b)
@@ -307,6 +319,7 @@ pub fn solve_scaled(
             }
         }
         factor.apply(&r, &mut z);
+        measured.preconditioner_applications += 1;
         center_nullspaces(g, &mut z);
         let next = dot(&r, &z);
         let beta = next / rz;
@@ -349,6 +362,7 @@ pub fn project(
     max: usize,
     control: &Control,
 ) -> Result<LinearInfo> {
+    let _projection = control.span(crate::profiling::Phase::PressureProjection);
     let (b, terms) = projection_rhs(g, u, dt);
     let (correction, info) = solve_scaled(g, &b, Some(&terms), tol, max, control)?;
     for (v, f) in u.iter_mut().zip(&g.faces) {

@@ -61,6 +61,10 @@ paired runner is `validation/benchmark_native.py`; the frozen cases are in
 `cases/performance/`. On the lid-driven cavity, timed on one machine with one
 thread each, OpenFOAM is 4.7–5.5 times faster than native steady mode and closer
 to the reference ([backend comparison](validation/BACKEND_COMPARISON.md)).
+The opt-in [`profile` command and accuracy sweep](docs/PROFILING.md) attribute
+actual solver phases, retain incomplete grid-sweep rows and report cost at a
+declared error only when the target is reached. See the
+[gap-closing baseline](validation/GAP_BASELINE.md).
 
 ## Verification
 

@@ -419,12 +419,34 @@ def manual_examples(report, title):
     return 0
 
 
+def accuracy_sweep(report, title):
+    lines = [
+        f"completed {report.get('completed')}; workflow valid {report.get('workflow_valid')}; all rows accepted {report.get('passed')}"
+    ]
+    if report.get("error"):
+        lines.append(f"error {report['error']}")
+    for group in report.get("groups") or []:
+        lines.append(
+            f"{group['method']} {group['grid']}²: accepted {group['accepted_rows']}/{group['timed_rows']}; workflow median {number(group['workflow_median_s'])} s; solver median {number(group['solver_median_s'])} s; error {number(group['reference_error'])}; qualifies {group['qualifies']}"
+        )
+    for method, found in (report.get("cost_at_target") or {}).items():
+        lines.append(f"{method}: {found['status']}")
+    lines.append(
+        "native/OpenFOAM at target: "
+        + json.dumps(report.get("native_over_openfoam_at_target"))
+    )
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
     schema = str(report.get("schema_version", ""))
     if schema.startswith("cfd-craft.manual-examples"):
         return manual_examples(report, title)
+    if schema.startswith("cfd-craft.accuracy-sweep"):
+        return accuracy_sweep(report, title)
     if "rows" in report:
         return resolution(report)
     if schema.startswith("cfd-craft.backend-performance"):

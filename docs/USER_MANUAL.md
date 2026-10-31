@@ -852,9 +852,18 @@ python validation/manual_examples.py --output runs/manual-verification
 
 This executes the native Python cookbook normally and under -O, all four Rust
 examples, the accepted/incomplete archive distinction and the point-source
-case with a field audit. OpenFOAM is optional and is exercised separately by
-Example 22. Small runnable API checks keep the manual tied to compiled APIs.
-Heavy optional external recipes are not part of this quick smoke execution.
+case with a field audit. Small runnable API checks keep the manual tied to
+compiled APIs. OpenFOAM is optional and not part of this quick execution. With
+an installed runtime, the OpenFOAM recipes (Examples 21, 22, 24 and 25, and the
+run of the mapped case) run in order as a separate check:
+
+```sh
+python validation/manual_examples.py \
+  --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/manual-foam-check
+```
+
+Each row of its report records a step's exit code and result fields; every
+step must exit 0.
 
 ### Example 30: run scientific workflows
 

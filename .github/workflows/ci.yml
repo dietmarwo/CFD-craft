@@ -69,19 +69,15 @@ jobs:
           code=$?
           test ! -f runs/mapping-cavity/report.json || python validation/external_notices.py runs/mapping-cavity/report.json "mapping cavity"
           test "$code" -eq 0 -o "$code" -eq 2
-      # The user manual's OpenFOAM recipes as written (Examples 21, 22, 24 and 25),
-      # with the manual's runtime path. Every step must exit 0.
+      # The user manual's OpenFOAM recipes (Examples 21, 22, 24 and 25, and the run of
+      # the mapped case) with the manual's relative runtime path. Every step must exit
+      # 0; the notice lists each step's exit code and result.
       - run: |
-          root=runs/openfoam13/runtime/opt/openfoam13
-          python examples/manual/openfoam_api.py --foam-root $root --output runs/manual-foam > runs/manual-foam.json
-          python integrations/openfoam_backend.py prepare --case cavity --level 1 --iterations 3000 --output runs/foam-cavity-input > /dev/null
-          python integrations/openfoam_backend.py run --case runs/foam-cavity-input --foam-root $root --timeout-s 180 --output runs/foam-cavity > /dev/null
-          python integrations/openfoam_backend.py report runs/foam-cavity > /dev/null
-          python integrations/openfoam_backend.py prepare-restart --source runs/foam-cavity --iterations 3000 --output runs/foam-continuation-input > /dev/null
-          python integrations/openfoam_backend.py run --case runs/foam-continuation-input --foam-root $root --timeout-s 180 --output runs/foam-continuation > /dev/null
-          python integrations/openfoam_backend.py prepare-mapped --source runs/foam-cavity --level 2 --iterations 3000 --foam-root $root --output runs/foam-finer-input > /dev/null
-          python integrations/openfoam_backend.py run --case runs/foam-finer-input --foam-root $root --timeout-s 180 --output runs/foam-finer > /dev/null
-          echo "::notice title=manual OpenFOAM recipes::Examples 21, 22, 24 and 25 passed"
+          set +e
+          python validation/manual_examples.py --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/manual-foam > /dev/null
+          code=$?
+          test ! -f runs/manual-foam/report.json || python validation/external_notices.py runs/manual-foam/report.json "manual OpenFOAM recipes"
+          test "$code" -eq 0
       - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
       # The study preset: the cavity comparison and the backstep at three mesh levels,
       # each with the recorded 300-second budget. Exit 2 records unaccepted evidence;
@@ -117,6 +113,8 @@ jobs:
             runs/external-study/backstep-level*-comparison/*
             runs/equivalence-*/report.json
             runs/mapping-cavity/**
+            runs/manual-foam/report.json
+            runs/manual-foam/*.log
   # Same-host timing of the cavity with both backends; explicit opt-in only.
   backend-comparison:
     if: github.event_name == 'workflow_dispatch' && inputs.external == 'comparison'
@@ -302,6 +300,8 @@ jobs:
       - run: python validation/test_cli.py -v
       - run: python -O validation/test_cli.py -v
       - run: cargo build --release --workspace --examples --locked
+      - run: python validation/test_manual_examples.py -v
+      - run: python -O validation/test_manual_examples.py -v
       - run: python validation/manual_examples.py --output runs/manual-examples
       - run: python validation/flow_accuracy.py --output runs/flow-accuracy
       - run: python validation/run_suite.py --output runs/verification

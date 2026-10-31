@@ -617,7 +617,8 @@ def prepare(
             level,
             iterations,
             output,
-            Path(foam_root),
+            # Utilities run inside the target case: a relative root is resolved here.
+            Path(foam_root).resolve(),
             data,
             timeout_s,
             output_mib,

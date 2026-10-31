@@ -34,6 +34,8 @@ cavity using the real source-checkout adapter API, with prepare/run/verify and
 numerical assessment. Install the pinned runtime as described in
 [OPENFOAM.md](../../integrations/OPENFOAM.md). It does not use the native run
 schema, and its result must be inspected with the external verifier.
+`python validation/manual_examples.py --foam-root <runtime root> --output <new
+directory>` runs it together with the manual's other OpenFOAM recipes.
 
 The Rust library examples configure their own Rayon pool. A bare solver result
 has no CLI source/compiler fingerprint added by the caller; see the manual's

@@ -39,11 +39,8 @@ This is the first implementation stage of the reviewed gap-closing plan.
 - Profile overhead: one warmup and five alternating pairs at 24², plus fixed-work
   scalar and canyon controls. Do not time independent CPU-heavy campaigns at
   the same time. Compiler, CPU, binaries, runtime and consumed cases are retained.
-- No 72² long campaign is required in this hosted iteration; test its plan and
-  budget handling. Record a 48² timeout rather than increasing its frozen budget.
-- Verify both patch formats against pristine merged main, then run the new
-  contract/API checks from the applied checkout. Package patches, compact
-  evidence, plan and implementation log with member checksums.
+- The 72² campaign is not run; its plan and budget handling are tested.
+  Record a 48² timeout rather than increasing its frozen budget.
 
 ## Completion and next stage
 
@@ -52,4 +49,4 @@ failed attempted work, and leave the solver's numerical results unchanged.
 The sweep must retain unsuccessful rows and explicitly show whether each
 backend reaches the target on the tested grids. New diagnostics include field
 paths. The next numerical stage is P1, a symmetric PCG-compatible multigrid
-preconditioner; it is not part of this measurement release.
+preconditioner; it is not part of the measurement stage.

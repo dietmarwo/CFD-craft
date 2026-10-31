@@ -176,11 +176,25 @@ jobs:
           code=$?
           test ! -f runs/accuracy-sweep/report.json || python validation/external_notices.py runs/accuracy-sweep/report.json "cavity accuracy sweep"
           test "$code" -eq 0 -o "$code" -eq 2
+      # A file-only upload drops empty directories, which an OpenFOAM archive's
+      # progress record can name. Upload a zip with directory entries; every archive
+      # in its extracted copy must verify as the original does.
+      - if: always()
+        run: |
+          test -d runs/accuracy-sweep || exit 0
+          set +e
+          python validation/archive_evidence.py runs/accuracy-sweep runs/accuracy-sweep-evidence.zip --binary target/release/cfd-craft > runs/accuracy-archive.json
+          code=$?
+          python validation/external_notices.py runs/accuracy-archive.json "accuracy evidence archive"
+          test "$code" -eq 0
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: accuracy-sweep-evidence
-          path: runs/accuracy-sweep/**
+          path: |
+            runs/accuracy-sweep/report.json
+            runs/accuracy-sweep-evidence.zip
+            runs/accuracy-archive.json
   external-resolution:
     if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy'
     runs-on: ubuntu-24.04
@@ -332,6 +346,8 @@ jobs:
       - run: python -O validation/test_cli.py -v
       - run: python validation/test_profiling.py -v
       - run: python -O validation/test_profiling.py -v
+      - run: python validation/test_archive_evidence.py -v
+      - run: python -O validation/test_archive_evidence.py -v
       - run: cargo build --release --workspace --examples --locked
       - run: python validation/test_manual_examples.py -v
       - run: python -O validation/test_manual_examples.py -v

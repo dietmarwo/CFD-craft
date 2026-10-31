@@ -439,6 +439,26 @@ def accuracy_sweep(report, title):
     return 0
 
 
+def evidence_archive(report, title):
+    lines = [
+        f"round trip identical {report.get('round_trip_identical')}; "
+        f"archives {report.get('archives')}; verified {report.get('verified')}; "
+        f"zip entries {report.get('entries')}"
+    ]
+    if report.get("error"):
+        lines.append(f"error {report['error']}")
+    lines += [
+        f"not verified: {row.get('archive')}: {row.get('error')}"
+        for row in report.get("failed") or []
+    ]
+    lines += [
+        "differs in the copy: " + json.dumps(row)
+        for row in report.get("differences") or []
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
@@ -447,6 +467,8 @@ def main():
         return manual_examples(report, title)
     if schema.startswith("cfd-craft.accuracy-sweep"):
         return accuracy_sweep(report, title)
+    if schema.startswith("cfd-craft.evidence-archive"):
+        return evidence_archive(report, title)
     if "rows" in report:
         return resolution(report)
     if schema.startswith("cfd-craft.backend-performance"):

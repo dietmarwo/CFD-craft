@@ -134,4 +134,4 @@ evidence, and 1 for a failed execution or invalid input
 | Code | Meaning |
 |---|---|
 | CFD-B003 | `profile.*`: an active or incorrectly nested phase snapshot (`active`, `nesting`), an unwritable profile report (`output`), or a profile/archive identity, time-accounting or attempted-work mismatch named by its field path. |
-| CFD-B004 | `sweep.*`: invalid grid/limit/target/row fields, changed inputs (`inputs`), inconsistent repeated accepted work/fields/producer (`repeat.*`), a failed bounded child (`native.execution`, `openfoam.execution`) or an occupied process-log destination (`process.output`). Unaccepted numerical rows remain recorded separately. |
+| CFD-B004 | `sweep.*`: invalid grid/limit/target/row fields, changed inputs (`inputs`), inconsistent repeated accepted work/fields/producer (`repeat.*`), a failed bounded child (`native.execution`, `openfoam.execution`), an occupied process-log destination (`process.output`), or an evidence zip that cannot be written, contains a symlink or an unsafe member, or holds an archive of unknown schema (`archive.*`). Unaccepted numerical rows remain recorded separately. |

@@ -1,6 +1,6 @@
-# Native/OpenFOAM gap-closing baseline (iteration 17, P0)
+# Native/OpenFOAM gap-closing baseline
 
-Date: 31 October 2026. Based on merged PR #10, `6759996`. This release adds measurement tools; the IC(0)-PCG, donor-cell momentum and SSPRK2 numerical algorithms remain the baseline.
+Measured 31 October 2026 on the code of `6759996` plus the profiling and sweep tools. The native numerics measured are IC(0)-PCG pressure, donor-cell momentum and SSPRK2 steps; profiling leaves their results unchanged.
 
 ## Protocol
 
@@ -20,7 +20,7 @@ The accuracy sweep uses one unscored warmup and three timed repetitions per conf
 
 OpenFOAM reaches error ≤0.01 at 24². Native does not reach it on the tested 12²/24²/48² grids. Its cost at the target and the cross-backend equal-accuracy ratio are therefore unavailable. No target crossing is extrapolated. The cavity is a numerical reference, not an experimental validation of urban dispersion.
 
-Workflow time includes preparation, a bounded child process, archive checks and profile evaluation. Native solver time is its `elapsed_s`; OpenFOAM solver time encloses `foamRun` startup, case I/O and solve. GNU-time RSS means maximum individual process RSS including waited descendants, not simultaneous aggregate memory. Complete timers, ranges, RSS, order, inputs and producer hashes accompany the report.
+Workflow time includes preparation, a bounded child process, archive checks and centerline sampling. Native solver time is its `elapsed_s`; OpenFOAM solver time encloses `foamRun` startup, case I/O and solve. GNU-time RSS means maximum individual process RSS including waited descendants, not simultaneous aggregate memory. Complete timers, ranges, RSS, order, inputs and producer hashes accompany the report.
 
 The original three-method comparator was also rerun:
 
@@ -46,7 +46,7 @@ One separately profiled 48² run retained 6390 steps and 1262035 pressure iterat
 
 ## Instrumentation cost and exact-state checks
 
-The merged baseline, candidate plain command and candidate profile command were run in recorded orders: one warmup per mode, five timed rounds for the cavity and two timed rounds for each fixed-work control. Every returned state was byte-identical across all three builds/modes within each case; independent field audits passed. There is no performance threshold or solver-speedup claim for this measurement release.
+The merged baseline, candidate plain command and candidate profile command were run in recorded orders: one warmup per mode, five timed rounds for the cavity and two timed rounds for each fixed-work control. Every returned state was byte-identical across all three builds/modes within each case; independent field audits passed. There is no performance threshold or solver-speedup claim.
 
 | Case | Profile/plain solver ratio, paired median | Candidate plain/baseline solver ratio, paired median | Profile/plain process ratio, paired median |
 |---|---:|---:|---:|
@@ -60,7 +60,11 @@ The scalar and canyon controls use fixed work and can end at their iteration lim
 
 A deliberate one-step native / 50-iteration OpenFOAM sweep completed with unaccepted rows and exit 2. Its numerical, independent-check and reference statuses remain separate, and no configuration is promoted into cost-at-target results. A failed-pressure test records attempted work even though no step commits.
 
-The final sweep freezes and checks its input/producer identities before and after each row. A development campaign with a changed producer was rejected; its report is retained separately and supplies no timing claim here. The delivered implementation log records that rejection and the measurement-tool limitations.
+The final sweep freezes and checks its input/producer identities before and after each row. A development campaign with a changed producer was rejected; its report is retained separately and supplies no timing claim here.
+
+## Archives with an empty recorded time directory
+
+In three of the four 48² OpenFOAM runs (the timed rounds, not the warmup), the summary written at sealing lists an old time directory, `250` or `500`, that holds no files; the final fields are at iteration 2132 in every run. This is the anomaly described in the [archive investigation](../docs/iterations/06-archive-investigation.md). The sweep verified each archive on the measuring host, where the directory existed. The evidence copy kept files only, so these three archives fail `openfoam_backend.py report` after restoration and verify again once the empty directories are recreated. All 72 native archives, the other 15 OpenFOAM archives and the 13 profile envelopes in the evidence verify as copied. The timing and Ghia-error results of the three runs come from their final fields and are unaffected. Use `validation/archive_evidence.py` to transfer such evidence with its directory entries.
 
 ## Next numerical iteration
 

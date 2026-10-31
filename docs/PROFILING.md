@@ -125,8 +125,8 @@ The sweep exits 0 if all rows pass existing numerical/audit/reference checks,
 workflow, changed input or inconsistent repeated result. Missing the development
 target alone is a recorded outcome and does not invalidate a sweep.
 
-Workflow time includes preparation, a bounded child, archive checks and profile
-evaluation. Native solver time is `elapsed_s`; OpenFOAM solver time is its
+Workflow time includes preparation, a bounded child, archive checks and the
+centerline sampling. Native solver time is `elapsed_s`; OpenFOAM solver time is its
 `foamRun` child time. Separate process time and GNU-time RSS observations are
 retained. RSS means maximum individual process RSS, including waited descendants,
 rather than simultaneous aggregate memory; it is explicitly unavailable without
@@ -140,3 +140,11 @@ For a hosted run, dispatch **CFD checks** with `external=accuracy`. It builds th
 release, installs the pinned runtime, runs the 24²/48² sweep and uploads the
 complete evidence. Notices show accepted-row counts, medians and unreached
 targets. This explicit opt-in is separate from the existing `all` budget.
+
+Transfer evidence with its directory entries. An OpenFOAM archive's progress
+record lists its numbered time directories, and one can hold no files (see the
+[archive investigation](iterations/06-archive-investigation.md)); a file-only
+copy then fails `openfoam_backend.py report` although the original verifies.
+`python validation/archive_evidence.py TREE NEW.zip` writes a zip with every
+directory entry and checks that each archive in the extracted copy verifies
+exactly as the original does. The CI job uploads that zip.

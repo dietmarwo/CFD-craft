@@ -15,8 +15,35 @@ def escape(text, title=False):
     return text.replace(":", "%3A").replace(",", "%2C") if title else text
 
 
+# GitHub keeps the first 4096 characters of an annotation message and drops the rest.
+MESSAGE_LIMIT = 4096
+
+
+def parts(message, limit=MESSAGE_LIMIT):
+    """Split a message at line ends into pieces GitHub keeps whole."""
+    pieces, current = [], None
+    for line in str(message).split("\n"):
+        while len(line) > limit:
+            if current is not None:
+                pieces.append(current)
+                current = None
+            pieces.append(line[:limit])
+            line = line[limit:]
+        if current is None:
+            current = line
+        elif len(current) + 1 + len(line) <= limit:
+            current += "\n" + line
+        else:
+            pieces.append(current)
+            current = line
+    return [*pieces, current]
+
+
 def notice(title, message):
-    print(f"::notice title={escape(title, True)}::{escape(message)}")
+    pieces = parts(message)
+    for number, piece in enumerate(pieces, 1):
+        name = title if len(pieces) == 1 else f"{title} ({number}/{len(pieces)})"
+        print(f"::notice title={escape(name, True)}::{escape(piece)}")
 
 
 def number(value, digits=6):
@@ -256,12 +283,108 @@ def mapped_start(report, title):
     return 0
 
 
+def observation_lines(name, observed):
+    """One returned archive's checks: numerical, audit, observable and metrics."""
+    observed = observed or {}
+    if observed.get("error"):
+        return [f"{name}: observation invalid: {observed['error']}"]
+    comparison = observed.get("comparison") or {}
+    screen = comparison.get("measurement_screen_passed", comparison.get("passed"))
+    lines = [
+        f"{name}: numerically accepted {observed.get('numerically_accepted')}; "
+        f"independent accepted {(observed.get('independent') or {}).get('passed')}; "
+        f"observable check {screen}"
+    ]
+    if "reattachment" in comparison:
+        lines.append(
+            f"{name}: reattachment {number(comparison['reattachment'].get('predicted_x_over_h'), 6)} H; "
+            f"Cf RMSE {number((comparison.get('skin_friction') or {}).get('rmse'), 4)}; profiles "
+            + ", ".join(
+                f"{k} {number(v.get('rmse_u_ref'), 4)}"
+                for k, v in (comparison.get("profiles") or {}).items()
+            )
+        )
+    elif "maximum_error" in comparison:
+        lines.append(
+            f"{name}: Ghia centerline error {number(comparison['maximum_error'])}"
+        )
+    return lines
+
+
+def refinement(report, title):
+    plan = report.get("plan") or {}
+    replay = (report.get("mesh_initialization") or {}).get("nearest_replay")
+    lines = [
+        f"workflow completed {report.get('workflow_completed')}; passed {report.get('passed')}; "
+        f"stop {report.get('stop_reason')}; error {report.get('error')}",
+        f"source iterations {report.get('source_iterations')} (separate from fine work); "
+        f"completed fine iterations {report.get('completed_fine_iterations')}; "
+        f"started {report.get('started_fine_iterations')}; "
+        f"stages {len(report.get('stages') or [])}; limits {json.dumps(plan.get('limits'))}",
+        f"preparation {number(report.get('preparation_wall_s'), 5)} s; "
+        f"campaign wall {number(report.get('total_wall_s'), 5)} s; "
+        f"archive checkpoints {len(report.get('archive_checkpoints') or [])}; "
+        f"mapNearest replay {json.dumps(replay)}",
+        f"source rejection {report.get('source_rejection')}",
+    ]
+    lines += observation_lines("coarse source", report.get("coarse_observation"))
+    stages = []
+    for row in report.get("stages") or []:
+        run = row.get("execution") or {}
+        work = run.get("numerical") or {}
+        trend = (work.get("residual_trend") or {}).get("p") or {}
+        stage = [
+            f"stage {row.get('stage')}: {run.get('execution_status')}; "
+            f"iterations {work.get('iterations')}; started "
+            f"{(run.get('progress') or {}).get('started_iterations')}; "
+            f"converged {work.get('solver_reported_convergence')}; "
+            f"numerically accepted {run.get('passed')}; wall {number(run.get('wall_s'), 5)} s"
+            + (f"; error {run['error']}" if run.get("error") else "")
+        ]
+        if work:
+            stage.append(
+                f"stage {row.get('stage')} final residuals "
+                + json.dumps(work.get("initial_residuals_final_iteration"))
+                + f"; p median last/previous window {number(trend.get('median_last_window'), 4)}"
+                f" / {number(trend.get('median_previous_window'), 4)}"
+            )
+        observed = row.get("observation") or {}
+        stage += observation_lines(f"stage {row.get('stage')}", observed)
+        stage += audit_lines(observed.get("independent"))
+        stages.append((row.get("stage"), stage))
+    sensitivity = report.get("mesh_sensitivity") or {}
+    lines.append(
+        "mesh sensitivity "
+        + json.dumps(
+            {
+                k: v
+                for k, v in sensitivity.items()
+                if k not in ["coarse", "fine", "cf_comparison_x_over_h"]
+            }
+        )
+    )
+    lines.append(f"physical qualification {report.get('physical_qualification')}")
+    # One notice per part, so no stage or identity is lost to the length limit.
+    notice(title, "\n".join(lines))
+    for index, stage in stages:
+        notice(f"{title} stage {index}", "\n".join(stage))
+    identities = plan.get("implementation_sha256") or {}
+    if identities:
+        notice(
+            f"{title} implementation",
+            "\n".join(f"{k} {v}" for k, v in identities.items()),
+        )
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
     if "rows" in report:
         return resolution(report)
     schema = str(report.get("schema_version", ""))
+    if schema.startswith("cfd-craft.refinement-campaign"):
+        return refinement(report, title)
     if schema.startswith("cfd-craft.mapping-experiment"):
         return mapping_experiment(report, title)
     if schema.startswith("cfd-craft.mapped-start"):

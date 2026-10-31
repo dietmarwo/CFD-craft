@@ -66,6 +66,11 @@ from same-mesh continuation: use accepted cold coarse fields, preserve generated
 fine boundaries and construct new phi in the target solver. It carries no
 fine-grid acceptance verdict; run the normal numerical/audit/screen checks.
 
+The [bounded refinement campaign](REFINEMENT_CAMPAIGN.md) connects that mapping
+to verified fine-grid stages, retains complete parent archives and compares
+observables only after both grids pass their numerical and independent gates.
+It has separate stopping, workflow and scientific verdicts.
+
 For a steady solve longer than one run's limits, see the
 [continuation guide](STEADY_RESTART.md). `prepare-restart` turns a completed
 archive into a fresh same-mesh input from its final fields and phi. The
@@ -154,8 +159,8 @@ fields and face fluxes to verify rejection, and compare the actual wall-resolved
 continue actual cavity runs against uninterrupted controls, and map actual
 cavity and backstep fields to the next level. CI runs the boundary tests on each
 push/PR. A manual workflow dispatch installs the pinned runtime in two parallel
-jobs; its `external` input selects the work: `backend`, `resolution`, `mapping`
-or `all`. `external-backend` runs the real backend tests (each failing test
+jobs; its `external` input selects the work: `backend`, `resolution`, `mapping`,
+`refinement` or `all`. `external-backend` runs the real backend tests (each failing test
 becomes an error annotation), the mapped-against-cold level-2 cavity, the
 external study preset with `--timeout-s 300` and a fixed-work continuation
 check of the wall-resolved backstep (`simple` profile, 250+250 iterations).
@@ -164,7 +169,10 @@ check of the wall-resolved backstep (`simple` profile, 250+250 iterations).
 runs it in stages (`--iterations 6000 --max-stages 4 --timeout-s 3500`) on the
 same runner and compares the two converged results; for `mapping` and `all` it
 starts level 2 from the single run and cold (`mapped_start.py`, 3000 iterations
-each). Both publish the key numbers as notices and
+each). For `refinement` (not part of `all`) it runs the declared
+[refinement campaign](REFINEMENT_CAMPAIGN.md) from the single run
+(`--iterations 4000 --max-stages 3 --timeout-s 3500 --preparation-s 900`) and
+uploads the complete campaign directory as an archive. Both publish the key numbers as notices and
 upload the reports. A recorded backstep failure keeps a job green; a workflow
 error fails it.
 

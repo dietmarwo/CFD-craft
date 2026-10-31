@@ -160,7 +160,7 @@ continue actual cavity runs against uninterrupted controls, and map actual
 cavity and backstep fields to the next level. CI runs the boundary tests on each
 push/PR. A manual workflow dispatch installs the pinned runtime in two parallel
 jobs; its `external` input selects the work: `backend`, `resolution`, `mapping`,
-`refinement` or `all`. `external-backend` runs the real backend tests (each failing test
+`refinement`, `comparison` or `all`. `external-backend` runs the real backend tests (each failing test
 becomes an error annotation), the mapped-against-cold level-2 cavity, the
 external study preset with `--timeout-s 300` and a fixed-work continuation
 check of the wall-resolved backstep (`simple` profile, 250+250 iterations).
@@ -174,7 +174,11 @@ each). For `refinement` (not part of `all`) it runs the declared
 (`--iterations 4000 --max-stages 3 --timeout-s 3500 --preparation-s 900`) and
 uploads the complete campaign directory as an archive. Both publish the key numbers as notices and
 upload the reports. A recorded backstep failure keeps a job green; a workflow
-error fails it.
+error fails it. `comparison` (not part of `all`) runs only
+`backend-comparison`: the cavity with both backends on one runner
+(`validation/compare_backends.py --repeats 2`, see the
+[backend comparison](../validation/BACKEND_COMPARISON.md)); any failed run
+fails the job.
 
 ## Frozen protocol
 

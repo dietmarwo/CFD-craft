@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 
-from process_measure import measure
+from process_measure import measure, live_processes, members
 
 
 class Processes(unittest.TestCase):
@@ -60,11 +60,34 @@ class Processes(unittest.TestCase):
         return [sys.executable, "-c", script], pid_file
 
     def alive(self, pid):
-        try:
-            stat = Path(f"/proc/{pid}/stat").read_text()
-        except OSError:
-            return False
-        return stat[stat.rindex(")") + 2] not in "ZX"
+        return any(local_pid == pid for local_pid, _ in live_processes())
+
+    def test_ancestor_procfs_ids_are_translated_and_other_namespaces_excluded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            proc = Path(temp)
+            (proc / "self/ns").mkdir(parents=True)
+            (proc / "self/ns/pid").symlink_to("pid:[1]")
+            for host_pid, local_pid, state, namespace in [
+                (100, 11, "S", 1),
+                (101, 12, "Z", 1),
+                (102, 11, "S", 2),
+                (103, 14, "S", 1),
+            ]:
+                p = proc / str(host_pid)
+                (p / "ns").mkdir(parents=True)
+                (p / "ns/pid").symlink_to(f"pid:[{namespace}]")
+                (p / "stat").write_text(
+                    f"{host_pid} (name with ) parentheses) {state} 1 900 900 0"
+                )
+                (p / "status").write_text(
+                    f"NSpid:\t{host_pid}\t{local_pid}\nNSpgid:\t900\t9\n"
+                )
+            (proc / "103/status").write_text("NSpid: 103 14\nNSpgid: 900 0\n")
+            self.assertEqual(members(9, proc), [11])
+            self.assertEqual(members(900, proc), [])
+            (proc / "100/status").write_text("NSpid: 100 11\n")
+            with self.assertRaisesRegex(ValueError, "CFD-B004 sweep.process.namespace"):
+                members(9, proc)
 
     def test_descendants_do_not_outlive_a_timeout_or_a_normal_exit(self):
         with tempfile.TemporaryDirectory(prefix="cfd-process-") as d:

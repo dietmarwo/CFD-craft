@@ -27,7 +27,7 @@ wall and throughput tasks below remain.
 | M6 Mitigation optimization | Budget-matched baseline, held-out scenarios, fine-grid replay | Not started; needs M4 and validated physics |
 | M7 Neighborhood and climatology | City geometry, conditional scenario maps, separate annual gate | Not started |
 | M8 Time-resolved turbulence | LES with spin-up and averaging studies | Not started |
-| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](iterations/07-14-performance-results.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Multigrid and semi-implicit diffusion remain later algorithms |
+| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](iterations/07-14-performance-results.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in unmasked [symmetric multigrid](PRESSURE_MULTIGRID.md) is implemented; masked multigrid and semi-implicit diffusion remain open |
 
 The [performance results](iterations/07-14-performance-results.md) give paired
 CPU and memory measurements of the current implementation against the previous
@@ -36,7 +36,7 @@ The [backend comparison](../validation/BACKEND_COMPARISON.md) times the cavity
 with both backends on one machine: OpenFOAM is 4.7–5.5 times faster than native
 steady mode, mostly because the native method needs about three times as many
 explicit pseudo-time steps, each with a PCG pressure solve. A steady algorithm
-and a multigrid pressure solver are the next native candidates. Accepted
+and masked/anisotropy-robust extensions of the optional multigrid preconditioner are the next native candidates. Accepted
 fine-grid and experimental-validation gates remain open.
 
 ## First-release definition

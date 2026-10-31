@@ -287,6 +287,18 @@ pub enum Advection {
     LinearUpwind,
     Muscl,
 }
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PressurePreconditioner {
+    #[default]
+    Ic0,
+    Multigrid,
+}
+impl PressurePreconditioner {
+    fn is_default(&self) -> bool {
+        *self == Self::Ic0
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Numerics {
@@ -295,6 +307,9 @@ pub struct Numerics {
     pub advective_cfl_max: f64,
     pub pressure_relative_tolerance: f64,
     pub pressure_max_iterations: usize,
+    /// Omitted/default IC(0) preserves existing normalized case/checkpoint hashes.
+    #[serde(default, skip_serializing_if = "PressurePreconditioner::is_default")]
+    pub pressure_preconditioner: PressurePreconditioner,
     pub steady_residual_tolerance: f64,
     pub steady_monitor_tolerance: f64,
     pub monitor_window: usize,
@@ -383,7 +398,15 @@ impl Case {
         let monitor_bytes = 8.0 * monitor_values + 32.0 * monitor_rows;
         // Include contiguous pressure factor construction and a compact per-solve
         // operator allowance (112 bytes/cell), before the existing 25% margin.
-        let peak = ((cells as f64) * (880.0 + 96.0 * species) * 1.25
+        // Extra hierarchy, reusable cycle vectors and construction peak allowance.
+        // This is a conservative preflight allowance, not measured process RSS.
+        let multigrid_bytes =
+            if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid {
+                1024.0
+            } else {
+                0.0
+            };
+        let peak = ((cells as f64) * (880.0 + multigrid_bytes + 96.0 * species) * 1.25
             + receptor_bytes
             + source_bytes
             + monitor_bytes)
@@ -451,6 +474,16 @@ impl Case {
         }
         if self.name.is_empty() {
             add("CFD-E002", "error", "name", "Supply a nonempty case name.");
+        }
+        if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid
+            && !self.geometry.is_empty()
+        {
+            add(
+                "CFD-E034",
+                "error",
+                "numerics.pressure_preconditioner",
+                "Multigrid currently requires an unmasked Cartesian grid; use ic0 for geometry masks.",
+            );
         }
         for a in 0..3 {
             if !(self.domain.size_m[a].is_finite()

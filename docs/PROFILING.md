@@ -57,7 +57,10 @@ JSON serialization. The outer workflow measures independent checking and startup
 For `pressure_solve`, `work_units` counts attempted PCG iterations whose operator
 work started. `operator_applications` includes those compact products plus
 independent face-by-face true-residual checks; those checks have their own count.
-`preconditioner_applications` counts IC(0) applications. A factor-setup span occurs
+`preconditioner_applications` counts applications of the selected preconditioner.
+For opt-in multigrid, `pressure_multigrid_setup` and the optional
+`pressure_solve.multigrid` work object distinguish hierarchy construction and
+multilevel work; see the [multigrid guide](PRESSURE_MULTIGRID.md). A factor-setup span occurs
 only when construction runs, including a zero-RHS first projection. Timers and
 locks occur at phase boundaries; inner iterations update local integer counters.
 
@@ -128,7 +131,9 @@ target alone is a recorded outcome and does not invalidate a sweep.
 
 Workflow time includes preparation, a bounded child, archive checks and the
 centerline sampling. Processes left in the child's process group are stopped
-when it returns, and the row records `stray_processes_stopped`. A row whose
+when it returns, and the row records `stray_processes_stopped`. Enumeration
+uses namespace-local PID/group IDs and excludes unrelated PID namespaces,
+including when procfs was mounted in an ancestor namespace. A row whose
 measurement fails validation keeps it as `rejected_measurement` beside the
 error. Native solver time is `elapsed_s`; OpenFOAM solver time is its
 `foamRun` child time. Separate process time and GNU-time RSS observations are

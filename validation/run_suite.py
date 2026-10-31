@@ -44,6 +44,9 @@ def main():
     ap.add_argument("--binary", type=Path, default=ROOT / "target/release/cfd-craft")
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--preset", choices=["smoke", "study"], default="smoke")
+    ap.add_argument(
+        "--pressure-preconditioner", choices=["ic0", "multigrid"], default="ic0"
+    )
     args = ap.parse_args()
     args.output.mkdir()
     records = []
@@ -54,6 +57,8 @@ def main():
         base = json.loads(
             (ROOT / "cases/verification/periodic-tracer.json").read_text()
         )
+        if args.pressure_preconditioner != "ic0":
+            base["numerics"]["pressure_preconditioner"] = args.pressure_preconditioner
         require(
             base["numerics"]["transport"] == "muscl",
             "the Gaussian order gate verifies the MUSCL/SSPRK2 transport",
@@ -90,6 +95,8 @@ def main():
         )
         require(order >= 1.8, "Gaussian transport order below the second-order target")
         p = json.loads((ROOT / "cases/verification/poiseuille.json").read_text())
+        if args.pressure_preconditioner != "ic0":
+            p["numerics"]["pressure_preconditioner"] = args.pressure_preconditioner
         r = run_case(args.binary, p, args.output / "poiseuille")
         records.append(r)
         require(accepted(r), "Poiseuille")
@@ -108,6 +115,8 @@ def main():
         report["poiseuille"] = dict(maximum_absolute_error_m_s=err, cells=nz)
         # This is a separate physical-consistency gate, not implied by transient completion.
         p = json.loads((ROOT / "cases/verification/empty-abl.json").read_text())
+        if args.pressure_preconditioner != "ic0":
+            p["numerics"]["pressure_preconditioner"] = args.pressure_preconditioner
         r = run_case(args.binary, p, args.output / "empty-abl")
         records.append(r)
         require(accepted(r), "ABL numerical run")

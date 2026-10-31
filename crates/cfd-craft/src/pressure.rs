@@ -1,13 +1,77 @@
 use crate::{
     Result,
+    case::PressurePreconditioner,
     grid::{FaceKind, Grid},
     solver::Control,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::MutexGuard;
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LinearInfo {
     pub iterations: usize,
     pub relative_residual: f64,
+}
+
+enum Preconditioner<'a> {
+    Ic0(&'a Factor),
+    Multigrid(MutexGuard<'a, Option<crate::multigrid::Cached>>),
+}
+impl Preconditioner<'_> {
+    fn apply(&mut self, r: &[f64], z: &mut [f64], measured: &mut crate::profiling::Span) {
+        match self {
+            Self::Ic0(factor) => factor.apply(r, z),
+            Self::Multigrid(cache) => cache.as_mut().expect("built hierarchy").hierarchy.apply(
+                r,
+                z,
+                measured.multigrid.as_mut().expect("multigrid work"),
+            ),
+        }
+        measured.preconditioner_applications += 1;
+    }
+}
+fn preconditioner<'a>(
+    g: &'a Grid,
+    control: &Control,
+    measured: &mut crate::profiling::Span,
+) -> Result<Preconditioner<'a>> {
+    match g.pressure_preconditioner {
+        PressurePreconditioner::Ic0 => {
+            Ok(Preconditioner::Ic0(g.pressure_factor.get_or_init(|| {
+                let _setup = control.span(crate::profiling::Phase::PressureFactorSetup);
+                Factor::build(g)
+            })))
+        }
+        PressurePreconditioner::Multigrid => {
+            measured.multigrid = Some(Default::default());
+            control.check()?;
+            let key = crate::multigrid::key(g)?;
+            // One cache owns its reusable scratch vectors. Cloned grids can share
+            // it safely; a changed operator rebuilds it before the next application.
+            let mut cache = g
+                .pressure_multigrid
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let built = cache.as_ref().is_none_or(|c| c.key != key);
+            if built {
+                measured.multigrid.as_mut().unwrap().hierarchy_builds = 1;
+                let _setup = control.span(crate::profiling::Phase::PressureMultigridSetup);
+                *cache = Some(crate::multigrid::Cached {
+                    key,
+                    hierarchy: crate::multigrid::Hierarchy::build(g, control)?,
+                });
+            }
+            measured.multigrid = Some(cache.as_ref().unwrap().hierarchy.work(built));
+            Ok(Preconditioner::Multigrid(cache))
+        }
+    }
+}
+/// Current allocated hierarchy dimensions/storage; absent before its first setup.
+pub fn multigrid_stats(g: &Grid) -> Option<crate::multigrid::MultigridStats> {
+    g.pressure_multigrid
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|c| c.hierarchy.stats.clone())
 }
 
 /// IC(0) of a slightly shifted matrix, used only as a preconditioner.
@@ -251,10 +315,7 @@ pub fn solve_scaled(
             }
         }
     }
-    let factor = g.pressure_factor.get_or_init(|| {
-        let _setup = control.span(crate::profiling::Phase::PressureFactorSetup);
-        Factor::build(g)
-    });
+    let mut preconditioner = preconditioner(g, control, &mut measured)?;
     let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let mut x = vec![0.0; g.count()];
     let mut r = b.to_vec();
@@ -268,8 +329,7 @@ pub fn solve_scaled(
         return Ok((x, LinearInfo::default()));
     }
     let mut z = vec![0.0; g.count()];
-    factor.apply(&r, &mut z);
-    measured.preconditioner_applications += 1;
+    preconditioner.apply(&r, &mut z, &mut measured);
     center_nullspaces(g, &mut z);
     let mut p = z.clone();
     let mut rz = dot(&r, &z);
@@ -318,8 +378,7 @@ pub fn solve_scaled(
                 ));
             }
         }
-        factor.apply(&r, &mut z);
-        measured.preconditioner_applications += 1;
+        preconditioner.apply(&r, &mut z, &mut measured);
         center_nullspaces(g, &mut z);
         let next = dot(&r, &z);
         let beta = next / rz;

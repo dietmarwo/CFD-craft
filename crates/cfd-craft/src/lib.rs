@@ -3,6 +3,7 @@
 pub mod case;
 pub mod flow;
 pub mod grid;
+pub mod multigrid;
 pub mod output;
 pub mod pressure;
 pub mod profiling;

@@ -30,6 +30,7 @@ pub enum Phase {
     PressureProjection,
     PressureSolve,
     PressureFactorSetup,
+    PressureMultigridSetup,
     PressureOperatorSetup,
     Turbulence,
     ScalarTransport,
@@ -50,6 +51,8 @@ pub struct PhaseTiming {
     pub operator_applications: u64,
     pub preconditioner_applications: u64,
     pub true_residual_checks: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multigrid: Option<crate::multigrid::MultigridWork>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -95,6 +98,7 @@ impl Collector {
             operator_applications: 0,
             preconditioner_applications: 0,
             true_residual_checks: 0,
+            multigrid: None,
             // A span must finish on the thread whose phase stack it entered.
             _same_thread: PhantomData,
         }
@@ -127,6 +131,7 @@ pub struct Span {
     pub(crate) operator_applications: u64,
     pub(crate) preconditioner_applications: u64,
     pub(crate) true_residual_checks: u64,
+    pub(crate) multigrid: Option<crate::multigrid::MultigridWork>,
     _same_thread: PhantomData<Rc<()>>,
 }
 impl Span {
@@ -137,6 +142,7 @@ impl Span {
             operator_applications: 0,
             preconditioner_applications: 0,
             true_residual_checks: 0,
+            multigrid: None,
             _same_thread: PhantomData,
         }
     }
@@ -176,6 +182,12 @@ impl Drop for Span {
         timing.operator_applications += self.operator_applications;
         timing.preconditioner_applications += self.preconditioner_applications;
         timing.true_residual_checks += self.true_residual_checks;
+        if let Some(work) = &self.multigrid {
+            timing
+                .multigrid
+                .get_or_insert_with(Default::default)
+                .merge(work);
+        }
     }
 }
 

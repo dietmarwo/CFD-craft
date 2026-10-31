@@ -103,3 +103,10 @@ attempted versus retained work and add exclusive times only. The comparator's
 `--grid-sweep` mode retains incomplete rows and reports cost at an accuracy
 target only for repeated accepted qualifying configurations. An unreached
 target has no finite ratio. See the [baseline](../validation/GAP_BASELINE.md).
+
+For unmasked pressure acceleration see [symmetric multigrid](PRESSURE_MULTIGRID.md).
+IC(0) remains the default; `numerics.pressure_preconditioner=multigrid` is an
+explicit, checkpoint-hashed selection. Masks are rejected, without fallback.
+Keep the fine operator, true residual and numerical gates unchanged. Use
+`validation/benchmark_pressure.py` to separate cold setup, reused pressure and
+accepted coupled cost; retain nonrepeating/unaccepted rows without a ratio.

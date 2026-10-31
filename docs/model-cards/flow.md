@@ -16,7 +16,7 @@ An incremental projection is applied to each SSPRK2 velocity stage. Tests recove
 
 The matrix-free operator is minus divergence times gradient. Internal faces have one shared flux. Pressure-outlet correction is zero; fixed normal-velocity faces use a homogeneous correction derivative. A closed fluid component has a mean-zero gauge and a compatibility check.
 
-PCG uses a cached incomplete Cholesky factor with zero fill. A tiny shift regularizes only the preconditioner, not the solved operator. Recomputed residuals use the compatible mean-zero right-hand side in closed components. The nominal recurrent tolerance is checked against an independently formed operator residual, allowing a documented round-off margin of ten times the target plus 1e-12.
+By default PCG uses a cached incomplete Cholesky factor with zero fill. A tiny shift regularizes only the preconditioner, not the solved operator. Recomputed residuals use the compatible mean-zero right-hand side in closed components. The nominal recurrent tolerance is checked against an independently formed operator residual, allowing a documented round-off margin of ten times the target plus 1e-12.
 
 The IC(0) factor is stored as contiguous row offsets, column indices and values.
 Construction sums duplicate periodic edges in face order, sorts each row and
@@ -33,7 +33,11 @@ cell pass, in the axis order of the divergence, and applies the correction
 gradient directly to the faces. [Performance results](../iterations/07-14-performance-results.md)
 give paired timings of these kernels at fixed work.
 
-Projection residuals, actual face-flux continuity and boundary balance are separate checks. There is no multigrid, sparse direct factorization or MPI implementation in 0.1.
+Projection residuals, actual face-flux continuity and boundary balance are separate checks. An opt-in [symmetric multigrid preconditioner](../PRESSURE_MULTIGRID.md) supports
+unmasked grids with Galerkin coarse operators and a direct coarse solve. The
+fine equation, projection and residual gates are unchanged; masks still use
+IC(0). Robust anisotropy, general sparse direct factorization and MPI remain
+open. Experimental model qualification is unchanged.
 
 ## Neutral turbulence package
 

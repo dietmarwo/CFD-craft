@@ -65,6 +65,8 @@ more than the host can hold.
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
 | CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
 | CFD-E030 | error | The geometry leaves no fluid cells |
+| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid was selected with a mask; the library also rejects a masked/disconnected grid or nonpositive/nonfinite pressure weights |
+| CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
@@ -135,3 +137,15 @@ evidence, and 1 for a failed execution or invalid input
 |---|---|
 | CFD-B003 | `profile.*`: an active or incorrectly nested phase snapshot (`active`, `nesting`), an unwritable profile report (`output`), or a profile/archive identity, time-accounting or attempted-work mismatch named by its field path. |
 | CFD-B004 | `sweep.*`: invalid grid/limit/target/row fields, changed inputs (`inputs`), inconsistent repeated accepted work/fields/producer (`repeat.*`), a failed bounded child (`native.execution`, `openfoam.execution`), an occupied process-log destination (`process.output`), or an evidence zip that cannot be written, contains a symlink or an unsafe member, or holds an archive of unknown schema (`archive.*`). Unaccepted numerical rows remain recorded separately. |
+
+`CFD-B005 pressure_benchmark.<field>` identifies invalid pressure-comparison
+inputs, changed producers, failed or malformed child measurements, missing
+returned arrays, inconsistent work or repeats, failed independent recovery,
+cavity numerical/archive/reference gates or pressure/velocity equivalence.
+Rows retain the original measurement when a later check rejects them. Cold setup,
+reused pressure time, accepted solver time and workflow time are separate scopes.
+
+`CFD-B004 sweep.process.namespace` reports unavailable or invalid Linux procfs
+PID/group namespace metadata. Process cleanup uses local IDs from NSpid/NSpgid
+and checks namespace identity, rather than comparing ancestor procfs IDs with
+local `killpg` IDs.

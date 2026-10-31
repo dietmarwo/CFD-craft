@@ -5,9 +5,9 @@ name: CFD checks
   workflow_dispatch:
     inputs:
       external:
-        description: "External work: all existing checks, backend, resolution, mapping, refinement (accepted level 1, then up to three mapped/continued level-2 stages), comparison (same-host cavity timing of both backends), or accuracy (24/48 cost/error sweep)"
+        description: "External work: all existing checks, backend, resolution, mapping, refinement (accepted level 1, then up to three mapped/continued level-2 stages), comparison (same-host cavity timing of both backends), accuracy (24/48 cost/error sweep), or pressure (native IC(0)/multigrid campaign)"
         type: choice
-        options: [all, backend, resolution, mapping, refinement, comparison, accuracy]
+        options: [all, backend, resolution, mapping, refinement, comparison, accuracy, pressure]
         default: all
 permissions:
   contents: read
@@ -199,8 +199,32 @@ jobs:
             runs/accuracy-sweep/report.json
             runs/accuracy-sweep-evidence.zip
             runs/accuracy-archive.json
+  pressure-performance:
+    if: github.event_name == 'workflow_dispatch' && inputs.external == 'pressure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --locked --examples && cargo build --release --locked
+      - run: python -m pip install -r requirements-validation.txt
+      - run: lscpu
+      - run: mkdir -p runs && python validation/benchmark_pressure.py --output runs/pressure
+      - if: always()
+        run: python validation/archive_evidence.py runs/pressure runs/pressure-evidence.zip
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pressure-performance-evidence
+          path: runs/pressure-evidence.zip
   external-resolution:
-    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'pressure'
     runs-on: ubuntu-24.04
     # Coarse reference + up to three fine executions, with audit/upload overhead.
     timeout-minutes: 360
@@ -338,6 +362,8 @@ jobs:
       - run: mkdir -p runs
       - run: python validation/test_benchmark_native.py -v
       - run: python -O validation/test_benchmark_native.py -v
+      - run: python validation/test_benchmark_pressure.py -v
+      - run: python -O validation/test_benchmark_pressure.py -v
       - run: cargo build --release --locked --example performance_probe
       - run: target/release/examples/performance_probe cases/verification/periodic-tracer.json pressure 2 2 1 json runs/native-pressure-probe.json
       # The paired runner against the real probe in every mode: a self-comparison
@@ -358,6 +384,7 @@ jobs:
       - run: python validation/manual_examples.py --output runs/manual-examples
       - run: python validation/flow_accuracy.py --output runs/flow-accuracy
       - run: python validation/run_suite.py --output runs/verification
+      - run: python validation/run_suite.py --pressure-preconditioner multigrid --output runs/verification-multigrid
       - run: python validation/cavity.py --output runs/cavity
       - run: python validation/scipy_reference.py --output runs/scipy-reference
       - run: python tutorials/source_inference.py --output runs/inference

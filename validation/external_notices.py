@@ -256,37 +256,73 @@ def mapped_start(report, title):
     return 0
 
 
+def observation_lines(name, observed):
+    """One returned archive's checks: numerical, audit, observable and metrics."""
+    observed = observed or {}
+    if observed.get("error"):
+        return [f"{name}: observation invalid: {observed['error']}"]
+    comparison = observed.get("comparison") or {}
+    screen = comparison.get("measurement_screen_passed", comparison.get("passed"))
+    lines = [
+        f"{name}: numerically accepted {observed.get('numerically_accepted')}; "
+        f"independent accepted {(observed.get('independent') or {}).get('passed')}; "
+        f"observable check {screen}"
+    ]
+    if "reattachment" in comparison:
+        lines.append(
+            f"{name}: reattachment {number(comparison['reattachment'].get('predicted_x_over_h'), 6)} H; "
+            f"Cf RMSE {number((comparison.get('skin_friction') or {}).get('rmse'), 4)}; profiles "
+            + ", ".join(
+                f"{k} {number(v.get('rmse_u_ref'), 4)}"
+                for k, v in (comparison.get("profiles") or {}).items()
+            )
+        )
+    elif "maximum_error" in comparison:
+        lines.append(
+            f"{name}: Ghia centerline error {number(comparison['maximum_error'])}"
+        )
+    return lines
+
+
 def refinement(report, title):
     plan = report.get("plan") or {}
+    replay = (report.get("mesh_initialization") or {}).get("nearest_replay")
     lines = [
         f"workflow completed {report.get('workflow_completed')}; passed {report.get('passed')}; "
         f"stop {report.get('stop_reason')}; error {report.get('error')}",
         f"source iterations {report.get('source_iterations')} (separate from fine work); "
         f"completed fine iterations {report.get('completed_fine_iterations')}; "
+        f"started {report.get('started_fine_iterations')}; "
         f"stages {len(report.get('stages') or [])}; limits {json.dumps(plan.get('limits'))}",
         f"preparation {number(report.get('preparation_wall_s'), 5)} s; "
         f"campaign wall {number(report.get('total_wall_s'), 5)} s; "
-        f"archive checkpoints {len(report.get('archive_checkpoints') or [])}",
+        f"archive checkpoints {len(report.get('archive_checkpoints') or [])}; "
+        f"mapNearest replay {json.dumps(replay)}",
+        f"source rejection {report.get('source_rejection')}",
     ]
+    lines += observation_lines("coarse source", report.get("coarse_observation"))
     for row in report.get("stages") or []:
         run = row.get("execution") or {}
         work = run.get("numerical") or {}
-        observed = row.get("observation") or {}
-        comparison = observed.get("comparison") or {}
+        trend = (work.get("residual_trend") or {}).get("p") or {}
         lines.append(
             f"stage {row.get('stage')}: {run.get('execution_status')}; "
-            f"iterations {work.get('iterations')}; converged {work.get('solver_reported_convergence')}; "
-            f"numerically accepted {run.get('passed')}; "
-            f"independent accepted {(observed.get('independent') or {}).get('passed')}; "
-            f"measurement screen {comparison.get('measurement_screen_passed')}; "
-            f"wall {number(run.get('wall_s'), 5)} s"
+            f"iterations {work.get('iterations')}; started "
+            f"{(run.get('progress') or {}).get('started_iterations')}; "
+            f"converged {work.get('solver_reported_convergence')}; "
+            f"numerically accepted {run.get('passed')}; wall {number(run.get('wall_s'), 5)} s"
+            + (f"; error {run['error']}" if run.get("error") else "")
         )
-        lines += audit_lines(observed.get("independent"))
         if work:
             lines.append(
-                "final residuals "
+                f"stage {row.get('stage')} final residuals "
                 + json.dumps(work.get("initial_residuals_final_iteration"))
+                + f"; p median last/previous window {number(trend.get('median_last_window'), 4)}"
+                f" / {number(trend.get('median_previous_window'), 4)}"
             )
+        observed = row.get("observation") or {}
+        lines += observation_lines(f"stage {row.get('stage')}", observed)
+        lines += audit_lines(observed.get("independent"))
     sensitivity = report.get("mesh_sensitivity") or {}
     lines.append(
         "mesh sensitivity "

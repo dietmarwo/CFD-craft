@@ -11,7 +11,6 @@ import io
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -225,6 +224,80 @@ class Boundaries(unittest.TestCase):
         ]:
             self.assertIn(required, text)
 
+    def test_ci_notice_states_every_stage_check_and_metric(self):
+        backstep = {
+            "numerically_accepted": True,
+            "independent": {"passed": True},
+            "comparison": {
+                "measurement_screen_passed": True,
+                "reattachment": {"predicted_x_over_h": 6.7064},
+                "skin_friction": {"rmse": 4.17e-4},
+                "profiles": {"1": {"rmse_u_ref": 0.0449}},
+            },
+        }
+        report = {
+            "schema_version": campaign.SCHEMA,
+            "stop_reason": "execution_timeout",
+            "error": None,
+            "started_fine_iterations": 4123,
+            "source_rejection": None,
+            "mesh_initialization": {"nearest_replay": {"other_candidate": 9600}},
+            "coarse_observation": backstep,
+            "stages": [
+                {
+                    "stage": 1,
+                    "execution": {
+                        "execution_status": "timeout",
+                        "passed": False,
+                        "error": "CFD-X004 execution.deadline: wall-time limit",
+                        "progress": {"started_iterations": 4123},
+                        "numerical": {
+                            "iterations": 4000,
+                            "initial_residuals_final_iteration": {"Uy": 1.04e-5},
+                            "residual_trend": {
+                                "p": {
+                                    "median_last_window": 2.5e-6,
+                                    "median_previous_window": 2.6e-6,
+                                }
+                            },
+                        },
+                    },
+                    "observation": {
+                        "status": "invalid",
+                        "error": "CFD-X001 refinement.observation: centerline.xy",
+                    },
+                },
+                {
+                    "stage": 2,
+                    "execution": {"execution_status": "completed", "numerical": {}},
+                    "observation": {
+                        "numerically_accepted": True,
+                        "independent": {"passed": True},
+                        "comparison": {"passed": True, "maximum_error": 0.00708},
+                    },
+                },
+            ],
+        }
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            external_notices.refinement(report, "fine campaign")
+        text = printed.getvalue()
+        for required in [
+            "started 4123",
+            '"other_candidate"%3A 9600',
+            "coarse source%3A numerically accepted True; independent accepted True; "
+            "observable check True",
+            "coarse source%3A reattachment 6.7064 H; Cf RMSE 0.000417; profiles 1 0.0449",
+            "stage 1%3A timeout; iterations 4000; started 4123",
+            "error CFD-X004 execution.deadline%3A wall-time limit",
+            '{"Uy"%3A 1.04e-05}; p median last/previous window 2.5e-06 / 2.6e-06',
+            "stage 1%3A observation invalid%3A CFD-X001 refinement.observation",
+            "stage 2%3A numerically accepted True; independent accepted True; "
+            "observable check True",
+            "stage 2%3A Ghia centerline error 0.00708",
+        ]:
+            self.assertIn(required, text.replace(":", "%3A"))
+
 
 class ArchiveSnapshot(unittest.TestCase):
     def setUp(self):
@@ -246,6 +319,16 @@ class ArchiveSnapshot(unittest.TestCase):
         self.assertEqual(
             backend.inventory(self.source), backend.inventory(self.root / "copy")
         )
+
+    def test_the_copy_must_be_the_archive_the_plan_froze(self):
+        (self.source / "manifest.json").write_text("{}")
+        frozen = backend.sha256(self.source / "manifest.json")
+        with patch.object(backend, "verify", return_value={"fixture": True}):
+            campaign.copy_archive(self.source, self.root / "copy", 10000, frozen)
+            # The source was replaced after the plan was frozen.
+            (self.source / "manifest.json").write_text('{"other": 1}')
+            with self.assertRaisesRegex(ValueError, "refinement.source.manifest"):
+                campaign.copy_archive(self.source, self.root / "other", 10000, frozen)
 
     def test_snapshot_budget_is_checked_before_copy_creation(self):
         with self.assertRaisesRegex(ValueError, "refinement.source.bytes"):
@@ -363,7 +446,9 @@ class ParentChain(unittest.TestCase):
             return campaign.lineage(self.source, self.runs)
 
     def test_coarse_work_is_not_counted_as_fine_work(self):
-        self.assertEqual(self.check(), 800)
+        total, records = self.check()
+        self.assertEqual(total, 800)
+        self.assertEqual(len(records), len(self.runs))
 
     def test_resealed_parent_receipt_mismatches_are_rejected(self):
         state = self.jobs[self.runs[1]]["initial_state"]
@@ -408,6 +493,89 @@ class ParentChain(unittest.TestCase):
             self.check()
 
 
+class Checkpoints(ParentChain):
+    """checkpoint() on the parent-chain fixture: identities, summaries, producers."""
+
+    def report(self):
+        return {
+            "plan": {
+                "implementation_sha256": {
+                    name: backend.sha256(path)
+                    for name, path in campaign.producers().items()
+                }
+            },
+            "stages": [
+                {"run_directory": p.name, "execution": copy.deepcopy(self.records[p])}
+                for p in self.runs
+            ],
+            "archive_checkpoints": [],
+        }
+
+    def checkpoint(self, report, label="final_collection"):
+        with patch.object(
+            backend, "verify", side_effect=lambda p: self.records[Path(p)]
+        ):
+            campaign.checkpoint(self.root, report, label)
+
+    def test_a_checkpoint_records_work_and_every_archive(self):
+        report = self.report()
+        self.checkpoint(report, "stage_2_returned")
+        self.assertEqual(report["completed_fine_iterations"], 800)
+        entry = report["archive_checkpoints"][-1]
+        self.assertEqual(entry["label"], "stage_2_returned")
+        self.assertEqual(
+            [a["directory"] for a in entry["archives"]], ["source", "first", "second"]
+        )
+        saved = json.loads((self.root / "report.json").read_text())
+        self.assertEqual(saved["completed_fine_iterations"], 800)
+
+    def test_an_archive_resealed_between_checkpoints_is_rejected(self):
+        report = self.report()
+        self.checkpoint(report, "stage_2_returned")
+        # The last stage is bound by no child receipt; its manifest is.
+        backend.write_json(self.runs[1] / "manifest.json", {"files": {"resealed": 1}})
+        with self.assertRaisesRegex(
+            ValueError,
+            "CFD-X015 refinement.archives.final_collection: "
+            "CFD-X015 refinement.archives.second: archive changed",
+        ):
+            self.checkpoint(report)
+
+    def test_the_sealed_summary_must_state_what_the_run_returned(self):
+        for key, value in [
+            ("passed", True),
+            ("execution_status", "timeout"),
+            ("error", "CFD-X007 numerical: not reached"),
+            ("numerical", {"iterations": 401, "final_time_directory": "400"}),
+        ]:
+            report = self.report()
+            report["stages"][0]["execution"][key] = value
+            with (
+                self.subTest(key=key),
+                self.assertRaisesRegex(
+                    ValueError, "refinement.stages\\[1\\].summary." + key
+                ),
+            ):
+                self.checkpoint(report)
+
+    def test_stages_and_producers_must_be_the_frozen_implementation(self):
+        self.records[self.runs[0]]["implementation_sha256"] = {
+            "openfoam_backend.py": "0" * 64
+        }
+        report = self.report()
+        with self.assertRaisesRegex(
+            ValueError, "refinement.stages\\[1\\].implementation.openfoam_backend.py"
+        ):
+            self.checkpoint(report)
+        self.records[self.runs[0]].pop("implementation_sha256")
+        report = self.report()
+        report["plan"]["implementation_sha256"]["refinement_campaign.py"] = "0" * 64
+        with self.assertRaisesRegex(
+            ValueError, "refinement.plan.implementation.refinement_campaign.py"
+        ):
+            self.checkpoint(report)
+
+
 class Workflow(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="cfd-refinement-workflow-")
@@ -428,15 +596,32 @@ class Workflow(unittest.TestCase):
         self.temp.cleanup()
 
     def run_campaign(
-        self, records, observed=None, restart_error=None, mapping_error=None
+        self,
+        records,
+        observed=None,
+        restart_error=None,
+        mapping_error=None,
+        observe=None,
+        checkpoint=None,
+        stop=None,
     ):
         found = observed or {"accepted": False, "passed": False}
+        accepted_source = {
+            "accepted": True,
+            "passed": True,
+            "independent": {"passed": True},
+        }
+
+        def observation(run, data):
+            return accepted_source if Path(run) == self.source else found
+
         with (
             patch.object(backend, "verify", return_value=self.parent),
             patch.object(campaign, "audit", return_value={"passed": True}),
             patch.object(campaign, "copy_archive"),
-            patch.object(campaign, "checkpoint"),
-            patch.object(campaign, "observation", return_value=found),
+            patch.object(campaign, "checkpoint", side_effect=checkpoint),
+            patch.object(campaign, "observation", side_effect=observe or observation),
+            patch.object(backend, "Stop", return_value=stop or backend.Stop()),
             patch.object(
                 campaign, "mesh_pair", return_value={"passed": found["passed"]}
             ),
@@ -452,12 +637,18 @@ class Workflow(unittest.TestCase):
             report = campaign.campaign(
                 self.source,
                 self.root,
-                self.root / "out",
+                self.output,
                 iterations=400,
                 max_stages=3,
                 timeout_s=60,
             )
         return report, run, prepare
+
+    @property
+    def output(self):
+        # A fresh output for every campaign in one test, so subtests stay independent.
+        self.calls = getattr(self, "calls", 0) + 1
+        return self.root / f"out-{self.calls}"
 
     def test_iteration_limited_completed_stages_continue_to_declared_limit(self):
         r = {
@@ -505,7 +696,6 @@ class Workflow(unittest.TestCase):
                 self.assertEqual(report["stop_reason"], reason)
                 self.assertFalse(report["passed"])
                 prepare.assert_not_called()
-                shutil.rmtree(self.root / "out")
 
     def test_timeout_is_retained_and_never_continued(self):
         r = {"execution_status": "timeout", "passed": False, "numerical": None}
@@ -542,7 +732,9 @@ class Workflow(unittest.TestCase):
         self.assertIn("CFD-X008", report["cancellation_diagnostic"])
         self.assertFalse(report["workflow_completed"])
         self.assertFalse(report["passed"])
-        self.assertTrue((self.root / "out/report.json").exists())
+        saved = json.loads((self.root / f"out-{self.calls}/report.json").read_text())
+        self.assertEqual(saved["stop_reason"], "cancelled")
+        self.assertEqual(saved["phase"], "finished")
         self.assertEqual(campaign.exit_code(report), 2)
         run.assert_not_called()
         prepare.assert_not_called()
@@ -565,6 +757,104 @@ class Workflow(unittest.TestCase):
         self.assertFalse(report["workflow_completed"])
         self.assertEqual(campaign.exit_code(report), 2)
         prepare.assert_not_called()
+
+    def test_a_failed_observation_of_a_returned_stage_is_evidence(self):
+        # The solver finished near the deadline; sampling then timed out.
+        r = {
+            "execution_status": "timeout",
+            "passed": False,
+            "numerical": {"solver_reported_convergence": False},
+        }
+        source = {"accepted": True, "passed": True, "independent": {"passed": True}}
+
+        def observation(run, data):
+            if Path(run) == self.source:
+                return source
+            raise FileNotFoundError(2, "No such file", "centerline.xy")
+
+        report, run, prepare = self.run_campaign([r], observe=observation)
+        self.assertEqual(report["stop_reason"], "execution_timeout")
+        self.assertNotIn("error", report)
+        self.assertEqual(campaign.exit_code(report), 2)
+        stage = report["stages"][0]["observation"]
+        self.assertEqual(stage["status"], "invalid")
+        self.assertIn("centerline.xy", stage["error"])
+
+    def test_an_integrity_error_after_a_cancellation_stays_an_error(self):
+        stop = backend.Stop()
+        calls = []
+
+        def checkpoint(output, report, label):
+            calls.append(label)
+            if label == "stage_1_returned":
+                stop.cancelled = True
+                raise ValueError(
+                    "CFD-X015 refinement.archives.stage_1_returned: "
+                    "CFD-X006 archive.files: changed, missing or additional files"
+                )
+
+        r = {
+            "execution_status": "completed",
+            "passed": False,
+            "numerical": {"solver_reported_convergence": False},
+        }
+        report, run, prepare = self.run_campaign([r], checkpoint=checkpoint, stop=stop)
+        self.assertEqual(report["stop_reason"], "workflow_error")
+        self.assertIn("CFD-X006 archive.files", report["error"])
+        self.assertNotIn("cancellation_diagnostic", report)
+        self.assertFalse(report["workflow_completed"])
+        self.assertEqual(campaign.exit_code(report), 1)
+
+    def test_started_fine_iterations_include_a_stopped_stage(self):
+        r = {
+            "execution_status": "completed",
+            "passed": False,
+            "numerical": {"solver_reported_convergence": False},
+            "progress": {"started_iterations": 400},
+        }
+        stopped = {
+            "execution_status": "timeout",
+            "passed": False,
+            "numerical": None,
+            "progress": {"started_iterations": 123},
+        }
+        report, run, prepare = self.run_campaign([r, stopped])
+        self.assertEqual(report["started_fine_iterations"], 523)
+
+    def test_a_source_that_fails_its_screen_is_rejected_before_output(self):
+        for found, field in [
+            (
+                {"accepted": False, "passed": False, "independent": {"passed": False}},
+                "source.audit",
+            ),
+            (
+                {"accepted": True, "passed": False, "independent": {"passed": True}},
+                "source.screen",
+            ),
+        ]:
+            output = self.root / ("screen-" + field)
+            with (
+                patch.object(backend, "verify", return_value=self.parent),
+                patch.object(campaign, "observation", return_value=found),
+                self.assertRaisesRegex(ValueError, "CFD-X015 refinement." + field),
+            ):
+                campaign.campaign(self.source, self.root, output)
+            self.assertFalse(output.exists())
+
+    def test_an_output_inside_the_source_is_rejected_before_creation(self):
+        for output in [self.source / "campaign", self.root]:
+            with self.assertRaisesRegex(ValueError, "CFD-X015 refinement.output"):
+                campaign.campaign(self.source, self.root, output)
+        self.assertFalse((self.source / "campaign").exists())
+
+    def test_an_unreadable_source_record_is_coded(self):
+        backend.write_json(self.source / "case/case.json", {})
+        with (
+            patch.object(backend, "verify", return_value=self.parent),
+            self.assertRaisesRegex(ValueError, "CFD-X015 refinement.source: "),
+        ):
+            campaign.campaign(self.source, self.root, self.root / "never")
+        self.assertFalse((self.root / "never").exists())
 
     def test_nonreference_backstep_is_rejected_before_creating_output(self):
         self.parent["case"] = "backstep"
@@ -608,6 +898,19 @@ class MeshPair(unittest.TestCase):
             patch.object(campaign, "observation", side_effect=observations),
         ):
             return campaign.mesh_pair(*self.paths, None)
+
+    def test_an_unaccepted_stage_is_not_compared_or_read(self):
+        with (
+            patch.object(backend, "verify", side_effect=KeyError("runtime")) as verify,
+            patch.object(
+                campaign,
+                "observation",
+                side_effect=[{"accepted": True}, {"accepted": False}],
+            ),
+        ):
+            found = campaign.mesh_pair(*self.paths, None)
+        self.assertEqual(found["status"], "not_assessed")
+        verify.assert_not_called()
 
     def test_unaccepted_grid_does_not_enter_mesh_comparison(self):
         with patch.object(campaign, "paired_metrics") as compare:

@@ -62,8 +62,11 @@ def limits(iterations, max_stages, timeout_s, preparation_s, output_mib, memory_
     }
 
 
-def copy_archive(source, target, budget_bytes):
-    """Copy the bytes of one stable, verified archive, including its seals."""
+def copy_archive(source, target, budget_bytes, manifest_sha256=None):
+    """Copy the bytes of one stable, verified archive, including its seals.
+
+    With `manifest_sha256`, the copy must be the archive the plan froze.
+    """
     before = backend.inventory(source)
     require(
         sum(e["bytes"] for e in before.values()) <= budget_bytes,
@@ -90,6 +93,12 @@ def copy_archive(source, target, budget_bytes):
     )
     require(
         backend.inventory(target) == before, "source.copy", "snapshot inventory differs"
+    )
+    require(
+        manifest_sha256 is None
+        or backend.sha256(target / "manifest.json") == manifest_sha256,
+        "source.manifest",
+        "the copied source is not the archive the plan froze",
     )
     return backend.verify(target)
 
@@ -141,6 +150,19 @@ def observation(run, data):
     return found
 
 
+def observed(run, data):
+    """observation(), with a failure of one returned archive kept as evidence."""
+    try:
+        return observation(run, data)
+    except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
+        return {
+            "status": "invalid",
+            "accepted": False,
+            "passed": False,
+            "error": backend.diagnostic(exc, "refinement.observation"),
+        }
+
+
 def paired_metrics(coarse, fine):
     """Compare accepted observations at identical physical sampling identities."""
     a, b = coarse["comparison"], fine["comparison"]
@@ -187,8 +209,26 @@ def paired_metrics(coarse, fine):
 
 def mesh_pair(source, fine, data):
     """A descriptive two-grid comparison, conditional on numerical/audit gates."""
+    coarse, finer = observed(source, data), observed(fine, data)
+    eligible = coarse["accepted"] and finer["accepted"]
+    result = {
+        "status": "evaluated" if eligible else "not_assessed",
+        "assessed": eligible,
+        "passed": False,
+        "coarse": coarse,
+        "fine": finer,
+        "meaning": "two-grid observable sensitivity; passed means both original numerical/audit/reference gates, not mesh independence or a GCI",
+        "physical_qualification": False,
+        "grid_convergence_estimate": "not_assessed: two grids only",
+    }
+    if not eligible:
+        result["reason"] = (
+            "both final numerical assessments and independent audits must pass"
+        )
+        return result
     a, b = backend.verify(source), backend.verify(fine)
     da, db = definition(source), definition(fine)
+    result["levels"] = [da["level"], db["level"]]
     require(
         a["case"] == b["case"] and db["level"] == da["level"] + 1,
         "pair.level",
@@ -220,24 +260,6 @@ def mesh_pair(source, fine, data):
         "pair.runtime",
         "runtimes differ",
     )
-    coarse, finer = observation(source, data), observation(fine, data)
-    eligible = coarse["accepted"] and finer["accepted"]
-    result = {
-        "status": "evaluated" if eligible else "not_assessed",
-        "assessed": eligible,
-        "passed": False,
-        "levels": [da["level"], db["level"]],
-        "coarse": coarse,
-        "fine": finer,
-        "meaning": "two-grid observable sensitivity; passed means both original numerical/audit/reference gates, not mesh independence or a GCI",
-        "physical_qualification": False,
-        "grid_convergence_estimate": "not_assessed: two grids only",
-    }
-    if not eligible:
-        result["reason"] = (
-            "both final numerical assessments and independent audits must pass"
-        )
-        return result
     result.update(paired_metrics(coarse, finer))
     result["passed"] = coarse["passed"] and finer["passed"]
     if a["case"] == "backstep":
@@ -261,11 +283,15 @@ def mesh_pair(source, fine, data):
 
 
 def lineage(source, runs):
-    """Bind every checked receipt to its retained, verified parent archive."""
+    """Bind every checked receipt to its retained, verified parent archive.
+
+    Returns the cumulative fine work and the verified record of each run.
+    """
     parent = backend.verify(source)
     previous = Path(source)
     coarse = definition(source)
     total = 0
+    records = []
     for number, run in enumerate(runs, 1):
         record = backend.verify(run)
         job = definition(run)
@@ -314,18 +340,27 @@ def lineage(source, runs):
                     "parent mesh identity differs",
                 )
         total += (record["numerical"] or {}).get("iterations", 0)
+        records.append(record)
         previous, parent = Path(run), record
-    return total
+    return total, records
+
+
+def same(a, b):
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
 
 
 def checkpoint(output, report, label):
-    runs = [
-        output / r["run_directory"]
-        for r in report["stages"]
-        if r.get("execution") is not None
-    ]
+    """Reverify every retained archive and bind it to what the campaign used.
+
+    Each archive must keep the manifest it had at its first checkpoint, each
+    stage's sealed summary must state what its run returned, and the producing
+    files must still be the ones the plan froze.
+    """
+    rows = [r for r in report["stages"] if r.get("execution") is not None]
+    runs = [output / r["run_directory"] for r in rows]
+    frozen = report["plan"]["implementation_sha256"]
     try:
-        total = lineage(output / "source", runs)
+        total, records = lineage(output / "source", runs)
         checked = [
             {
                 "directory": str(p.relative_to(output)),
@@ -333,6 +368,33 @@ def checkpoint(output, report, label):
             }
             for p in [output / "source", *runs]
         ]
+        first = report.setdefault("archive_identities", {})
+        for entry in checked:
+            require(
+                first.setdefault(entry["directory"], entry["manifest_sha256"])
+                == entry["manifest_sha256"],
+                f"archives.{entry['directory']}",
+                "archive changed after its first checkpoint",
+            )
+        for number, (row, record) in enumerate(zip(rows, records, strict=True), 1):
+            for key in ["execution_status", "passed", "error", "numerical"]:
+                require(
+                    same(record.get(key), row["execution"].get(key)),
+                    f"stages[{number}].summary.{key}",
+                    "sealed summary differs from the returned record",
+                )
+            for name, digest in (record.get("implementation_sha256") or {}).items():
+                require(
+                    frozen.get(name, digest) == digest,
+                    f"stages[{number}].implementation.{name}",
+                    "stage produced by another implementation than the plan froze",
+                )
+        for name, path in producers().items():
+            require(
+                backend.sha256(path) == frozen[name],
+                "plan.implementation." + name,
+                "producer changed after the plan was frozen",
+            )
     except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
         require(False, "archives." + label, backend.diagnostic(exc, "archive"))
     report["completed_fine_iterations"] = total
@@ -340,6 +402,22 @@ def checkpoint(output, report, label):
         {"label": label, "archives": checked, "passed": True}
     )
     backend.write_json(output / "report.json", report)
+
+
+def producers():
+    return {
+        p.name: p
+        for p in [
+            Path(__file__),
+            ROOT / "integrations/openfoam_backend.py",
+            ROOT / "integrations/openfoam_cases.py",
+            ROOT / "integrations/openfoam_mapping.py",
+            ROOT / "integrations/openfoam_restart.py",
+            ROOT / "validation/audit_openfoam_mesh.py",
+            ROOT / "validation/compare_backstep.py",
+            ROOT / "validation/backstep_data.py",
+        ]
+    }
 
 
 def exit_code(report):
@@ -351,8 +429,8 @@ def campaign(
     foam_root,
     output,
     data=None,
-    iterations=3000,
-    max_stages=4,
+    iterations=4000,
+    max_stages=3,
     timeout_s=3500,
     preparation_s=900,
     output_mib=1024,
@@ -362,8 +440,18 @@ def campaign(
         iterations, max_stages, timeout_s, preparation_s, output_mib, memory_mib
     )
     source, output = Path(source), Path(output)
-    parent = backend.verify(source)
-    original = definition(source)
+    inside = output.resolve().is_relative_to(source.resolve())
+    require(
+        not inside and not source.resolve().is_relative_to(output.resolve()),
+        "output",
+        "the campaign output and the source must not contain each other",
+    )
+    try:
+        parent = backend.verify(source)
+        original = definition(source)
+        level = original["level"]
+    except (OSError, KeyError, TypeError) as exc:
+        require(False, "source", backend.diagnostic(exc, "source"))
     require(
         parent["passed"] and parent["execution_status"] == "completed",
         "source.acceptance",
@@ -374,7 +462,7 @@ def campaign(
         "source.initialization",
         "cold-generated coarse source required",
     )
-    require(original["level"] in [1, 2], "source.level", "source level must be 1 or 2")
+    require(level in [1, 2], "source.level", "source level must be 1 or 2")
     require(
         parent["case"] != "backstep" or data is not None,
         "data",
@@ -388,28 +476,27 @@ def campaign(
             "wall-resolved/simplec reference source required",
         )
         load(data)
+    # The source is reused only if it passes every check it is compared under.
+    coarse = observed(source, data)
     require(
-        audit(source)["passed"], "source.audit", "coarse independent audit must pass"
+        (coarse.get("independent") or {}).get("passed") is True,
+        "source.audit",
+        "coarse independent audit must pass",
+    )
+    require(
+        coarse["passed"],
+        "source.screen",
+        "coarse measurement screen (cavity: Ghia reference) must pass",
     )
     plan = {
         "source_manifest_sha256": backend.sha256(source / "manifest.json"),
         "source_case_sha256": parent["case_sha256"],
         "case": parent["case"],
-        "source_level": original["level"],
-        "target_level": original["level"] + 1,
+        "source_level": level,
+        "target_level": level + 1,
         "limits": declared,
         "implementation_sha256": {
-            p.name: backend.sha256(p)
-            for p in [
-                Path(__file__),
-                ROOT / "integrations/openfoam_backend.py",
-                ROOT / "integrations/openfoam_cases.py",
-                ROOT / "integrations/openfoam_mapping.py",
-                ROOT / "integrations/openfoam_restart.py",
-                ROOT / "validation/audit_openfoam_mesh.py",
-                ROOT / "validation/compare_backstep.py",
-                ROOT / "validation/backstep_data.py",
-            ]
+            name: backend.sha256(path) for name, path in producers().items()
         },
     }
     backend.claim_directory(output)
@@ -435,8 +522,13 @@ def campaign(
         s: signal.signal(s, stop.signal) for s in [signal.SIGINT, signal.SIGTERM]
     }
     try:
-        copy_archive(source, output / "source", output_mib * 1024**2)
-        report["coarse_observation"] = observation(output / "source", data)
+        copy_archive(
+            source,
+            output / "source",
+            output_mib * 1024**2,
+            plan["source_manifest_sha256"],
+        )
+        report["coarse_observation"] = observed(output / "source", data)
         checkpoint(output, report, "source_snapshot")
         backend.require(not stop.cancelled, "execution.cancel", "cancelled", "CFD-X008")
         report["phase"] = "preparing_mapping"
@@ -489,7 +581,7 @@ def campaign(
             )
             backend.write_json(output / "report.json", report)
             checkpoint(output, report, f"stage_{number}_returned")
-            row["observation"] = observation(run, data)
+            row["observation"] = observed(run, data)
             backend.write_json(output / "report.json", report)
             record = row["execution"]
             numerical = record["numerical"]
@@ -516,11 +608,13 @@ def campaign(
         report["workflow_completed"] = not stop.cancelled
         checkpoint(output, report, "final_collection")
     except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
-        if stop.cancelled:
+        diagnostic = backend.diagnostic(exc, "refinement")
+        if stop.cancelled and diagnostic.startswith("CFD-X008"):
             report["stop_reason"] = "cancelled"
-            report["cancellation_diagnostic"] = backend.diagnostic(exc, "refinement")
+            report["cancellation_diagnostic"] = diagnostic
         else:
-            report["error"] = backend.diagnostic(exc, "refinement")
+            # An integrity or workflow error stays an error after a cancellation.
+            report["error"] = diagnostic
             report["stop_reason"] = "workflow_error"
         report["passed"] = False
         report["workflow_completed"] = False
@@ -530,7 +624,13 @@ def campaign(
         if stop.cancelled:
             report["passed"] = False
             report["workflow_completed"] = False
-            report["stop_reason"] = "cancelled"
+            if "error" not in report:
+                report["stop_reason"] = "cancelled"
+        report["started_fine_iterations"] = sum(
+            ((r.get("execution") or {}).get("progress") or {}).get("started_iterations")
+            or 0
+            for r in report["stages"]
+        )
         report["phase"] = "finished"
         report["total_wall_s"] = time.monotonic() - began
         backend.write_json(output / "report.json", report)
@@ -543,8 +643,8 @@ def main():
     ap.add_argument("--foam-root", type=Path, required=True)
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--data", type=Path)
-    ap.add_argument("--iterations", type=int, default=3000)
-    ap.add_argument("--max-stages", type=int, default=4)
+    ap.add_argument("--iterations", type=int, default=4000)
+    ap.add_argument("--max-stages", type=int, default=3)
     ap.add_argument("--timeout-s", type=float, default=3500)
     ap.add_argument("--preparation-s", type=float, default=900)
     ap.add_argument("--output-mib", type=int, default=1024)

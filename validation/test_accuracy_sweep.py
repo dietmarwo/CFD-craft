@@ -195,6 +195,31 @@ class Sweep(unittest.TestCase):
                 altered[key] = value
                 s.validate_row(altered)
 
+    def test_a_rejected_measurement_stays_in_the_report(self):
+        def runner(method, grid, destination, *args):
+            row = self.runner(method, grid, destination, *args)
+            if (
+                method == "native-steady"
+                and grid == 24
+                and "round-01" in str(destination)
+            ):
+                # Claimed accepted above the frozen 0.06 screen: inconsistent.
+                row.update(reference_error=0.07)
+            if method == "openfoam-steady" and "round-02" in str(destination):
+                raise AttributeError("runner defect")
+            return row
+
+        report = self.run_sweep(runner, levels=[1], native_diagnostic=False)
+        rows = {r["run_directory"]: r for r in report["rows"]}
+        rejected = rows["round-01-n24-native-steady"]
+        self.assertIn("row.reference_screen_passed", rejected["error"])
+        self.assertEqual(rejected["rejected_measurement"]["reference_error"], 0.07)
+        self.assertNotIn("reference_error", rejected)
+        self.assertIn("runner defect", rows["round-02-n24-openfoam-steady"]["error"])
+        self.assertTrue(report["completed"])
+        self.assertFalse(report["workflow_valid"])
+        self.assertNotIn("rejected_measurement", rows["round-00-n24-native-steady"])
+
     def test_arguments_are_checked_before_claiming_output(self):
         for kw in [
             dict(levels=[]),

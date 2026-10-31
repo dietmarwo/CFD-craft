@@ -116,7 +116,8 @@ development objective; existing numerical checks still apply.
 
 Best cost at the target uses configurations whose timed repetitions are all
 accepted and repeat their work, producer and sampled profile. Warmups do not
-enter medians. If a backend misses the target on every tested grid/budget, its
+enter medians. The native 12² diagnostic counts like any other configuration.
+If a backend misses the target on every tested grid/budget, its
 best cost and the cross-backend ratio are `null`, with an explicit
 target-not-reached status. No crossing is extrapolated.
 
@@ -126,7 +127,10 @@ workflow, changed input or inconsistent repeated result. Missing the development
 target alone is a recorded outcome and does not invalidate a sweep.
 
 Workflow time includes preparation, a bounded child, archive checks and the
-centerline sampling. Native solver time is `elapsed_s`; OpenFOAM solver time is its
+centerline sampling. Processes left in the child's process group are stopped
+when it returns, and the row records `stray_processes_stopped`. A row whose
+measurement fails validation keeps it as `rejected_measurement` beside the
+error. Native solver time is `elapsed_s`; OpenFOAM solver time is its
 `foamRun` child time. Separate process time and GNU-time RSS observations are
 retained. RSS means maximum individual process RSS, including waited descendants,
 rather than simultaneous aggregate memory; it is explicitly unavailable without

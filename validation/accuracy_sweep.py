@@ -190,6 +190,7 @@ def run_method(method, grid, destination, binary, foam_root, limits):
         peak_rss_kib_linux=usage["peak_rss_kib_linux"],
         rss_scope=usage["rss_scope"],
         measurement_timer_sha256=usage["timer_sha256"],
+        stray_processes_stopped=usage["stray_processes_stopped"],
         returncode=usage["returncode"],
         archive_manifest_sha256=cmp.digest(archive / "manifest.json"),
         run_directory=destination.name,
@@ -503,6 +504,8 @@ def sweep(
                             foam_root,
                             limits,
                         )
+                        # A rejected measurement stays in the report beside its error.
+                        row["rejected_measurement"] = measured
                         require(
                             measured["method"] == config["method"]
                             and measured["grid"] == grid,
@@ -510,6 +513,7 @@ def sweep(
                             "returned configuration differs",
                         )
                         validate_row(measured)
+                        del row["rejected_measurement"]
                         row.update(measured)
                     except (
                         ValueError,
@@ -517,6 +521,7 @@ def sweep(
                         KeyError,
                         TypeError,
                         IndexError,
+                        AttributeError,
                     ) as exc:
                         row["error"] = (
                             str(exc)

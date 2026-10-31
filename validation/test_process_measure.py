@@ -46,6 +46,42 @@ class Processes(unittest.TestCase):
             self.assertNotEqual(r["returncode"], 0)
             self.assertLess(r["process_wall_s"], 6)
 
+    def grandchild(self, d, parent_code):
+        """A child that starts a TERM-ignoring grandchild in its group."""
+        pid_file = Path(d) / "grandchild.pid"
+        script = (
+            "import subprocess, sys, time\n"
+            "g = subprocess.Popen([sys.executable, '-c', "
+            "'import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "time.sleep(60)'])\n"
+            f"open({str(pid_file)!r}, 'w').write(str(g.pid))\n"
+            f"{parent_code}\n"
+        )
+        return [sys.executable, "-c", script], pid_file
+
+    def alive(self, pid):
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text()
+        except OSError:
+            return False
+        return stat[stat.rindex(")") + 2] not in "ZX"
+
+    def test_descendants_do_not_outlive_a_timeout_or_a_normal_exit(self):
+        with tempfile.TemporaryDirectory(prefix="cfd-process-") as d:
+            for name, parent_code, timeout_s in [
+                ("timeout", "time.sleep(30)", 1.0),
+                ("exit", "sys.exit(0)", 20.0),
+            ]:
+                with self.subTest(name=name):
+                    sub = Path(d) / name
+                    sub.mkdir()
+                    command, pid_file = self.grandchild(sub, parent_code)
+                    r = measure(command, sub / "out", timeout_s)
+                    pid = int(pid_file.read_text())
+                    self.assertFalse(self.alive(pid))
+                    self.assertTrue(r["stray_processes_stopped"])
+                    self.assertEqual(r["outer_timeout"], name == "timeout")
+
     def test_occupied_and_dangling_output_are_refused(self):
         with tempfile.TemporaryDirectory(prefix="cfd-process-") as d:
             for symlink in [False, True]:

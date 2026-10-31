@@ -607,11 +607,11 @@ mod tests {
                     if !l.transfer.offsets.is_empty() {
                         let nc = 1 + *l.transfer.columns.iter().max().unwrap();
                         let mut ac = vec![vec![0.0; nc]; nc];
-                        for i in 0..a.len() {
-                            for j in 0..a.len() {
+                        for (i, row) in a.iter().enumerate() {
+                            for (j, &aij) in row.iter().enumerate() {
                                 for (ci, wi) in l.transfer.row(i) {
                                     for (cj, wj) in l.transfer.row(j) {
-                                        ac[ci][cj] += wi * a[i][j] * wj;
+                                        ac[ci][cj] += wi * aij * wj;
                                     }
                                 }
                             }
@@ -640,9 +640,9 @@ mod tests {
                     m[i][j] = y[i];
                 }
             }
-            for i in 0..n {
-                for j in 0..n {
-                    close(m[i][j], m[j][i]);
+            for (i, row) in m.iter().enumerate() {
+                for (j, &mij) in row.iter().enumerate() {
+                    close(mij, m[j][i]);
                 }
             }
             let anchored = g.anchored[0];

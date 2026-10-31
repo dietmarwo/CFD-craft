@@ -1,6 +1,16 @@
+<p align="center">
+  <img src="docs/images/cfd-craft.jpg" alt="CFD-craft: CFD experiments and validation with native Rust and OpenFOAM workflows">
+</p>
+
 # CFD-craft
 
 CFD experiment and validation workbench, with a Rust CPU research solver for incompressible flow and conservative passive-gas dispersion and a bounded OpenFOAM Foundation 13 backend. Cases are data; runs report numerical checks, stopping reason, model scope and reproducible input/build identity.
+
+**[Read the detailed user manual](docs/USER_MANUAL.md)** for architecture,
+numerical and evidence concepts, 31 API examples, native and OpenFOAM workflows,
+Rust/Python integration, optimizer jobs and troubleshooting. The
+[runnable examples](examples/manual/README.md) include four compiled Rust
+programs and a complete CLI/Python cookbook.
 
 Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These are recorded release gates, rather than a claim of general urban-model validation. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
 

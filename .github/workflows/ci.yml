@@ -288,6 +288,8 @@ jobs:
           done
       - run: python validation/test_cli.py -v
       - run: python -O validation/test_cli.py -v
+      - run: cargo build --release --workspace --examples --locked
+      - run: python validation/manual_examples.py --output runs/manual-examples
       - run: python validation/flow_accuracy.py --output runs/flow-accuracy
       - run: python validation/run_suite.py --output runs/verification
       - run: python validation/cavity.py --output runs/cavity

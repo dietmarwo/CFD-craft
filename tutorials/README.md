@@ -1,5 +1,9 @@
 # Tutorials
 
+Start with the [user manual](../docs/USER_MANUAL.md) for architecture, concepts
+and API examples, or the [small runnable cookbook](../examples/manual/README.md)
+before choosing a scientific workflow below.
+
 There are six executable workflows. Every run uses canonical inputs and preserves its evidence.
 
 The [established-solver and experimental comparisons](../integrations/OPENFOAM.md)

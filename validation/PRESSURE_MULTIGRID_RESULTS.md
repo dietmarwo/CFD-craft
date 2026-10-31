@@ -51,6 +51,29 @@ pressure 2.22e-15 m²/s², with the same gauge. Predeclared bounds were
 pressure acceleration does not change donor-cell momentum error. No fresh
 OpenFOAM speed ratio or matched-accuracy comparison is claimed.
 
+## Hosted reproduction
+
+The manual `external=pressure` job ran the same campaign on a GitHub runner
+(AMD EPYC 7763, 4 CPUs, ubuntu-24.04;
+[run 41235330963](https://github.com/dietmarwo/CFD-craft/actions/runs/41235330963))
+on the code of commit `646dda3`, which differs from the recorded measurements by
+the `CFD-W004` check and an exact (rather than hashed) hierarchy reuse check. All
+rows passed; iterations, steps and Ghia errors equal the recorded ones.
+
+| Configuration | IC(0) / MG iterations | IC(0) | MG | Speedup |
+|---|---:|---:|---:|---:|
+| kernel cavity24, reused ms | 53 / 6 | 1.632 | 0.928 | 1.76× |
+| kernel cavity48, reused ms | 102 / 6 | 13.103 | 4.051 | 3.24× |
+| kernel cavity96, reused ms | 193 / 6 | 102.44 | 16.087 | 6.37× |
+| kernel cube24, reused ms | 61 / 7 | 22.919 | 14.103 | 1.63× |
+| kernel cube48, reused ms | 113 / 7 | 378.06 | 130.76 | 2.89× |
+| accepted cavity 24², solver s | 204,850 / 24,120 | 7.965 | 5.526 | 1.44× |
+| accepted cavity 48², solver s | 1,262,035 / 76,680 | 185.33 | 73.97 | 2.51× |
+
+Cold multigrid solves were again slower than IC(0) on every kernel (0.14–0.84×).
+The evidence zip kept its directory entries; all 16 sealed archives verified in
+its extracted copy.
+
 ## Shape sweep: where multigrid is slower
 
 The kernels above use a smooth manufactured right-hand side on near-isotropic

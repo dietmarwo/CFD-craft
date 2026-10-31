@@ -65,8 +65,8 @@ impl Factor {
             diagonal: diag,
         }
     }
-    fn apply(&self, r: &[f64]) -> Vec<f64> {
-        let mut z = r.to_vec();
+    fn apply(&self, r: &[f64], z: &mut [f64]) {
+        z.copy_from_slice(r);
         for i in 0..z.len() {
             for &(j, l) in &self.lower[i] {
                 z[i] -= l * z[j];
@@ -79,7 +79,6 @@ impl Factor {
                 z[j] -= l * z[i];
             }
         }
-        z
     }
 }
 
@@ -159,7 +158,8 @@ pub fn solve_scaled(
     if norm < 1e-24 {
         return Ok((x, LinearInfo::default()));
     }
-    let mut z = factor.apply(&r);
+    let mut z = vec![0.0; g.count()];
+    factor.apply(&r, &mut z);
     center_nullspaces(g, &mut z);
     let mut p = z.clone();
     let mut rz = dot(&r, &z);
@@ -200,7 +200,7 @@ pub fn solve_scaled(
                 ));
             }
         }
-        z = factor.apply(&r);
+        factor.apply(&r, &mut z);
         center_nullspaces(g, &mut z);
         let next = dot(&r, &z);
         let beta = next / rz;

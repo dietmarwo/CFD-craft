@@ -14,6 +14,12 @@ The matrix-free operator is minus divergence times gradient. Internal faces have
 
 PCG uses a cached incomplete Cholesky factor with zero fill. A tiny shift regularizes only the preconditioner, not the solved operator. Recomputed residuals use the compatible mean-zero right-hand side in closed components. The nominal recurrent tolerance is checked against an independently formed operator residual, allowing a documented round-off margin of ten times the target plus 1e-12.
 
+The preconditioned residual buffer is reused within a solve. This removes an
+allocation from each IC(0) application; it does not change the factor, initial
+guess, arithmetic order, compatibility test or residual tolerance. The
+[performance plan](../iterations/07-14-performance-plan.md) separates kernel cost
+from fixed-work and accepted-run throughput.
+
 Projection residuals, actual face-flux continuity and boundary balance are separate checks. There is no multigrid, sparse direct factorization or MPI implementation in 0.1.
 
 ## Neutral turbulence package

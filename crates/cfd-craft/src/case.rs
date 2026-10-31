@@ -485,6 +485,32 @@ impl Case {
                 "Multigrid currently requires an unmasked Cartesian grid; use ic0 for geometry masks.",
             );
         }
+        if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid {
+            // Point smoothing with full coarsening degrades when face weights 1/dx^2
+            // differ strongly between coarsened axes (more than two cells): in a
+            // shape sweep, multigrid was slower than IC(0) above a ratio of 25.
+            let weights: Vec<f64> = (0..3)
+                .filter(|&a| self.grid.cells[a] > 2)
+                .map(|a| {
+                    let dx = self.domain.size_m[a] / self.grid.cells[a] as f64;
+                    1.0 / (dx * dx)
+                })
+                .collect();
+            if weights.len() >= 2 && weights.iter().all(|w| w.is_finite() && *w > 0.0) {
+                let ratio = weights.iter().cloned().fold(0.0, f64::max)
+                    / weights.iter().cloned().fold(f64::INFINITY, f64::min);
+                if ratio > 25.0 {
+                    add(
+                        "CFD-W004",
+                        "warning",
+                        "numerics.pressure_preconditioner",
+                        &format!(
+                            "Pressure face weights differ by a factor of {ratio:.0} between axes of more than two cells; multigrid can then be slower than ic0 or stop at the pressure iteration limit (CFD-E033). Compare with ic0."
+                        ),
+                    );
+                }
+            }
+        }
         for a in 0..3 {
             if !(self.domain.size_m[a].is_finite()
                 && self.domain.size_m[a] >= 1e-6

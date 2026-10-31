@@ -51,6 +51,40 @@ pressure 2.22e-15 m²/s², with the same gauge. Predeclared bounds were
 pressure acceleration does not change donor-cell momentum error. No fresh
 OpenFOAM speed ratio or matched-accuracy comparison is claimed.
 
+## Shape sweep: where multigrid is slower
+
+The kernels above use a smooth manufactured right-hand side on near-isotropic
+grids. A separate sweep on another host solved a rough compatible right-hand
+side (`sin(0.618 i)`, centered) to a relative tolerance of 1e-10, timing the
+second solve, so the hierarchy is reused. One thread. Face weights are 1/dx²
+per axis; the ratio is taken between axes of more than two cells, and
+`CFD-W004` marks ratios above 25.
+
+| Cells | Domain, m | Weights x/y/z | Ratio | W004 | IC(0) it / ms | MG it / ms |
+|---|---|---:|---:|---|---:|---:|
+| 96×2×24 | 4×0.1×1 | 576/400/576 | 1 | no | 106 / 9.7 | 10 / 5.0 |
+| 48×48×48 | 1×1×0.2 | 2304/2304/57600 | 25 | no | 132 / 379.6 | 19 / 304.4 |
+| 64×2×64 | 1×0.1×0.2 | 4096/400/102400 | 25 | no | 96 / 15.7 | 17 / 15.9 |
+| 128×2×16 | 100×1×1 | 2/4/256 | 128 | yes | 212 / 17.0 | 42 / 16.9 |
+| 64×64×8 | 1×1×0.01 | 4096/4096/640000 | 156 | yes | 199 / 153.5 | 40 / 154.3 |
+| 64×2×64 | 1×0.1×0.1 | 4096/400/409600 | 100 | yes | 85 / 13.9 | 34 / 30.9 |
+| 64×2×64 | 1×0.1×0.05 | 4096/400/1638400 | 400 | yes | 82 / 13.5 | 68 / 61.0 |
+| 48×48×48 | 1×1×0.1 | 2304/2304/230400 | 100 | yes | 151 / 436.8 | 36 / 569.3 |
+| 32×32×16 | 1×1×0.05 | 1024/1024/102400 | 100 | yes | 127 / 44.0 | 37 / 71.5 |
+| 64×8×64 | 1×1×1 | 4096/64/4096 | 64 | yes | 109 / 87.0 | 36 / 148.7 |
+| 64×16×64 | 1×4×1 | 4096/16/4096 | 256 | yes | 162 / 278.9 | 70 / 644.5 |
+| 64×8×64 | 1×1×0.2 | 4096/64/102400 | 1600 | yes | 136 / 108.6 | 121 / 505.8 |
+| 64×8×64 | 1×1×0.1 | 4096/64/409600 | 6400 | yes | 147 / 116.0 | 231 / 935.9 |
+
+With a rough right-hand side, one cycle costs roughly as much as 5–10 IC(0)
+applications. Multigrid was faster only on the near-isotropic shapes; above a
+ratio of 25 it was as fast or slower, sometimes with more iterations. In a
+separate review test (64×8×64, domain 1×1×0.02 m, x/z ratio 2500), multigrid
+exceeded the case default of 1200 PCG iterations and stopped with CFD-E033,
+where IC(0) converged in about 200. `check` reports `CFD-W004` for such cases;
+semicoarsening or line smoothing is the remedy, and part of the next pressure
+work.
+
 ## Memory and work attribution
 
 GNU time 1.9 reports the maximum individual process RSS, including waited

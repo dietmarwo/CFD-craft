@@ -5,8 +5,12 @@ Multigrid currently accepts unmasked Cartesian cases. A geometry mask is a case
 error (`CFD-E034`), with no automatic fallback. Laminar and neutral-RANS pressure
 use the same constant-density operator; no flow, scalar or turbulence model is
 changed. Prescribed-flow runs bypass pressure and gain no acceleration from this
-selection. Unequal spacings are correct algebraically, but robust performance for
-strong anisotropy is an open task.
+selection. Unequal spacings are correct algebraically, but the point smoother
+and full coarsening are not robust to strong anisotropy: when face weights 1/dx²
+differ by more than 25 between axes of more than two cells, `check` warns
+(`CFD-W004`). Such cases were slower than IC(0), and extreme ones can stop at the
+pressure iteration limit (`CFD-E033`); see the
+[shape sweep](../validation/PRESSURE_MULTIGRID_RESULTS.md#shape-sweep-where-multigrid-is-slower).
 
 ## Use it
 

@@ -61,6 +61,29 @@ fn masks_fail_explicitly_and_preflight_accounts_for_hierarchy_storage() {
     );
 }
 #[test]
+fn strong_anisotropy_between_coarsened_axes_is_a_check_warning() {
+    let warned = |c: &Case| {
+        c.check()
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "CFD-W004" && d.path == "numerics.pressure_preconditioner")
+    };
+    // Equal spacing, and the two-cell span axis that is never coarsened.
+    assert!(!warned(&case([48, 2, 48], Boundary::Wall)));
+    let mut c = case([64, 2, 64], Boundary::Wall);
+    c.domain.size_m = [1.0, 0.1, 0.2];
+    assert!(!warned(&c)); // z:x weight ratio 25
+    c.domain.size_m = [1.0, 0.1, 0.1];
+    assert!(warned(&c)); // ratio 100
+    assert!(c.check().valid);
+    // A coarsened span axis of eight cells, 64 times weaker than x and z.
+    let mut c = case([64, 8, 64], Boundary::Wall);
+    c.domain.size_m = [1.0, 1.0, 1.0];
+    assert!(warned(&c));
+    c.numerics.pressure_preconditioner = PressurePreconditioner::Ic0;
+    assert!(!warned(&c));
+}
+#[test]
 fn manufactured_pressure_and_projection_match_independent_gradient_divergence() {
     for boundary in [Boundary::Wall, Boundary::Periodic, Boundary::Open] {
         for n in [[9, 2, 7], [8, 5, 6], [2, 2, 2]] {

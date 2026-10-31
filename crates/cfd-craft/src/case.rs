@@ -381,7 +381,9 @@ impl Case {
             .min(self.run.max_steps) as f64;
         let monitor_values = monitor_rows * (3.0 + species * (1.0 + self.receptors.len() as f64));
         let monitor_bytes = 8.0 * monitor_values + 32.0 * monitor_rows;
-        let peak = ((cells as f64) * (768.0 + 96.0 * species) * 1.25
+        // Include contiguous pressure factor construction and a compact per-solve
+        // operator allowance (112 bytes/cell), before the existing 25% margin.
+        let peak = ((cells as f64) * (880.0 + 96.0 * species) * 1.25
             + receptor_bytes
             + source_bytes
             + monitor_bytes)

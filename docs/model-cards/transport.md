@@ -17,3 +17,9 @@ The archived-field checker recomputes every receptor value from the stored conce
 For exact response matrices, use fixed flow/diffusivity and linear_upwind. A nonlinear limiter invalidates exact superposition. The source-inference tutorial verifies combined versus separate sources, holds out receptors, includes an unidentifiable matrix and repeats observations with changed inflow/grid.
 
 The independent SciPy reference assembles the steady uniform-flow matrix and compares the full concentration field with a direct sparse solve. This is numerical verification, not measured atmospheric validation.
+
+A step builds its candidate state separately, from only the fields it changes,
+and replaces the state only after the state, velocity and positivity checks
+pass; the monitor history is checked in place and moved over last. A pressure
+failure, a cancellation or a late check failure leaves the whole state
+unchanged, and constituents without a supplied source array keep their values.

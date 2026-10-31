@@ -1,0 +1,146 @@
+{
+  "schema_version": "cfd-craft.case/0.1",
+  "name": "performance-canyon-93k",
+  "domain": {
+    "size_m": [
+      18.0,
+      16.0,
+      6.0
+    ]
+  },
+  "grid": {
+    "cells": [
+      54,
+      48,
+      36
+    ]
+  },
+  "boundaries": {
+    "x": "open",
+    "y": "open",
+    "z": "ground_open_top"
+  },
+  "flow": {
+    "kind": "neutral_rans",
+    "speed_m_s": 2.0,
+    "reference_height_m": 1.0,
+    "roughness_m": 0.01,
+    "direction_deg_from": 270,
+    "viscosity_m2_s": 1.5e-05,
+    "turbulent_schmidt": 0.7
+  },
+  "geometry": [
+    {
+      "id": "west",
+      "min_m": [
+        5.0,
+        3.0,
+        0.0
+      ],
+      "max_m": [
+        6.0,
+        13.0,
+        1.0
+      ]
+    },
+    {
+      "id": "east",
+      "min_m": [
+        7.0,
+        3.0,
+        0.0
+      ],
+      "max_m": [
+        8.0,
+        13.0,
+        1.0
+      ]
+    }
+  ],
+  "constituents": [
+    {
+      "id": "tracer",
+      "diffusivity_m2_s": 1.5e-05
+    }
+  ],
+  "initial_conditions": [],
+  "sources": [
+    {
+      "kind": "line",
+      "id": "traffic",
+      "constituent": "tracer",
+      "from_m": [
+        6.5,
+        3.0,
+        0.15
+      ],
+      "to_m": [
+        6.5,
+        13.0,
+        0.15
+      ],
+      "rate_kg_s_m": 1e-08
+    }
+  ],
+  "receptors": [
+    {
+      "kind": "point",
+      "id": "sensor0",
+      "point_m": [
+        6.5,
+        5.0,
+        0.4
+      ]
+    },
+    {
+      "kind": "point",
+      "id": "sensor1",
+      "point_m": [
+        6.5,
+        8.0,
+        0.4
+      ]
+    },
+    {
+      "kind": "point",
+      "id": "sensor2",
+      "point_m": [
+        6.5,
+        11.0,
+        0.4
+      ]
+    },
+    {
+      "kind": "point",
+      "id": "sensor3",
+      "point_m": [
+        6.5,
+        8.0,
+        0.8
+      ]
+    }
+  ],
+  "numerics": {
+    "transport": "linear_upwind",
+    "max_time_step_s": 0.1,
+    "advective_cfl_max": 0.4,
+    "pressure_relative_tolerance": 1e-10,
+    "pressure_max_iterations": 1200,
+    "steady_residual_tolerance": 1e-05,
+    "steady_monitor_tolerance": 0.001,
+    "monitor_window": 100
+  },
+  "run": {
+    "mode": "steady",
+    "end_time_s": 100.0,
+    "max_steps": 7000,
+    "wall_time_limit_s": 240.0,
+    "threads": 1,
+    "memory_limit_mib": 4096
+  },
+  "output": {
+    "fields": true,
+    "checkpoint": true,
+    "max_total_mib": 1024
+  }
+}

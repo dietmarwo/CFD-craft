@@ -103,14 +103,13 @@ fn sample(
     fi: usize,
     d: usize,
     side: isize,
+    neighbor: Option<usize>,
     u: &[f64],
     nut: &[f64],
     cell_u: &[[f64; 3]],
 ) -> f64 {
     let f = &g.faces[fi];
-    let mut q = f.coord.map(|v| v as isize);
-    q[d] += side;
-    if let Some(j) = g.face_at(c, f.axis, q) {
+    if let Some(j) = neighbor {
         if matches!(g.faces[j].kind, FaceKind::Wall | FaceKind::Blocked) && d != f.axis {
             wall_ghost(c, g, fi, d, side, u, nut, cell_u)
         } else {
@@ -123,6 +122,16 @@ fn sample(
         wall_ghost(c, g, fi, d, side, u, nut, cell_u)
     }
 }
+// Reuse topology within this cell evaluation; no persistent mutable-grid cache.
+fn cell_neighbors(g: &Grid, i: usize) -> [[usize; 2]; 3] {
+    std::array::from_fn(|d| {
+        [
+            transport::neighbor(g, i, d, 0).unwrap_or(i),
+            transport::neighbor(g, i, d, 1).unwrap_or(i),
+        ]
+    })
+}
+
 pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
     let cell_u = g.cell_velocity(u);
     // Remaining variable-viscosity symmetric-stress term:
@@ -133,12 +142,11 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
             if !g.fluid[i] {
                 continue;
             }
+            let neighbors = cell_neighbors(g, i);
             for a in 0..3 {
                 for d in 0..3 {
-                    let im = transport::neighbor(g, i, d, 0).unwrap_or(i);
-                    let ip = transport::neighbor(g, i, d, 1).unwrap_or(i);
-                    let jm = transport::neighbor(g, i, a, 0).unwrap_or(i);
-                    let jp = transport::neighbor(g, i, a, 1).unwrap_or(i);
+                    let [im, ip] = neighbors[d];
+                    let [jm, jp] = neighbors[a];
                     cross[i][a] += (nut[ip] - nut[im]) / (2.0 * g.dx[d])
                         * (cell_u[jp][d] - cell_u[jm][d])
                         / (2.0 * g.dx[a]);
@@ -160,8 +168,13 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
             });
             let mut rhs = 0.0;
             for d in 0..3 {
-                let lo = sample(c, g, fi, d, -1, u, nut, &cell_u);
-                let hi = sample(c, g, fi, d, 1, u, nut, &cell_u);
+                let mut q = f.coord.map(|v| v as isize);
+                q[d] -= 1;
+                let lo_face = g.face_at(c, f.axis, q);
+                q[d] += 2;
+                let hi_face = g.face_at(c, f.axis, q);
+                let lo = sample(c, g, fi, d, -1, lo_face, u, nut, &cell_u);
+                let hi = sample(c, g, fi, d, 1, hi_face, u, nut, &cell_u);
                 // Donor-cell momentum, direct second-order viscous stencil on the staggered grid.
                 rhs -= velocity[d]
                     * if velocity[d] >= 0.0 {
@@ -173,10 +186,8 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 let mu = c.flow.viscosity() + adjacent_mean(f, nut);
                 let mut mu_lo = mu;
                 let mut mu_hi = mu;
-                for (side, dst) in [(-1, &mut mu_lo), (1, &mut mu_hi)] {
-                    let mut q = f.coord.map(|v| v as isize);
-                    q[d] += side;
-                    if let Some(j) = g.face_at(c, f.axis, q)
+                for (neighbor, dst) in [(lo_face, &mut mu_lo), (hi_face, &mut mu_hi)] {
+                    if let Some(j) = neighbor
                         && g.faces[j].kind == FaceKind::Interior
                     {
                         *dst = 0.5 * (mu + c.flow.viscosity() + adjacent_mean(&g.faces[j], nut));
@@ -213,15 +224,12 @@ pub fn production(
         if !g.fluid[i] {
             continue;
         }
+        let neighbors = cell_neighbors(g, i);
         let mut grad = [[0.0; 3]; 3];
         for a in 0..3 {
             for d in 0..3 {
-                let lo = transport::neighbor(g, i, d, 0)
-                    .map(|j| v[j][a])
-                    .unwrap_or(v[i][a]);
-                let hi = transport::neighbor(g, i, d, 1)
-                    .map(|j| v[j][a])
-                    .unwrap_or(v[i][a]);
+                let lo = v[neighbors[d][0]][a];
+                let hi = v[neighbors[d][1]][a];
                 grad[a][d] = (hi - lo) / (2.0 * g.dx[d]);
             }
         }

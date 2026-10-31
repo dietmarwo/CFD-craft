@@ -79,3 +79,11 @@ python tutorials/canyon_study.py --preset sensitivity --output runs/new-sensitiv
 ~~~
 
 The study preset is deliberately more expensive; it may hit its per-case budgets. Record this outcome. Change numerical methods or available resources with evidence before increasing scope.
+
+For performance work use the Rust `performance_probe` example and
+`validation/benchmark_native.py` with the cases in `cases/performance/`: they
+compare fixed work between two builds, with input and producer hashes, exact
+work counts and field comparisons. Kernel, step and CLI timings and numerical or
+physical acceptance are separate observations. Record slower controls and memory
+costs; keep the scientific gates unchanged. See the
+[performance results](iterations/07-14-performance-results.md).

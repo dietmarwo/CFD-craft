@@ -239,6 +239,16 @@ jobs:
       - run: cargo build --release --locked
       - run: python -m pip install -r requirements-validation.txt
       - run: mkdir -p runs
+      - run: python validation/test_benchmark_native.py -v
+      - run: python -O validation/test_benchmark_native.py -v
+      - run: cargo build --release --locked --example performance_probe
+      - run: target/release/examples/performance_probe cases/verification/periodic-tracer.json pressure 2 2 1 json runs/native-pressure-probe.json
+      # The paired runner against the real probe in every mode: a self-comparison
+      # must agree exactly. No timing threshold is applied.
+      - run: |
+          for mode in setup pressure momentum production transport steps; do
+            python validation/benchmark_native.py --baseline target/release/examples/performance_probe --candidate target/release/examples/performance_probe --case cases/canyon/wh1-wind270.json --mode $mode --rounds 1 --inner 2 --steps 2 --output runs/native-self-$mode
+          done
       - run: python validation/test_cli.py -v
       - run: python -O validation/test_cli.py -v
       - run: python validation/flow_accuracy.py --output runs/flow-accuracy

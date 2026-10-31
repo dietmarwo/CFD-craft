@@ -180,6 +180,9 @@ pub fn initial_state(c: &Case, g: &Grid) -> State {
     }
 }
 pub fn validate_state(c: &Case, g: &Grid, s: &State) -> Result<()> {
+    validate_with_history(c, g, s, &s.monitor_history)
+}
+fn validate_with_history(c: &Case, g: &Grid, s: &State, history: &[Vec<f64>]) -> Result<()> {
     if s.velocity.len() != g.faces.len()
         || s.pressure.len() != g.count()
         || s.k.len() != g.count()
@@ -205,7 +208,7 @@ pub fn validate_state(c: &Case, g: &Grid, s: &State) -> Result<()> {
                 .iter()
                 .any(|v| !v.is_finite() || *v < 0.0)
         })
-        || s.monitor_history.iter().flatten().any(|v| !v.is_finite())
+        || history.iter().flatten().any(|v| !v.is_finite())
     {
         return Err("CFD-E051: nonfinite or invalid state".into());
     }
@@ -298,7 +301,27 @@ pub fn step(
     control.check()?;
     let nut = flow::eddy_viscosity(g, &s.k, &s.epsilon);
     // Build the next state off to the side: pressure/cancellation failure cannot publish half a step.
-    let mut next = s.clone();
+    let mut next = State {
+        steps: s.steps,
+        time_s: s.time_s,
+        velocity: if c.flow.prescribed() {
+            s.velocity.clone()
+        } else {
+            Vec::new()
+        },
+        pressure: if c.flow.prescribed() {
+            s.pressure.clone()
+        } else {
+            Vec::new()
+        },
+        k: s.k.clone(),
+        epsilon: s.epsilon.clone(),
+        concentrations: Vec::with_capacity(s.concentrations.len()),
+        budgets: s.budgets.clone(),
+        floor_events: s.floor_events,
+        pressure_iterations: s.pressure_iterations,
+        monitor_history: Vec::new(),
+    };
     if !c.flow.prescribed() {
         let (v, p, n1) = flow_euler(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
         let (v2, p2, n2) = flow_euler(c, g, &v, &p, &nut, dt, control)?;
@@ -341,19 +364,25 @@ pub fn step(
             c.numerics.transport,
             |_| 0.0,
         );
-        next.concentrations[j] = s.concentrations[j]
+        let concentration = s.concentrations[j]
             .iter()
             .zip(v)
             .zip(r2.values)
             .map(|((a, b), r)| 0.5 * (a + b + dt * r))
             .collect();
+        next.concentrations.push(concentration);
         next.budgets[j].emitted_kg += 0.5 * dt * (r1.source + r2.source);
         next.budgets[j].inflow_kg += 0.5 * dt * (r1.inflow + r2.inflow);
         next.budgets[j].outflow_kg += 0.5 * dt * (r1.outflow + r2.outflow);
     }
+    // Preserve the public step function's unchanged trailing constituents when
+    // a caller supplies only a prefix of source arrays.
+    next.concentrations
+        .extend(s.concentrations.iter().skip(sources.len()).cloned());
     next.time_s += dt;
     next.steps += 1;
-    validate_state(c, g, &next)?;
+    // History is borrowed until every fallible gate below has passed.
+    validate_with_history(c, g, &next, &s.monitor_history)?;
     if next
         .velocity
         .iter()
@@ -367,6 +396,7 @@ pub fn step(
             return Err("CFD-E053: transport positivity failure; no clipping applied".into());
         }
     }
+    next.monitor_history = std::mem::take(&mut s.monitor_history);
     *s = next;
     Ok(())
 }

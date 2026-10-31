@@ -5,8 +5,12 @@ arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that
 did not perform the requested work, unequal work or fields, missing or malformed
 report fields and timing samples, and failed, cancelled or timed-out benchmark
-children. These research measurements are not
-CFD numerical-acceptance or physical-qualification verdicts.
+children. The same-host backend comparison uses `CFD-B002 comparison.<field>`
+for invalid limits or inputs, a run that is not accepted or misses the 0.06
+Ghia screen, an ambiguous solver record, work, profiles or producers that differ
+between rounds, and inputs changed during the comparison. These research
+measurements are not CFD numerical-acceptance or physical-qualification
+verdicts.
 
 `cfd-craft check CASE` prints a `cfd-craft.check/0.1` report on stdout. Each
 diagnostic has a code, a severity, a JSON path into the case (for example

@@ -20,6 +20,37 @@ from common import accepted, run_case
 require = backend.require
 
 
+def native_centerline(case, field):
+    """Lid-normalized u on the vertical centerline of a native cavity, walls included.
+
+    The native cavity is x/z with a periodic span; u is averaged over the span.
+    """
+    nx, ny, nz = case["grid"]["cells"]
+    u = (
+        np.array(field["velocity"][: (nx + 1) * ny * nz])
+        .reshape(nz, ny, nx + 1)[:, :, nx // 2]
+        .mean(axis=1)
+    )
+    return np.r_[0, (np.arange(nz) + 0.5) / nz, 1], np.r_[0, u, 1]
+
+
+def openfoam_centerline(external, report):
+    """Lid-normalized u on the sampled OpenFOAM centerline, walls included."""
+    values = samples(external, "centerline", ["y", "U_x", "U_y", "U_z"], report)
+    return np.r_[0, values[:, 0], 1], np.r_[0, values[:, 1], 1]
+
+
+def ghia_reference():
+    return np.loadtxt(ROOT / "validation/ghia-re100-u.csv", delimiter=",", skiprows=1)
+
+
+def at_ghia_stations(y, u, reference=None):
+    """The profile interpolated to the Ghia stations, and its maximum error there."""
+    reference = ghia_reference() if reference is None else reference
+    predicted = np.interp(reference[:, 0], y, u)
+    return predicted, float(max(abs(predicted - reference[:, 1])))
+
+
 def cavity_comparison(binary, external, output):
     result = {
         "passed": False,
@@ -59,27 +90,16 @@ def cavity_comparison(binary, external, output):
             "CFD-X007",
         )
         field = json.loads((Path(output) / "native-cavity/fields.json").read_text())
-        nx, ny, nz = c["grid"]["cells"]
-        native_u = (
-            np.array(field["velocity"][: (nx + 1) * ny * nz])
-            .reshape(nz, ny, nx + 1)[:, :, nx // 2]
-            .mean(axis=1)
+        reference = ghia_reference()
+        native_predicted, native_error = at_ghia_stations(
+            *native_centerline(c, field), reference
         )
-        native_y = np.r_[0, (np.arange(nz) + 0.5) / nz, 1]
-        native_u = np.r_[0, native_u, 1]
-        external_values = samples(
-            external, "centerline", ["y", "U_x", "U_y", "U_z"], external_report
+        external_predicted, external_error = at_ghia_stations(
+            *openfoam_centerline(external, external_report), reference
         )
-        external_y = np.r_[0, external_values[:, 0], 1]
-        external_u = np.r_[0, external_values[:, 1], 1]
-        reference = np.loadtxt(
-            ROOT / "validation/ghia-re100-u.csv", delimiter=",", skiprows=1
-        )
-        native_predicted = np.interp(reference[:, 0], native_y, native_u)
-        external_predicted = np.interp(reference[:, 0], external_y, external_u)
         errors = {
-            "native_vs_ghia": float(max(abs(native_predicted - reference[:, 1]))),
-            "openfoam_vs_ghia": float(max(abs(external_predicted - reference[:, 1]))),
+            "native_vs_ghia": native_error,
+            "openfoam_vs_ghia": external_error,
             "native_vs_openfoam_at_reference_stations": float(
                 max(abs(native_predicted - external_predicted))
             ),

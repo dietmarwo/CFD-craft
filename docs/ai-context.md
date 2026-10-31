@@ -86,4 +86,8 @@ compare fixed work between two builds, with input and producer hashes, exact
 work counts and field comparisons. Kernel, step and CLI timings and numerical or
 physical acceptance are separate observations. Record slower controls and memory
 costs; keep the scientific gates unchanged. See the
-[performance results](iterations/07-14-performance-results.md).
+[performance results](iterations/07-14-performance-results.md). To compare the
+native solver with OpenFOAM, use `validation/compare_backends.py` (same host,
+one thread, every run accepted); its ratios describe configured workflows, not
+equal work. On the cavity OpenFOAM is faster; see the
+[backend comparison](../validation/BACKEND_COMPARISON.md).

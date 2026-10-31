@@ -48,7 +48,9 @@ The [native CPU performance results](docs/iterations/07-14-performance-results.m
 give paired pressure, stencil, step and CLI timings at fixed work, with the
 fields compared against the previous implementation and the memory cost. The
 paired runner is `validation/benchmark_native.py`; the frozen cases are in
-`cases/performance/`.
+`cases/performance/`. On the lid-driven cavity, timed on one machine with one
+thread each, OpenFOAM is 4.7–5.5 times faster than native steady mode and closer
+to the reference ([backend comparison](validation/BACKEND_COMPARISON.md)).
 
 ## Verification
 

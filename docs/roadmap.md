@@ -32,7 +32,12 @@ wall and throughput tasks below remain.
 The [performance results](iterations/07-14-performance-results.md) give paired
 CPU and memory measurements of the current implementation against the previous
 one. Their hardware differs from that of the resource measurements in RESULTS.
-Accepted fine-grid and experimental-validation gates remain open.
+The [backend comparison](../validation/BACKEND_COMPARISON.md) times the cavity
+with both backends on one machine: OpenFOAM is 4.7–5.5 times faster than native
+steady mode, mostly because the native method needs about three times as many
+explicit pseudo-time steps, each with a PCG pressure solve. A steady algorithm
+and a multigrid pressure solver are the next native candidates. Accepted
+fine-grid and experimental-validation gates remain open.
 
 ## First-release definition
 

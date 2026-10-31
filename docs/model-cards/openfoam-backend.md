@@ -28,6 +28,14 @@ OpenFOAM solves the steady equations; the native case advances to 30 s. The
 report retains this distinction. Ghia is a numerical reference, not a physical
 experiment. Code agreement is not experimental validation.
 
+On this cavity, timed on the same machine with one thread each, OpenFOAM's
+steady workflow is 4.7–5.5 times faster than the native steady mode and closer
+to Ghia (0.0090 against 0.0276); its solver process is about 9 times faster
+than the native solver. The native method needs about three times as many
+explicit pseudo-time steps as OpenFOAM needs SIMPLE iterations, on twice the
+cells. See the [backend comparison](../../validation/BACKEND_COMPARISON.md); it
+is not a fixed operation count or a ranking for other problems.
+
 ## Experimental comparison: Driver--Seegmiller backstep
 
 The reference is the zero-angle configuration in Driver and Seegmiller (1985),

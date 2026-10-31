@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Performance evidence must reject failed, changed or malformed measurements."""
 
+import contextlib
 import copy
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
 import benchmark_pressure as bp
+import external_notices
 
 
 class PressureBenchmark(unittest.TestCase):
@@ -84,6 +87,40 @@ class PressureBenchmark(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, "CFD-B005"):
                     bp.finite(value, "time", positive=True)
+
+    def test_the_ci_notice_states_work_ratios_and_failed_rows(self):
+        rows = []
+        for method, iterations, solver in [("ic0", 100, 4.0), ("multigrid", 8, 2.0)]:
+            for round_index in range(3):
+                rows.append(
+                    dict(
+                        method=method,
+                        warmup=round_index == 0,
+                        passed=True,
+                        iterations=iterations,
+                        result_sha256="same",
+                        source_sha256="source",
+                        solver_s=solver,
+                        workflow_s=solver + 0.1,
+                        steps=50,
+                        reference_error=0.03,
+                        measurement=dict(peak_rss_kib_linux=None),
+                    )
+                )
+        report = dict(
+            schema_version=bp.SCHEMA,
+            passed=False,
+            rounds=2,
+            rows=[dict(directory="cavity-cavity24-r1-multigrid", passed=False)],
+            results={"cavity-cavity24": bp.summarize(rows, "cavity", 2)},
+        )
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            external_notices.pressure_performance(report, "pressure")
+        text = printed.getvalue().replace("%0A", "\n")
+        self.assertIn("failed rows: cavity-cavity24-r1-multigrid", text)
+        self.assertIn("cavity-cavity24: iterations 100/8; solver_s 4/2 (x2)", text)
+        self.assertIn("steps 50/50; Ghia error 0.03/0.03", text)
 
 
 if __name__ == "__main__":

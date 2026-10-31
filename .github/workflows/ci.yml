@@ -214,15 +214,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release --locked --examples && cargo build --release --locked
       - run: python -m pip install -r requirements-validation.txt
-      - run: lscpu
-      - run: mkdir -p runs && python validation/benchmark_pressure.py --output runs/pressure
+      - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
+      # Exit 2 (a failed row or non-repeating work) fails the job; the notice lists
+      # work, medians and IC(0)/multigrid ratios either way.
+      - run: |
+          set +e
+          mkdir -p runs && python validation/benchmark_pressure.py --output runs/pressure
+          code=$?
+          test ! -f runs/pressure/report.json || python validation/external_notices.py runs/pressure/report.json "pressure IC(0)/multigrid"
+          test "$code" -eq 0
       - if: always()
-        run: python validation/archive_evidence.py runs/pressure runs/pressure-evidence.zip
+        run: |
+          test -d runs/pressure || exit 0
+          set +e
+          python validation/archive_evidence.py runs/pressure runs/pressure-evidence.zip > runs/pressure-archive.json
+          code=$?
+          python validation/external_notices.py runs/pressure-archive.json "pressure evidence archive"
+          test "$code" -eq 0
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pressure-performance-evidence
-          path: runs/pressure-evidence.zip
+          path: |
+            runs/pressure/report.json
+            runs/pressure-evidence.zip
+            runs/pressure-archive.json
   external-resolution:
     if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'pressure'
     runs-on: ubuntu-24.04

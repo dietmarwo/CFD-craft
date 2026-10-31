@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """The evidence zip keeps directory entries and re-verifies the extracted copy."""
 
+import contextlib
+import io
 import json
 import shutil
 import subprocess
@@ -13,6 +15,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import archive_evidence as evidence
+import external_notices
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / "target/release/cfd-craft"
@@ -21,21 +24,28 @@ STAND_IN = Path(sys.executable)
 
 
 def external_archive(directory, saved):
-    """A sealed external archive whose progress names its saved time directories."""
+    """A sealed external archive whose progress names its saved time directories;
+    only the first and last hold fields."""
     (directory / "case").mkdir(parents=True)
     for name in saved:
         (directory / "case" / name).mkdir()
-    (directory / "case/0/U").write_text("initial\n")
+    files = {}
+    for name in [saved[0], saved[-1]]:
+        (directory / "case" / name / "U").write_text(f"field {name}\n")
+        files[f"case/{name}/U"] = {"bytes": 0, "sha256": "x"}
     (directory / "manifest.json").write_text(
-        json.dumps({"schema_version": "cfd-craft.external-archive/0.1"})
+        json.dumps({"schema_version": "cfd-craft.external-archive/0.1", "files": files})
     )
-    (directory / "summary.json").write_text(json.dumps({"saved": saved}))
+    (directory / "summary.json").write_text(
+        json.dumps({"progress": {"saved_time_directories": saved}})
+    )
     (directory / "complete.json").write_text("{}")
 
 
 def progress_verify(directory):
     """Stands in for backend.verify: the progress check lists numeric directories."""
-    recorded = json.loads((Path(directory) / "summary.json").read_text())["saved"]
+    summary = json.loads((Path(directory) / "summary.json").read_text())
+    recorded = summary["progress"]["saved_time_directories"]
     found = sorted(p.name for p in (Path(directory) / "case").iterdir() if p.is_dir())
     if found != sorted(recorded):
         raise ValueError("CFD-X006 archive.progress: summary differs")
@@ -58,6 +68,14 @@ class EmptyDirectories(unittest.TestCase):
             report = evidence.round_trip(self.tree, self.root / "e.zip", STAND_IN)
             self.assertTrue(report["round_trip_identical"], report)
             self.assertEqual((report["archives"], report["verified"]), (1, 1))
+            # Verified, yet the record names a directory that holds no files.
+            self.assertEqual(report["empty_time_directories"], {"row/run": ["500"]})
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                external_notices.evidence_archive(report, "evidence")
+            self.assertIn(
+                "time directory without files: 1%0A  row/run: 500", printed.getvalue()
+            )
             with zipfile.ZipFile(self.root / "e.zip") as z:
                 self.assertIn("sweep/row/run/case/500/", z.namelist())
             # A file-only copy, as an artifact upload makes, loses the directory.

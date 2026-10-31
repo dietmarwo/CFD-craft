@@ -79,6 +79,17 @@ def verify_tree(root, binary):
             row["schema"] = manifest.get("schema_version")
             if row["schema"] == "cfd-craft.external-archive/0.1":
                 backend.verify(directory)
+                # A time directory recorded at sealing without files passes the
+                # verifier on the original disk; list it so it is visible.
+                summary = json.loads((directory / "summary.json").read_text())
+                progress = summary.get("progress") or {}
+                row["empty_time_directories"] = [
+                    time
+                    for time in progress.get("saved_time_directories") or []
+                    if not any(
+                        name.startswith(f"case/{time}/") for name in manifest["files"]
+                    )
+                ]
             elif row["schema"] == "cfd-craft.manifest/0.1":
                 # The native reporter checks the manifest, hashes and summary.
                 done = subprocess.run(
@@ -134,6 +145,11 @@ def round_trip(root, destination, binary):
         archives=len(original),
         verified=sum(r["verified"] for r in original),
         failed=[r for r in original if not r["verified"]],
+        empty_time_directories={
+            r["archive"]: r["empty_time_directories"]
+            for r in original
+            if r.get("empty_time_directories")
+        },
         tree_identical=copied == listing,
         missing_in_copy=sorted({e[0] for e in listing} - {e[0] for e in copied})[:20],
         round_trip_identical=copy == original and copied == listing,

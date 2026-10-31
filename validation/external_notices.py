@@ -447,6 +447,11 @@ def evidence_archive(report, title):
     ]
     if report.get("error"):
         lines.append(f"error {report['error']}")
+    empty = report.get("empty_time_directories") or {}
+    lines.append(
+        f"archives recording a time directory without files: {len(empty)}"
+        + "".join(f"\n  {name}: {', '.join(times)}" for name, times in empty.items())
+    )
     lines += [
         f"not verified: {row.get('archive')}: {row.get('error')}"
         for row in report.get("failed") or []

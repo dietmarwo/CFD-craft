@@ -152,4 +152,6 @@ record lists its numbered time directories, and one can hold no files (see the
 copy then fails `openfoam_backend.py report` although the original verifies.
 `python validation/archive_evidence.py TREE NEW.zip` writes a zip with every
 directory entry and checks that each archive in the extracted copy verifies
-exactly as the original does. The CI job uploads that zip.
+exactly as the original does. It also lists archives whose progress records a
+time directory without files, which a verified archive does not rule out. The
+CI job uploads that zip and prints that list.

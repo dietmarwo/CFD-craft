@@ -15,8 +15,35 @@ def escape(text, title=False):
     return text.replace(":", "%3A").replace(",", "%2C") if title else text
 
 
+# GitHub keeps the first 4096 characters of an annotation message and drops the rest.
+MESSAGE_LIMIT = 4096
+
+
+def parts(message, limit=MESSAGE_LIMIT):
+    """Split a message at line ends into pieces GitHub keeps whole."""
+    pieces, current = [], None
+    for line in str(message).split("\n"):
+        while len(line) > limit:
+            if current is not None:
+                pieces.append(current)
+                current = None
+            pieces.append(line[:limit])
+            line = line[limit:]
+        if current is None:
+            current = line
+        elif len(current) + 1 + len(line) <= limit:
+            current += "\n" + line
+        else:
+            pieces.append(current)
+            current = line
+    return [*pieces, current]
+
+
 def notice(title, message):
-    print(f"::notice title={escape(title, True)}::{escape(message)}")
+    pieces = parts(message)
+    for number, piece in enumerate(pieces, 1):
+        name = title if len(pieces) == 1 else f"{title} ({number}/{len(pieces)})"
+        print(f"::notice title={escape(name, True)}::{escape(piece)}")
 
 
 def number(value, digits=6):
@@ -301,28 +328,30 @@ def refinement(report, title):
         f"source rejection {report.get('source_rejection')}",
     ]
     lines += observation_lines("coarse source", report.get("coarse_observation"))
+    stages = []
     for row in report.get("stages") or []:
         run = row.get("execution") or {}
         work = run.get("numerical") or {}
         trend = (work.get("residual_trend") or {}).get("p") or {}
-        lines.append(
+        stage = [
             f"stage {row.get('stage')}: {run.get('execution_status')}; "
             f"iterations {work.get('iterations')}; started "
             f"{(run.get('progress') or {}).get('started_iterations')}; "
             f"converged {work.get('solver_reported_convergence')}; "
             f"numerically accepted {run.get('passed')}; wall {number(run.get('wall_s'), 5)} s"
             + (f"; error {run['error']}" if run.get("error") else "")
-        )
+        ]
         if work:
-            lines.append(
+            stage.append(
                 f"stage {row.get('stage')} final residuals "
                 + json.dumps(work.get("initial_residuals_final_iteration"))
                 + f"; p median last/previous window {number(trend.get('median_last_window'), 4)}"
                 f" / {number(trend.get('median_previous_window'), 4)}"
             )
         observed = row.get("observation") or {}
-        lines += observation_lines(f"stage {row.get('stage')}", observed)
-        lines += audit_lines(observed.get("independent"))
+        stage += observation_lines(f"stage {row.get('stage')}", observed)
+        stage += audit_lines(observed.get("independent"))
+        stages.append((row.get("stage"), stage))
     sensitivity = report.get("mesh_sensitivity") or {}
     lines.append(
         "mesh sensitivity "
@@ -335,8 +364,16 @@ def refinement(report, title):
         )
     )
     lines.append(f"physical qualification {report.get('physical_qualification')}")
-    lines += [f"{k} {v}" for k, v in (plan.get("implementation_sha256") or {}).items()]
+    # One notice per part, so no stage or identity is lost to the length limit.
     notice(title, "\n".join(lines))
+    for index, stage in stages:
+        notice(f"{title} stage {index}", "\n".join(stage))
+    identities = plan.get("implementation_sha256") or {}
+    if identities:
+        notice(
+            f"{title} implementation",
+            "\n".join(f"{k} {v}" for k, v in identities.items()),
+        )
     return 0
 
 

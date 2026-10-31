@@ -41,6 +41,10 @@ python validation/external_notices.py runs/refinement-campaign/report.json \
   "refinement campaign"
 ```
 
+The notices summarize the report: one for the campaign, one per stage and one
+for the implementation identities. GitHub keeps 4096 characters of an
+annotation, so a longer notice is split at line ends into numbered parts.
+
 `ROOT` is the installed `runtime/opt/openfoam13` directory. A fresh output path
 and an existing parent are required. Re-running never overwrites or resumes an
 old campaign. Use a new path for another declared trial. For quick real-solver

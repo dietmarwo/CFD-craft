@@ -432,6 +432,8 @@ class Boundaries(unittest.TestCase):
         with contextlib.redirect_stdout(printed):
             external_notices.refinement(report, "fine campaign")
         text = printed.getvalue()
+        for title in ["fine campaign stage 1", "fine campaign stage 2"]:
+            self.assertIn(f"::notice title={title}::", text)
         for required in [
             "started 5000;",
             '"other_candidate"%3A 9600',
@@ -447,6 +449,143 @@ class Boundaries(unittest.TestCase):
             "stage 2%3A Ghia centerline error 0.00708",
         ]:
             self.assertIn(required, text.replace(":", "%3A"))
+
+    @staticmethod
+    def printed_notices(text):
+        """(title, message) of each printed notice, with the escapes undone."""
+        found = []
+        for line in text.splitlines():
+            head, _, message = line.partition("::")[2].partition("::")
+            title = head.removeprefix("notice title=")
+            for code, char in [
+                ("%0A", "\n"),
+                ("%0D", "\r"),
+                ("%3A", ":"),
+                ("%2C", ","),
+            ]:
+                title, message = title.replace(code, char), message.replace(code, char)
+            found.append((title.replace("%25", "%"), message.replace("%25", "%")))
+        return found
+
+    def test_ci_notices_of_a_full_campaign_fit_githubs_annotation_limit(self):
+        # GitHub cut the single notice of the declared three-stage campaign at 4096
+        # characters, which dropped the producer identities at its end.
+        audit = {
+            "passed": True,
+            "max_abs_div_phi_h_over_u": 1.29e-8,
+            "max_relative_cell_imbalance": 3.54e-6,
+            "walls": {
+                wall: {
+                    "max_y_plus": 0.5,
+                    "x_over_h": 49.92,
+                    "y_over_h": 0,
+                    "median": 0.2,
+                }
+                for wall in ["lowerWall", "upstreamWall", "upperWall", "stepWall"]
+            },
+        }
+        observed = {
+            "numerically_accepted": False,
+            "independent": audit,
+            "comparison": {
+                "reattachment": {"predicted_x_over_h": 6.6805},
+                "skin_friction": {"rmse": 3.929e-4},
+                "profiles": {s: {"rmse_u_ref": 0.09} for s in ["1", "4", "6", "10"]},
+            },
+        }
+        stage = {
+            "execution_status": "completed",
+            "passed": False,
+            "wall_s": 1800.4,
+            "error": "CFD-X007 numerical: convergence/continuity gate not reached",
+            "progress": {"started_iterations": 4000},
+            "numerical": {
+                "iterations": 4000,
+                "solver_reported_convergence": False,
+                "initial_residuals_final_iteration": {
+                    k: 1.23456789012345e-07 for k in ["Ux", "Uy", "p", "k", "omega"]
+                },
+                "residual_trend": {
+                    "p": {
+                        "median_last_window": 8.5e-7,
+                        "median_previous_window": 9.7e-7,
+                    }
+                },
+            },
+        }
+        identities = {
+            path.name: "%064x" % n
+            for n, path in enumerate(campaign.producers().values())
+        }
+        report = {
+            "schema_version": campaign.SCHEMA,
+            "workflow_completed": True,
+            "passed": False,
+            "stop_reason": "stage_limit",
+            "error": None,
+            "source_iterations": 18412,
+            "completed_fine_iterations": 32000,
+            "started_fine_iterations": 32000,
+            "plan": {
+                "limits": campaign.limits(4000, 8, 3500, 900, 1024, 4096),
+                "implementation_sha256": identities,
+            },
+            "mesh_initialization": {
+                "nearest_replay": {
+                    "candidates": 27,
+                    "nearest_source": 185984,
+                    "other_candidate": 9600,
+                    "maximum_rank": 4,
+                    "maximum_distance_ratio": 1.1600660045729756,
+                }
+            },
+            "coarse_observation": observed,
+            "stages": [
+                {"stage": n, "execution": copy.deepcopy(stage), "observation": observed}
+                for n in range(1, 9)
+            ],
+            "mesh_sensitivity": {
+                "status": "not_assessed",
+                "assessed": False,
+                "passed": False,
+                "meaning": "two-grid observable sensitivity; passed means both original "
+                "numerical/audit/reference gates, not mesh independence or a GCI",
+                "reason": "both final numerical assessments and independent audits must pass",
+            },
+            "physical_qualification": False,
+        }
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            external_notices.refinement(report, "refinement level 2")
+        found = self.printed_notices(printed.getvalue())
+        for title, message in found:
+            self.assertLessEqual(len(message), 4096, title)
+        text = "\n".join(message for _, message in found)
+        for name, digest in identities.items():
+            self.assertIn(f"{name} {digest}", text)
+        for n in range(1, 9):
+            self.assertIn(f"stage {n}: completed; iterations 4000", text)
+        self.assertIn("physical qualification False", text)
+
+    def test_long_notices_are_split_at_line_ends(self):
+        lines = [f"line {n:03d} " + "x" * 90 for n in range(100)]
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            external_notices.notice("long", "\n".join(lines))
+            external_notices.notice("short", "one\n\ntwo")
+            external_notices.notice("wide", "y" * 9000)
+        found = self.printed_notices(printed.getvalue())
+        long_parts = [m for t, m in found if t.startswith("long (")]
+        self.assertGreater(len(long_parts), 1)
+        self.assertEqual(
+            [t for t, _ in found if t.startswith("long")],
+            [f"long ({n}/{len(long_parts)})" for n in range(1, len(long_parts) + 1)],
+        )
+        self.assertTrue(all(len(m) <= external_notices.MESSAGE_LIMIT for _, m in found))
+        self.assertEqual("\n".join(long_parts), "\n".join(lines))
+        self.assertIn(("short", "one\n\ntwo"), found)
+        wide = [m for t, m in found if t.startswith("wide")]
+        self.assertEqual([len(m) for m in wide], [4096, 4096, 808])
 
 
 class ArchiveSnapshot(unittest.TestCase):

@@ -10,6 +10,7 @@ does; an original that fails stays failed in the copy.
 """
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -33,6 +34,8 @@ def pack(root, destination):
     """Write every file and directory below root; return the number of entries."""
     root, destination = Path(root), Path(destination)
     require(root.is_dir() and not root.is_symlink(), "source", "directory required")
+    # Member names start at the resolved root's own name, never with "..".
+    root = root.resolve()
     require(
         not destination.exists() and not destination.is_symlink(),
         "output",
@@ -47,9 +50,26 @@ def pack(root, destination):
     return len(paths) + 1
 
 
-def verify_tree(root, binary):
-    """Integrity of every sealed archive below root, native or OpenFOAM."""
+def tree(root):
+    """Every entry below root: relative path, kind and file digest."""
     root = Path(root)
+    return [
+        [
+            str(path.relative_to(root)),
+            "directory" if path.is_dir() else "file",
+            None if path.is_dir() else hashlib.sha256(path.read_bytes()).hexdigest(),
+        ]
+        for path in sorted(root.rglob("*"))
+    ]
+
+
+def verify_tree(root, binary):
+    """Integrity of every sealed archive below root, native or OpenFOAM.
+
+    Error texts name paths relative to root, so an original and its copy that
+    fail in the same way compare equal."""
+    root = Path(root)
+    prefixes = sorted({str(root.resolve()), str(root)}, key=len, reverse=True)
     rows = []
     for marker in sorted(root.rglob("complete.json")):
         directory = marker.parent
@@ -67,6 +87,7 @@ def verify_tree(root, binary):
                     text=True,
                     timeout=120,
                 )
+                row["report_returncode"] = done.returncode
                 require(
                     done.returncode in (0, 2),
                     row["archive"],
@@ -76,15 +97,24 @@ def verify_tree(root, binary):
                 raise ValueError(f"CFD-B004 sweep.archive.schema: {row['schema']}")
             row["verified"] = True
         except (ValueError, OSError, KeyError, TypeError) as exc:
-            row["error"] = str(exc)
+            text = str(exc)
+            for prefix in prefixes:
+                text = text.replace(prefix, "<tree>")
+            row["error"] = text
         rows.append(row)
     return rows
 
 
 def round_trip(root, destination, binary):
     root, destination = Path(root), Path(destination)
+    # A missing reporter would fail original and copy alike and pass the check.
+    binary = Path(binary).resolve()
+    require(binary.is_file(), "binary", f"native reporter not found: {binary}")
     entries = pack(root, destination)
+    root = root.resolve()
     original = verify_tree(root, binary)
+    require(bool(original), "archives", "no sealed archive found")
+    listing = tree(root)
     with tempfile.TemporaryDirectory(prefix="cfd-evidence-") as temp:
         with zipfile.ZipFile(destination) as archive:
             for info in archive.infolist():
@@ -96,6 +126,7 @@ def round_trip(root, destination, binary):
                 )
             archive.extractall(temp)
         copy = verify_tree(Path(temp) / root.name, binary)
+        copied = tree(Path(temp) / root.name)
     return dict(
         schema_version=SCHEMA,
         zip=destination.name,
@@ -103,7 +134,9 @@ def round_trip(root, destination, binary):
         archives=len(original),
         verified=sum(r["verified"] for r in original),
         failed=[r for r in original if not r["verified"]],
-        round_trip_identical=copy == original,
+        tree_identical=copied == listing,
+        missing_in_copy=sorted({e[0] for e in listing} - {e[0] for e in copied})[:20],
+        round_trip_identical=copy == original and copied == listing,
         differences=[dict(archives=[len(original), len(copy)])]
         if len(copy) != len(original)
         else [

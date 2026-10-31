@@ -16,6 +16,8 @@ import archive_evidence as evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / "target/release/cfd-craft"
+# External archives only: any existing file stands in for the native reporter.
+STAND_IN = Path(sys.executable)
 
 
 def external_archive(directory, saved):
@@ -53,7 +55,7 @@ class EmptyDirectories(unittest.TestCase):
 
     def test_an_empty_recorded_directory_survives_and_still_verifies(self):
         with patch.object(evidence.backend, "verify", side_effect=progress_verify):
-            report = evidence.round_trip(self.tree, self.root / "e.zip", BINARY)
+            report = evidence.round_trip(self.tree, self.root / "e.zip", STAND_IN)
             self.assertTrue(report["round_trip_identical"], report)
             self.assertEqual((report["archives"], report["verified"]), (1, 1))
             with zipfile.ZipFile(self.root / "e.zip") as z:
@@ -65,14 +67,14 @@ class EmptyDirectories(unittest.TestCase):
                     target = files_only / path.relative_to(self.tree)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, target)
-            rows = evidence.verify_tree(files_only, BINARY)
+            rows = evidence.verify_tree(files_only, STAND_IN)
             self.assertFalse(rows[0]["verified"])
             self.assertIn("archive.progress", rows[0]["error"])
 
     def test_a_failing_original_stays_failing_in_the_copy(self):
         (self.tree / "row/run/case/500").rmdir()
         with patch.object(evidence.backend, "verify", side_effect=progress_verify):
-            report = evidence.round_trip(self.tree, self.root / "e.zip", BINARY)
+            report = evidence.round_trip(self.tree, self.root / "e.zip", STAND_IN)
         self.assertTrue(report["round_trip_identical"])
         self.assertEqual(report["verified"], 0)
         self.assertEqual(report["failed"][0]["archive"], "row/run")
@@ -86,8 +88,47 @@ class EmptyDirectories(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"sweep\.archive\.output:"):
             evidence.pack(self.tree, self.root / "taken.zip")
         (self.tree / "row/run/manifest.json").write_text('{"schema_version": "x"}')
-        rows = evidence.verify_tree(self.tree, BINARY)
+        rows = evidence.verify_tree(self.tree, STAND_IN)
         self.assertIn("sweep.archive.schema", rows[0]["error"])
+
+    def test_a_missing_reporter_or_an_empty_tree_is_an_error(self):
+        with self.assertRaisesRegex(ValueError, r"sweep\.archive\.binary:"):
+            evidence.round_trip(self.tree, self.root / "e.zip", self.root / "none")
+        self.assertFalse((self.root / "e.zip").exists())
+        (self.root / "empty").mkdir()
+        with self.assertRaisesRegex(ValueError, r"sweep\.archive\.archives:"):
+            evidence.round_trip(self.root / "empty", self.root / "f.zip", STAND_IN)
+
+    def test_the_same_failure_compares_equal_and_a_lossy_copy_does_not(self):
+        broken = self.tree / "broken"
+        broken.mkdir()
+        (broken / "complete.json").write_text("{}")
+        (self.tree / "report.json").write_text("{}")
+        with patch.object(evidence.backend, "verify", side_effect=progress_verify):
+            report = evidence.round_trip(self.tree, self.root / "e.zip", STAND_IN)
+            self.assertTrue(report["round_trip_identical"], report)
+            self.assertIn("<tree>", report["failed"][0]["error"])
+            real = zipfile.ZipFile.extractall
+
+            def lossy(archive, path):
+                real(archive, path)
+                (Path(path) / "sweep/report.json").unlink()
+
+            with patch.object(zipfile.ZipFile, "extractall", lossy):
+                report = evidence.round_trip(self.tree, self.root / "g.zip", STAND_IN)
+            self.assertFalse(report["round_trip_identical"])
+            self.assertFalse(report["tree_identical"])
+            self.assertEqual(report["missing_in_copy"], ["report.json"])
+
+    def test_a_root_with_parent_components_writes_safe_member_names(self):
+        (self.tree / "row/sub").mkdir()
+        with patch.object(evidence.backend, "verify", side_effect=progress_verify):
+            report = evidence.round_trip(
+                self.tree / "row/sub/../..", self.root / "e.zip", STAND_IN
+            )
+        self.assertTrue(report["round_trip_identical"], report)
+        with zipfile.ZipFile(self.root / "e.zip") as z:
+            self.assertTrue(all(n.startswith("sweep") for n in z.namelist()))
 
 
 @unittest.skipUnless(BINARY.is_file(), "build the release CLI first")

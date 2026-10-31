@@ -1031,6 +1031,7 @@ class OfflinePreparation(unittest.TestCase):
         self.mapped_values = {}
         self.on_map = None
         self.fail_label = None
+        self.programs = {}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -1038,6 +1039,7 @@ class OfflinePreparation(unittest.TestCase):
     def execute(self, command, env, output, label, *args):
         if label == self.fail_label:
             raise PermissionError(13, "Permission denied", str(command[0]))
+        self.programs[label] = command[0]
         target = Path(command[2])
         output = Path(output)
         if label == "mesh":
@@ -1073,6 +1075,7 @@ class OfflinePreparation(unittest.TestCase):
         audit=None,
         runtime=None,
         level=2,
+        foam=None,
         **kwargs,
     ):
         parent = parent or {**self.summary, "passed": True}
@@ -1098,7 +1101,7 @@ class OfflinePreparation(unittest.TestCase):
             patch.object(backend, "execute", side_effect=self.execute),
         ):
             return mapping.prepare(
-                self.source, level, 50, output, self.foam, stop=stop, **kwargs
+                self.source, level, 50, output, foam or self.foam, stop=stop, **kwargs
             )
 
     def reseal(self, case=None, files=None):
@@ -1244,6 +1247,17 @@ class OfflinePreparation(unittest.TestCase):
         values = backend.internal_values(self.root / "mapped/0/p", 2304)
         coarse = backend.internal_values(self.source / "case/2/p", 576)
         np.testing.assert_array_equal(values, np.array(coarse)[nearest_coarse_cell()])
+
+    def test_a_relative_runtime_root_still_starts_the_mapper(self):
+        # Utilities run inside the target case, so the mapper path given relative
+        # to the caller's directory must be resolved before it is started.
+        previous = Path.cwd()
+        os.chdir(self.root)
+        try:
+            self.prepare(self.root / "mapped", foam=Path("foam"))
+        finally:
+            os.chdir(previous)
+        self.assertEqual(Path(self.programs["map"]), self.mapper.resolve())
 
     def test_a_mapper_output_that_is_not_nearest_cell_leaves_no_runnable_case(self):
         wrong = coarse_values("p")[nearest_coarse_cell()].copy()

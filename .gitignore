@@ -2,3 +2,4 @@ target/
 /runs/
 __pycache__/
 *.pyc
+.venv/

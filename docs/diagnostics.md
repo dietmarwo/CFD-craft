@@ -1,5 +1,13 @@
 # Diagnostics
 
+The manual's example programs and `validation/manual_examples.py` use
+`CFD-U001 manual.<field>` for missing/unavailable inputs, occupied example
+output paths, failed process/schema expectations, unaccepted example results,
+incorrect source units or source-response scaling, and checkpoint/archive
+replays that disagree. These are example/API checks, not new solver numerical
+tolerances. Rust library solver failures retain their existing diagnostics;
+the OpenFOAM example retains the adapter's external codes.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that

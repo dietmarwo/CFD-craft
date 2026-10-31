@@ -2,6 +2,11 @@
 
 CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.
 
+The [user manual](USER_MANUAL.md) explains architecture, units, numerical and
+evidence concepts, CLI/Rust/Python APIs and external/job workflows. Its
+[runnable examples](../examples/manual/README.md) are exercised by
+`validation/manual_examples.py`; use them as concrete API starting points.
+
 For established-solver execution, start with [OPENFOAM.md](../integrations/OPENFOAM.md)
 and the [external model card](model-cards/openfoam-backend.md). The generated
 Foundation-13 cavity and backstep cases have their own external result schema.

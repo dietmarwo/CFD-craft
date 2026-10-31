@@ -694,3 +694,34 @@ fn the_memory_estimate_includes_the_pressure_workspace() {
         assert_eq!(rejected_now, rejected, "{limit} MiB");
     }
 }
+
+#[test]
+fn an_external_poll_error_stops_the_run_as_cancelled_not_diverged() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    // Fail before the first step (run loop) and inside a step (pressure solve).
+    for allowed in [0, 3] {
+        let mut c = canyon();
+        c.grid.cells = [18, 16, 12];
+        c.run.max_steps = 20;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let control = Control::with_poll(60.0, move || {
+            if observed.fetch_add(1, Ordering::SeqCst) >= allowed {
+                Err("job deadline reached".into())
+            } else {
+                Ok(())
+            }
+        });
+        let run = solver::run(&c, &control, None).unwrap();
+        assert_eq!(run.summary.termination, "cancelled", "allowed {allowed}");
+        assert_eq!(run.summary.assessment, "incomplete");
+    }
+    let mut c = tracer();
+    c.grid.cells = [8, 4, 4];
+    let control = Control::with_poll(60.0, || Err("wall_time_limit".into()));
+    let run = solver::run(&c, &control, None).unwrap();
+    assert_eq!(run.summary.termination, "wall_time_limit");
+}

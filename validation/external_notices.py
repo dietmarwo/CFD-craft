@@ -405,12 +405,28 @@ def backend_performance(report, title):
     return 0
 
 
+def manual_examples(report, title):
+    """One line per executed manual step: exit code and the recorded result."""
+    lines = [f"examples {report.get('examples')}; passed {report.get('passed')}"]
+    if report.get("error"):
+        lines.append(f"error {report['error']}")
+    lines += [
+        f"{row.get('name')}: exit {row.get('returncode')}; "
+        + json.dumps(row.get("result"), sort_keys=True)
+        for row in report.get("rows") or []
+    ]
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
+    schema = str(report.get("schema_version", ""))
+    if schema.startswith("cfd-craft.manual-examples"):
+        return manual_examples(report, title)
     if "rows" in report:
         return resolution(report)
-    schema = str(report.get("schema_version", ""))
     if schema.startswith("cfd-craft.backend-performance"):
         return backend_performance(report, title)
     if schema.startswith("cfd-craft.refinement-campaign"):

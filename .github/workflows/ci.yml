@@ -69,6 +69,15 @@ jobs:
           code=$?
           test ! -f runs/mapping-cavity/report.json || python validation/external_notices.py runs/mapping-cavity/report.json "mapping cavity"
           test "$code" -eq 0 -o "$code" -eq 2
+      # The user manual's OpenFOAM recipes (Examples 21, 22, 24 and 25, and the run of
+      # the mapped case) with the manual's relative runtime path. Every step must exit
+      # 0; the notice lists each step's exit code and result.
+      - run: |
+          set +e
+          python validation/manual_examples.py --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/manual-foam > /dev/null
+          code=$?
+          test ! -f runs/manual-foam/report.json || python validation/external_notices.py runs/manual-foam/report.json "manual OpenFOAM recipes"
+          test "$code" -eq 0
       - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
       # The study preset: the cavity comparison and the backstep at three mesh levels,
       # each with the recorded 300-second budget. Exit 2 records unaccepted evidence;
@@ -104,6 +113,8 @@ jobs:
             runs/external-study/backstep-level*-comparison/*
             runs/equivalence-*/report.json
             runs/mapping-cavity/**
+            runs/manual-foam/report.json
+            runs/manual-foam/*.log
   # Same-host timing of the cavity with both backends; explicit opt-in only.
   backend-comparison:
     if: github.event_name == 'workflow_dispatch' && inputs.external == 'comparison'
@@ -288,6 +299,10 @@ jobs:
           done
       - run: python validation/test_cli.py -v
       - run: python -O validation/test_cli.py -v
+      - run: cargo build --release --workspace --examples --locked
+      - run: python validation/test_manual_examples.py -v
+      - run: python -O validation/test_manual_examples.py -v
+      - run: python validation/manual_examples.py --output runs/manual-examples
       - run: python validation/flow_accuracy.py --output runs/flow-accuracy
       - run: python validation/run_suite.py --output runs/verification
       - run: python validation/cavity.py --output runs/cavity

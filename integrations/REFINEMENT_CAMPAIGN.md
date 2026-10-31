@@ -2,14 +2,14 @@
 
 `validation/refinement_campaign.py` connects the existing one-level mapper to
 verified same-mesh continuation and final acceptance. It retains the complete
-coarse source and every returned fine stage. Start with the [iteration
-plan](../docs/iterations/06-refinement-campaign-plan.md) and read the actual
+coarse source and every returned fine stage. Read the
+[plan](../docs/iterations/06-refinement-campaign-plan.md) and the
 [results](../validation/REFINEMENT_RESULTS.md) before budgeting a larger run.
 
 This is a serial CPU workflow using the separately installed, pinned Foundation
-13 runtime. Owner workstations, GPUs and MPI are not prerequisites. The native
-solver, SST recipe, restart/mapping schemas and measurement protocol are
-unchanged. A completed campaign can produce scientifically unaccepted evidence.
+13 runtime; GPUs and MPI are not needed. The native solver, SST recipe,
+restart/mapping schemas and measurement protocol are unchanged. A completed
+campaign can produce scientifically unaccepted evidence.
 
 ## Run
 
@@ -25,9 +25,11 @@ python tutorials/backstep_resolution.py --preset smoke --iterations 20000 \
   --output runs/coarse-reference
 ```
 
-Continue only after that report passes. The campaign independently verifies the
-source, requires completed numerical acceptance and the full independent audit,
-and rejects unsupported or changed inputs before starting fine-grid work:
+Continue only after that report passes. Before it creates its output, the
+campaign verifies the source and requires its numerical acceptance, the full
+independent audit and its measurement screen (for the cavity, the Ghia
+reference check); it rejects unsupported inputs and an output inside the source.
+The defaults are the declared campaign of three 4000-iteration stages:
 
 ```sh
 python validation/refinement_campaign.py \
@@ -68,15 +70,31 @@ without convergence may be continued when `prepare-restart` accepts its final
 fields and phi. A completed but ineligible stage ends the trial with
 `source_ineligible`; its rejection diagnostic and archive remain evidence.
 
-The campaign stops at accepted convergence, converged-but-rejected numerical or
-independent evidence, a failed measurement screen, an execution stop, an
-ineligible source or the stage limit. Timeouts and cancelled/failed executions
-are never continued and an older saved snapshot is never promoted. Cancellation
-also overrides acceptance if it arrives after a solver has returned. Exit 0
-means the declared scientific gates passed, 2 means retained unaccepted or
-cancelled evidence, and 1 means invalid input or a campaign workflow error.
-`workflow_completed` describes collection of a valid bounded trial, not its
-scientific acceptance.
+The `stop_reason` is one of:
+
+- `accepted`: the stage converged and passed the numerical, audit and
+  measurement (cavity: Ghia reference) checks;
+- `converged_without_numerical_acceptance`,
+  `converged_without_independent_acceptance`, `measurement_screen_failed`
+  (for the cavity, the Ghia reference check): converged, but a check failed;
+- `execution_timeout`, `execution_failed`, `execution_cancelled`: the stage
+  stopped; `no_final_field`: it completed without a final field;
+- `source_ineligible`: the next stage's source failed the flux gate;
+- `stage_limit`: every declared stage completed without convergence;
+- `cancelled` and `workflow_error`.
+
+Timeouts and cancelled or failed executions are never continued and an older
+saved snapshot is never promoted. A cancellation overrides acceptance if it
+arrives after a solver has returned, but an integrity or workflow error stays an
+error after a cancellation. If the audit or the measurement comparison of a
+returned stage cannot be read (for example when sampling hit the deadline),
+that stage records the failure as its observation and the campaign carries on
+with the stop reason of its execution. Exit 0 means the declared scientific
+gates passed, 2 means retained unaccepted or cancelled evidence, and 1 means
+invalid input or a campaign workflow error. `workflow_completed` describes
+collection of a valid bounded trial, not its scientific acceptance.
+`completed_fine_iterations` counts the iterations of stages with a final field;
+`started_fine_iterations` also counts those of stopped stages.
 
 ## Evidence and integrity
 
@@ -90,11 +108,21 @@ The fresh directory contains:
 | `stage-01/`, `stage-02/`, ... | Complete returned archives, including actual consumed inputs, mesh, fields, logs, summary, manifest and completion marker |
 | `stage-02-input/`, ... | Verified same-mesh initialization receipts and copied inputs |
 
-Source bytes are checked during copying, and both source and copy inventories
-are checked afterwards. Every complete parent and stage is reverified after a
-stage returns and at final collection. Continuation receipts must bind the
-retained parent's manifest, case, final time, fields, mesh, runtime, acceptance
-and cumulative fine work. The first mapping binds the retained coarse parent.
+Source bytes are checked during copying, both source and copy inventories are
+checked afterwards, and the copy must have the manifest the plan froze. Every
+complete parent and stage is reverified after a stage returns and at final
+collection. At each of these checkpoints:
+
+- continuation receipts must bind the retained parent's manifest, case, final
+  time, fields, mesh, runtime, acceptance and cumulative fine work, and the
+  first mapping must bind the retained coarse parent;
+- every archive must keep the manifest it had at its first checkpoint, so the
+  last stage, which no child receipt binds, cannot be resealed unnoticed;
+- each stage's sealed summary must state the execution status, verdict, error
+  and numerical assessment its run returned;
+- the stage records and the producing files must have the implementation
+  identities the plan froze.
+
 Coarse iterations and historical coarse wall time remain separate from newly
 performed fine work and campaign wall time.
 
@@ -102,12 +130,12 @@ An extra file or changed archive stops collection with `CFD-X015
 refinement.archives.*` and the underlying diagnostic. The campaign does not
 delete an extra time directory, reseal an archive or accept an earlier field to
 make the result pass. The deliberate late-file test demonstrates detection and
-containment. It does not establish the root cause of the earlier cloud anomaly.
-This iteration also observed a rejected source whose file hashes were unchanged
-but whose empty old time directory reappeared. The
-[investigation record](../docs/iterations/06-archive-investigation.md) preserves
-that distinction. Failed witnesses must retain empty directory entries when
-transferred or zipped; a file-only copy can lose that failure's evidence.
+containment. It does not establish the root cause of the anomaly seen on a
+cloud machine, where a source's file hashes were unchanged but an empty old time
+directory reappeared; see the
+[investigation record](../docs/iterations/06-archive-investigation.md). Keep
+empty directory entries when transferring or zipping a failed archive; a
+file-only copy loses that evidence.
 
 For an individual stage, use `openfoam_backend.py report STAGE` and
 `audit_openfoam_mesh.py --run STAGE --output NEW_AUDIT.json`. Report-only
@@ -145,17 +173,14 @@ CFD_OPENFOAM_ROOT=ROOT python -O validation/test_refinement.py -v
 ```
 
 Without that environment variable the contract tests run and the five actual
-Foundation-13 tests are explicitly skipped. Actual tests cover a converged
-mapped/continued cavity, a bounded unconverged cavity, occupied output and
-post-seal file and empty-time-directory corruption. Synthetic workflow records exercise cancellation, timeout,
-source rejection, work accounting and gate ordering; they are not flow evidence.
+Foundation-13 tests are skipped. Actual tests cover a converged mapped and
+continued cavity, a bounded unconverged cavity, occupied output and post-seal
+file and empty-time-directory corruption. Synthetic records and mocked runs
+exercise every receipt, checkpoint, stop and verdict rule; they are not flow
+evidence.
 
-The existing manual workflow has an explicit `external=refinement` selector.
-It produces a fresh accepted coarse reference, then the same three-stage bounded
-campaign and uploads `runs/refinement-campaign-evidence.zip`, including fine
-fields and explicit directory entries. It preserves empty-directory failure
-witnesses and rejects symlinks before serialization; the report is uploaded
-separately for inspection. The regression executes this exact workflow step.
-This
-longer trial is separate from the existing `all` budget. No remote run is
-implied by adding the selector.
+The manual workflow's `external=refinement` selector runs the level-1 reference
+solve and then the declared campaign of three 4000-iteration stages, and
+uploads `runs/refinement-campaign-evidence.zip` with the fine fields and
+explicit directory entries; symlinks are rejected before serialization, and a
+test runs this exact workflow step. The selector is not part of `all`.

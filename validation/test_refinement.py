@@ -11,6 +11,7 @@ import io
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,8 @@ import textwrap
 import unittest
 import zipfile
 from pathlib import Path
+
+import numpy as np
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +78,19 @@ class Boundaries(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("CFD-X015 refinement.archive.linked", rejected.stderr)
             self.assertEqual(archive_path.read_bytes(), before)
+            # The campaign directory itself may not be a link either.
+            (source / "linked").unlink()
+            source.rename(root / "real-campaign")
+            source.symlink_to(root / "real-campaign")
+            rejected = subprocess.run(
+                ["bash", "-c", textwrap.dedent(step[1])],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                timeout=20,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("CFD-X015 refinement.archive.source", rejected.stderr)
 
     def test_invalid_limits_are_coded_and_do_not_create_an_output(self):
         defaults = [3000, 4, 3500, 900, 1024, 4096]
@@ -96,11 +112,34 @@ class Boundaries(unittest.TestCase):
         ]:
             args = defaults.copy()
             args[index] = value
+            field = [
+                "iterations",
+                "max_stages",
+                "timeout_s",
+                "preparation_s",
+                "output_mib",
+                "memory_mib",
+            ][index]
             with (
                 self.subTest(index=index, value=value),
-                self.assertRaisesRegex(ValueError, "CFD-X015 refinement"),
+                self.assertRaisesRegex(ValueError, "CFD-X015 refinement." + field),
             ):
                 campaign.limits(*args)
+        for index, value in [(3, 3601), (4, 0), (5, 8193), (3, float("nan"))]:
+            args = defaults.copy()
+            args[index] = value
+            with self.subTest(index=index, value=value), self.assertRaises(ValueError):
+                campaign.limits(*args)
+        # The edges themselves are accepted.
+        campaign.limits(50, 1, 3600, 3600, 1, 256)
+        campaign.limits(20000, 8, 0.5, 0.5, 2048, 8192)
+        # The campaign checks its limits before it reads the source.
+        with tempfile.TemporaryDirectory(prefix="cfd-refinement-limits-") as tmp:
+            with self.assertRaisesRegex(ValueError, "CFD-X015 refinement.max_stages"):
+                campaign.campaign(
+                    Path(tmp) / "missing", tmp, Path(tmp) / "out", max_stages=9
+                )
+            self.assertFalse((Path(tmp) / "out").exists())
 
     def test_supported_stage_cadences_and_all_limits_are_recorded(self):
         found = campaign.limits(4000, 3, 3500, 900, 1024, 4096)
@@ -129,6 +168,66 @@ class Boundaries(unittest.TestCase):
             ):
                 self.assertEqual(campaign.main(), expected)
 
+    def test_the_command_line_forwards_limits_and_codes_failures(self):
+        argv = [
+            "x",
+            "--source",
+            "s",
+            "--foam-root",
+            "r",
+            "--output",
+            "o",
+            "--data",
+            "d",
+            "--iterations",
+            "400",
+            "--max-stages",
+            "2",
+            "--timeout-s",
+            "450",
+            "--preparation-s",
+            "180",
+            "--output-mib",
+            "512",
+            "--memory-mib",
+            "2048",
+        ]
+        with (
+            patch.object(campaign, "campaign", return_value={"passed": True}) as run,
+            patch.object(sys, "argv", argv),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(campaign.main(), 0)
+        self.assertEqual(
+            run.call_args.args,
+            (
+                Path("s"),
+                Path("r"),
+                Path("o"),
+                Path("d"),
+                400,
+                2,
+                450.0,
+                180.0,
+                512,
+                2048,
+            ),
+        )
+        printed = io.StringIO()
+        with (
+            patch.object(
+                campaign,
+                "campaign",
+                side_effect=ValueError("CFD-X015 refinement.source: x"),
+            ),
+            patch.object(sys, "argv", argv),
+            contextlib.redirect_stdout(printed),
+        ):
+            self.assertEqual(campaign.main(), 1)
+        self.assertEqual(
+            json.loads(printed.getvalue())["error"], "CFD-X015 refinement.source: x"
+        )
+
     def test_paired_velocity_identities_must_be_complete_unique_and_finite(self):
         rows = [
             {
@@ -145,8 +244,19 @@ class Boundaries(unittest.TestCase):
                 "reattachment": {"predicted_x_over_h": 6.7},
             }
         }
-        for change in ["length", "identity", "duplicate", "nan"]:
+        for change in [
+            "length",
+            "identity",
+            "duplicate",
+            "nan",
+            "empty",
+            "station",
+            "height",
+            "both duplicate",
+            "longer",
+        ]:
             second = copy.deepcopy(first)
+            left = first
             values = second["comparison"]["paired_velocity_samples"]
             if change == "length":
                 values.pop()
@@ -154,13 +264,24 @@ class Boundaries(unittest.TestCase):
                 values[0]["sample_id"] = 5
             elif change == "duplicate":
                 values[1] = copy.deepcopy(values[0])
+            elif change == "empty":
+                values.clear()
+            elif change == "station":
+                values[0]["station_x_over_h"] = 4
+            elif change == "height":
+                values[0]["y_over_h"] = 9
+            elif change == "longer":
+                values.append(dict(values[0], sample_id=7))
+            elif change == "both duplicate":
+                values[1] = copy.deepcopy(values[0])
+                left = copy.deepcopy(second)
             else:
                 values[0]["predicted_u_over_u_ref"] = float("nan")
             with (
                 self.subTest(change=change),
                 self.assertRaisesRegex(ValueError, "CFD-X015 refinement.pair.samples"),
             ):
-                campaign.paired_metrics(first, second)
+                campaign.paired_metrics(left, second)
         second = copy.deepcopy(first)
         second["comparison"]["paired_velocity_samples"][0][
             "predicted_u_over_u_ref"
@@ -169,6 +290,35 @@ class Boundaries(unittest.TestCase):
         result = campaign.paired_metrics(first, second)
         self.assertAlmostEqual(result["maximum_velocity_change_u_ref"], 0.2)
         self.assertIsNone(result["reattachment_change_h"])
+        # Decreases count by magnitude; RMS and the reattachment change are reported.
+        second = copy.deepcopy(first)
+        samples = second["comparison"]["paired_velocity_samples"]
+        samples[0]["predicted_u_over_u_ref"] -= 0.3
+        samples[1]["predicted_u_over_u_ref"] -= 0.4
+        second["comparison"]["reattachment"]["predicted_x_over_h"] = 6.5
+        result = campaign.paired_metrics(first, second)
+        self.assertAlmostEqual(result["maximum_velocity_change_u_ref"], 0.4)
+        self.assertAlmostEqual(result["rms_velocity_change_u_ref"], (0.125) ** 0.5)
+        self.assertAlmostEqual(result["reattachment_change_h"], 0.2)
+        self.assertEqual(result["coarse_reattachment_x_over_h"], 6.7)
+        self.assertEqual(result["fine_reattachment_x_over_h"], 6.5)
+
+    def test_cavity_pair_compares_the_same_positions_by_magnitude(self):
+        first = {
+            "comparison": {
+                "sample_positions": [0.2, 0.8],
+                "predicted_u_over_u_ref": [0.1, 0.5],
+            }
+        }
+        second = copy.deepcopy(first)
+        second["comparison"]["predicted_u_over_u_ref"] = [0.05, 0.2]
+        found = campaign.paired_metrics(first, second)
+        self.assertAlmostEqual(found["maximum_velocity_change_u_ref"], 0.3)
+        second["comparison"]["sample_positions"] = [0.2, 0.9]
+        with self.assertRaisesRegex(
+            ValueError, "CFD-X015 refinement.pair.samples: cavity"
+        ):
+            campaign.paired_metrics(first, second)
 
     def test_cavity_pair_rejects_nonfinite_differences(self):
         first = {
@@ -239,7 +389,7 @@ class Boundaries(unittest.TestCase):
             "schema_version": campaign.SCHEMA,
             "stop_reason": "execution_timeout",
             "error": None,
-            "started_fine_iterations": 4123,
+            "started_fine_iterations": 5000,
             "source_rejection": None,
             "mesh_initialization": {"nearest_replay": {"other_candidate": 9600}},
             "coarse_observation": backstep,
@@ -283,7 +433,7 @@ class Boundaries(unittest.TestCase):
             external_notices.refinement(report, "fine campaign")
         text = printed.getvalue()
         for required in [
-            "started 4123",
+            "started 5000;",
             '"other_candidate"%3A 9600',
             "coarse source%3A numerically accepted True; independent accepted True; "
             "observable check True",
@@ -329,6 +479,42 @@ class ArchiveSnapshot(unittest.TestCase):
             (self.source / "manifest.json").write_text('{"other": 1}')
             with self.assertRaisesRegex(ValueError, "refinement.source.manifest"):
                 campaign.copy_archive(self.source, self.root / "other", 10000, frozen)
+
+    def test_the_copy_is_a_new_directory_of_identical_bytes(self):
+        total = sum(e["bytes"] for e in backend.inventory(self.source).values())
+        with patch.object(backend, "verify", return_value={"fixture": True}):
+            campaign.copy_archive(self.source, self.root / "exact", total)
+            with self.assertRaises(FileExistsError):
+                campaign.copy_archive(self.source, self.root / "exact", total)
+        original = Path.write_bytes
+
+        def altered(path, data):
+            return original(path, data.replace(b"bytes", b"BYTES"))
+
+        with (
+            patch.object(Path, "write_bytes", altered),
+            self.assertRaisesRegex(ValueError, "refinement.source.copy: snapshot"),
+        ):
+            campaign.copy_archive(self.source, self.root / "altered", total)
+
+    def test_a_same_length_change_while_copying_is_found_by_its_hash(self):
+        original = Path.read_bytes
+        reads = 0
+
+        def race(path):
+            nonlocal reads
+            blob = original(path)
+            if path == self.source / "a":
+                reads += 1
+                if reads == 2:
+                    (self.source / "b").write_text("synthetic snapshot BYTES b")
+            return blob
+
+        with (
+            patch.object(Path, "read_bytes", race),
+            self.assertRaisesRegex(ValueError, "refinement.source.copy.b"),
+        ):
+            campaign.copy_archive(self.source, self.root / "copy", 10000)
 
     def test_snapshot_budget_is_checked_before_copy_creation(self):
         with self.assertRaisesRegex(ValueError, "refinement.source.bytes"):
@@ -487,9 +673,33 @@ class ParentChain(unittest.TestCase):
         self.write()
 
     def test_first_mapping_must_bind_retained_coarse_archive(self):
-        self.jobs[self.runs[0]]["mesh_initialization"]["source_iterations"] = 800
+        state = self.jobs[self.runs[0]]["mesh_initialization"]
+        for key, value in [
+            ("source_iterations", 800),
+            ("source_manifest_sha256", "f" * 64),
+            ("source_case_sha256", "f" * 64),
+        ]:
+            old = state[key]
+            state[key] = value
+            self.write()
+            with (
+                self.subTest(key=key),
+                self.assertRaisesRegex(ValueError, "refinement.stages\\[1\\].parent"),
+            ):
+                self.check()
+            state[key] = old
         self.write()
-        with self.assertRaisesRegex(ValueError, "refinement.stages\\[1\\].parent"):
+
+    def test_every_stage_is_the_next_level_of_the_same_case(self):
+        self.records[self.runs[1]]["case"] = "backstep"
+        with self.assertRaisesRegex(ValueError, "refinement.stages\\[2\\].parent"):
+            self.check()
+        self.records[self.runs[1]]["case"] = "cavity"
+        self.jobs[self.runs[0]]["level"] = 3
+        self.write()
+        with self.assertRaisesRegex(
+            ValueError, "refinement.stages\\[1\\].parent: wrong case"
+        ):
             self.check()
 
 
@@ -604,6 +814,8 @@ class Workflow(unittest.TestCase):
         observe=None,
         checkpoint=None,
         stop=None,
+        mapping=False,
+        copy=True,
     ):
         found = observed or {"accepted": False, "passed": False}
         accepted_source = {
@@ -618,14 +830,18 @@ class Workflow(unittest.TestCase):
         with (
             patch.object(backend, "verify", return_value=self.parent),
             patch.object(campaign, "audit", return_value={"passed": True}),
-            patch.object(campaign, "copy_archive"),
+            patch.object(campaign, "copy_archive")
+            if copy
+            else contextlib.nullcontext(),
             patch.object(campaign, "checkpoint", side_effect=checkpoint),
             patch.object(campaign, "observation", side_effect=observe or observation),
             patch.object(backend, "Stop", return_value=stop or backend.Stop()),
             patch.object(
                 campaign, "mesh_pair", return_value={"passed": found["passed"]}
             ),
-            patch.object(
+            contextlib.nullcontext()
+            if mapping
+            else patch.object(
                 campaign.mapping,
                 "prepare",
                 return_value={"mesh_initialization": {"fixture": True}},
@@ -856,6 +1072,159 @@ class Workflow(unittest.TestCase):
             campaign.campaign(self.source, self.root, self.root / "never")
         self.assertFalse((self.root / "never").exists())
 
+    def test_only_an_accepted_cold_level_one_or_two_source_is_used(self):
+        for change, job, field in [
+            ({"passed": False}, {}, "source.acceptance"),
+            ({"execution_status": "timeout"}, {}, "source.acceptance"),
+            ({}, {"initial_state": {"x": 1}}, "source.initialization"),
+            ({}, {"mesh_initialization": {"x": 1}}, "source.initialization"),
+            ({}, {"level": 3}, "source.level"),
+            ({"case": "backstep"}, {}, "data"),
+        ]:
+            backend.write_json(self.source / "case/case.json", {"level": 1, **job})
+            output = self.root / ("pre-" + field + str(len(job)) + str(len(change)))
+            with (
+                self.subTest(field=field, change=change, job=job),
+                patch.object(backend, "verify", return_value={**self.parent, **change}),
+                self.assertRaisesRegex(ValueError, "CFD-X015 refinement." + field),
+            ):
+                campaign.campaign(self.source, self.root, output)
+            self.assertFalse(output.exists())
+
+    def test_the_backstep_source_must_be_the_reference_recipe(self):
+        self.parent["case"] = "backstep"
+        for metadata in [
+            {"mesh_family": "wall-resolved", "solver_profile": "simple"},
+            {"mesh_family": "legacy", "solver_profile": "simplec"},
+        ]:
+            backend.write_json(
+                self.source / "case/case.json", {"level": 1, "metadata": metadata}
+            )
+            with (
+                patch.object(backend, "verify", return_value=self.parent),
+                self.assertRaisesRegex(ValueError, "CFD-X015 refinement.source.recipe"),
+            ):
+                campaign.campaign(self.source, self.root, self.root / "never", data="d")
+        backend.write_json(
+            self.source / "case/case.json",
+            {
+                "level": 1,
+                "metadata": {
+                    "mesh_family": "wall-resolved",
+                    "solver_profile": "simplec",
+                },
+            },
+        )
+        with (
+            patch.object(backend, "verify", return_value=self.parent),
+            patch.object(
+                campaign, "load", side_effect=ValueError("CFD-D001 data: changed")
+            ) as load,
+            self.assertRaisesRegex(ValueError, "CFD-D001 data"),
+        ):
+            campaign.campaign(self.source, self.root, self.root / "never", data="d")
+        load.assert_called_once_with("d")
+        self.assertFalse((self.root / "never").exists())
+
+    def test_declared_limits_reach_the_mapping_and_every_stage(self):
+        r = {
+            "execution_status": "completed",
+            "passed": False,
+            "numerical": {"solver_reported_convergence": False},
+        }
+        with patch.object(
+            campaign.mapping,
+            "prepare",
+            return_value={"mesh_initialization": {"recorded": True}},
+        ) as mapped:
+            report, run, prepare = self.run_campaign([r, r, r], mapping=True)
+        call = mapped.call_args
+        self.assertEqual(call.args[1:3], (2, 400))
+        self.assertEqual(call.args[3].name, "mapped-input")
+        self.assertEqual(
+            {k: call.kwargs[k] for k in ["timeout_s", "output_mib", "memory_mib"]},
+            {"timeout_s": 900, "output_mib": 1024, "memory_mib": 4096},
+        )
+        self.assertEqual(report["mesh_initialization"], {"recorded": True})
+        self.assertEqual(prepare.call_args.args[0].name, "stage-02")
+        self.assertEqual(prepare.call_args.args[1], 400)
+        self.assertEqual(prepare.call_args.args[2].name, "stage-03-input")
+        for number, call in enumerate(run.call_args_list, 1):
+            self.assertEqual(
+                call.args[0].name,
+                "mapped-input" if number == 1 else f"stage-{number:02d}-input",
+            )
+            self.assertEqual(call.args[1].name, f"stage-{number:02d}")
+            self.assertEqual(
+                {k: call.kwargs[k] for k in ["timeout_s", "output_mib", "memory_mib"]},
+                {"timeout_s": 60, "output_mib": 1024, "memory_mib": 4096},
+            )
+        saved = json.loads((self.root / f"out-{self.calls}/report.json").read_text())
+        self.assertEqual(saved["phase"], "finished")
+        self.assertIs(saved["physical_qualification"], False)
+        self.assertEqual(saved["source_iterations"], 696)
+        self.assertIn("total_wall_s", saved)
+
+    def test_the_source_snapshot_gets_the_stage_budget_and_frozen_manifest(self):
+        r = {"execution_status": "timeout", "passed": False, "numerical": None}
+        with patch.object(campaign, "copy_archive") as copied:
+            report, run, prepare = self.run_campaign([r], copy=False)
+        source, target, budget, frozen = copied.call_args.args
+        self.assertEqual((source, target.name), (self.source, "source"))
+        self.assertEqual(budget, 1024 * 1024**2)
+        self.assertEqual(frozen, report["plan"]["source_manifest_sha256"])
+        self.assertEqual(frozen, backend.sha256(self.source / "manifest.json"))
+
+    def test_a_cancellation_between_steps_starts_nothing_more(self):
+        stop = backend.Stop()
+        r = {
+            "execution_status": "completed",
+            "passed": False,
+            "numerical": {"solver_reported_convergence": False},
+        }
+
+        def cancelled(*args, **kwargs):
+            # While a stage runs, SIGINT and SIGTERM request a graceful stop.
+            for s in [signal.SIGINT, signal.SIGTERM]:
+                self.assertEqual(signal.getsignal(s), stop.signal)
+            stop.cancelled = True
+            return r
+
+        before = {s: signal.getsignal(s) for s in [signal.SIGINT, signal.SIGTERM]}
+        report, run, prepare = self.run_campaign(cancelled, stop=stop)
+        self.assertEqual(run.call_count, 1)
+        prepare.assert_not_called()
+        self.assertEqual(report["stop_reason"], "cancelled")
+        self.assertEqual(
+            {s: signal.getsignal(s) for s in [signal.SIGINT, signal.SIGTERM]}, before
+        )
+        # Cancelled while the source was being copied: no mapping either.
+        stop = backend.Stop()
+        with patch.object(
+            campaign,
+            "copy_archive",
+            side_effect=lambda *a: setattr(stop, "cancelled", True),
+        ):
+            report, run, prepare = self.run_campaign([r], stop=stop, copy=False)
+        self.assertEqual(report["stop_reason"], "cancelled")
+        run.assert_not_called()
+
+    def test_a_completed_stage_without_a_final_field_stops(self):
+        r = {"execution_status": "completed", "passed": False, "numerical": None}
+        report, run, prepare = self.run_campaign([r])
+        self.assertEqual(report["stop_reason"], "no_final_field")
+        prepare.assert_not_called()
+
+    def test_a_workflow_error_is_reported_as_one(self):
+        report, run, prepare = self.run_campaign(
+            [], mapping_error=ValueError("CFD-X014 mapping.source.audit: failed")
+        )
+        self.assertEqual(report["stop_reason"], "workflow_error")
+        self.assertIn("CFD-X014 mapping.source.audit", report["error"])
+        self.assertFalse(report["passed"] or report["workflow_completed"])
+        self.assertEqual(campaign.exit_code(report), 1)
+        run.assert_not_called()
+
     def test_nonreference_backstep_is_rejected_before_creating_output(self):
         self.parent["case"] = "backstep"
         backend.write_json(
@@ -871,6 +1240,79 @@ class Workflow(unittest.TestCase):
         ):
             campaign.campaign(self.source, self.root, self.root / "out", data=self.root)
         self.assertFalse((self.root / "out").exists())
+
+
+class Observations(unittest.TestCase):
+    """observation() with mocked archive, audit and screen; Ghia from a sample file."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="cfd-refinement-observe-")
+        self.root = Path(self.temp.name)
+        reference = np.loadtxt(
+            ROOT / "validation/ghia-re100-u.csv", delimiter=",", skiprows=1
+        )
+        self.reference = reference
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def centerline(self, shift):
+        path = self.root / "case/postProcessing/sampleProfiles/9/centerline.xy"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = self.reference[(self.reference[:, 0] > 0) & (self.reference[:, 0] < 1)]
+        path.write_text(
+            "# y U_x U_y U_z\n"
+            + "".join(f"{float(y)!r} {float(u + shift)!r} 0 0\n" for y, u in rows)
+        )
+
+    def observe(self, record, independent=True, assessed=None):
+        record = {
+            "case": "cavity",
+            "execution_status": "completed",
+            "numerical": {"final_time_directory": "9"},
+            **record,
+        }
+        with (
+            patch.object(backend, "verify", return_value=record),
+            patch.object(campaign, "audit", return_value={"passed": independent}),
+            patch.object(campaign, "assess", return_value=assessed) as assess,
+        ):
+            return campaign.observation(self.root, "data"), assess
+
+    def test_ghia_reference_within_and_outside_its_target(self):
+        self.centerline(0.0)
+        found, _ = self.observe({"passed": True})
+        self.assertLess(found["comparison"]["maximum_error"], 1e-12)
+        self.assertTrue(found["accepted"] and found["passed"])
+        self.centerline(0.0601)
+        found, _ = self.observe({"passed": True})
+        self.assertAlmostEqual(found["comparison"]["maximum_error"], 0.0601)
+        self.assertTrue(found["accepted"])
+        self.assertFalse(found["passed"])
+        self.centerline(0.0599)
+        self.assertTrue(self.observe({"passed": True})[0]["passed"])
+
+    def test_acceptance_needs_the_numerical_and_independent_verdicts(self):
+        self.centerline(0.0)
+        found, _ = self.observe({"passed": False})
+        self.assertFalse(found["accepted"] or found["passed"])
+        found, _ = self.observe({"passed": True}, independent=False)
+        self.assertFalse(found["accepted"] or found["passed"])
+        found, _ = self.observe({"passed": False, "numerical": None})
+        self.assertIsNone(found["independent"])
+        self.assertFalse(found["accepted"])
+
+    def test_the_backstep_uses_the_frozen_measurement_screen(self):
+        found, assess = self.observe(
+            {"passed": True, "case": "backstep"}, assessed={"passed": True}
+        )
+        self.assertEqual(assess.call_args.args, (self.root, "data"))
+        self.assertTrue(found["passed"])
+        found, _ = self.observe(
+            {"passed": True, "case": "backstep"}, assessed={"passed": False}
+        )
+        self.assertTrue(found["accepted"])
+        self.assertFalse(found["passed"])
 
 
 class MeshPair(unittest.TestCase):
@@ -911,6 +1353,132 @@ class MeshPair(unittest.TestCase):
             found = campaign.mesh_pair(*self.paths, None)
         self.assertEqual(found["status"], "not_assessed")
         verify.assert_not_called()
+
+    def accepted_pair(self, records=None, passed=(True, True)):
+        records = records or [
+            {"case": "cavity", "runtime": {"fixture": True}},
+            {"case": "cavity", "runtime": {"fixture": True}},
+        ]
+        observations = [
+            {
+                "accepted": True,
+                "passed": ok,
+                "comparison": {
+                    "sample_positions": [0.5],
+                    "predicted_u_over_u_ref": [0.1],
+                },
+            }
+            for ok in passed
+        ]
+        with (
+            patch.object(
+                backend,
+                "verify",
+                side_effect=lambda p: records[self.paths.index(Path(p))],
+            ),
+            patch.object(campaign, "observation", side_effect=observations),
+        ):
+            return campaign.mesh_pair(*self.paths, None)
+
+    def test_two_accepted_grids_must_be_the_same_recipe_one_level_apart(self):
+        self.assertTrue(self.accepted_pair()["passed"])
+        self.assertFalse(self.accepted_pair(passed=(True, False))["passed"])
+        self.assertFalse(self.accepted_pair(passed=(False, True))["passed"])
+        backstep = {"case": "backstep", "runtime": {"fixture": True}}
+        cavity = {"case": "cavity", "runtime": {"fixture": True}}
+        with self.assertRaisesRegex(ValueError, "refinement.pair.level"):
+            self.accepted_pair([cavity, backstep])
+        with self.assertRaisesRegex(ValueError, "refinement.pair.runtime"):
+            self.accepted_pair([cavity, dict(cavity, runtime={"other": 1})])
+        for path, key, value, field in [
+            (1, "level", 3, "pair.level"),
+            (1, "metadata", {"reynolds": 200}, "pair.metadata.reynolds"),
+            (
+                1,
+                "metadata",
+                {"reynolds": 100, "mesh_family": "x"},
+                "pair.metadata.mesh_family",
+            ),
+            (
+                1,
+                "metadata",
+                {"reynolds": 100, "solver_profile": "x"},
+                "pair.metadata.solver_profile",
+            ),
+            (1, "metadata", {"reynolds": 100, "height_m": 2}, "pair.metadata.height_m"),
+            (
+                1,
+                "metadata",
+                {"reynolds": 100, "reference_speed_m_s": 2},
+                "pair.metadata.reference_speed_m_s",
+            ),
+            (
+                1,
+                "inputs",
+                {"system/fvSchemes": {"sha256": "x"}},
+                "pair.inputs.system/fvSchemes",
+            ),
+        ]:
+            job = json.loads((self.paths[path] / "case/case.json").read_text())
+            saved = copy.deepcopy(job)
+            job[key] = value
+            backend.write_json(self.paths[path] / "case/case.json", job)
+            with (
+                self.subTest(field=field),
+                self.assertRaisesRegex(
+                    ValueError, "CFD-X015 refinement." + re.escape(field)
+                ),
+            ):
+                self.accepted_pair()
+            backend.write_json(self.paths[path] / "case/case.json", saved)
+
+    def test_a_coarse_grid_that_is_not_accepted_is_not_compared(self):
+        with (
+            patch.object(backend, "verify") as verify,
+            patch.object(
+                campaign,
+                "observation",
+                side_effect=[{"accepted": False}, {"accepted": True}],
+            ),
+        ):
+            found = campaign.mesh_pair(*self.paths, None)
+        self.assertFalse(found["assessed"])
+        verify.assert_not_called()
+
+    def test_backstep_friction_is_compared_at_positive_measured_positions(self):
+        curve = [{"x_over_h": x, "cf": 0.001 * x} for x in [-1.0, 0.0, 1.0, 2.0, 3.0]]
+        finer = [{"x_over_h": x, "cf": -0.002 * x} for x in [-1.0, 0.0, 1.0, 2.0, 3.0]]
+        samples = [
+            {
+                "station_x_over_h": 1,
+                "sample_id": 1,
+                "y_over_h": 0.5,
+                "predicted_u_over_u_ref": 0.1,
+            }
+        ]
+        observations = [
+            {
+                "accepted": True,
+                "passed": True,
+                "comparison": {
+                    "paired_velocity_samples": samples,
+                    "reattachment": {"predicted_x_over_h": 6.7},
+                    "friction_curve": c,
+                },
+            }
+            for c in [curve, finer]
+        ]
+        record = {"case": "backstep", "runtime": {"fixture": True}}
+        with (
+            patch.object(backend, "verify", return_value=record),
+            patch.object(campaign, "observation", side_effect=observations),
+            patch.object(
+                campaign, "load", return_value={"cf": [[-0.5, 0], [1.0, 0], [2.5, 0]]}
+            ),
+        ):
+            found = campaign.mesh_pair(*self.paths, "data")
+        self.assertEqual(found["cf_comparison_x_over_h"], [1.0, 2.5])
+        self.assertAlmostEqual(found["maximum_cf_change_at_measured_positions"], 0.0075)
 
     def test_unaccepted_grid_does_not_enter_mesh_comparison(self):
         with patch.object(campaign, "paired_metrics") as compare:

@@ -44,6 +44,11 @@ Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid c
 
 The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/roadmap.md) maps the development plan's milestones, numeric targets and tutorials to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, multigrid and GPU execution are later work.
 
+[Native CPU performance iterations 07–14](docs/iterations/07-14-performance-results.md)
+record paired pressure, stencil, complete-step and CLI timings, unchanged-field
+comparisons and the memory tradeoff. The [declared plan](docs/iterations/07-14-performance-plan.md)
+and bounded benchmark tooling keep numerical work and validation targets fixed.
+
 ## Verification
 
 ~~~sh

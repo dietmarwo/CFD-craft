@@ -79,3 +79,11 @@ python tutorials/canyon_study.py --preset sensitivity --output runs/new-sensitiv
 ~~~
 
 The study preset is deliberately more expensive; it may hit its per-case budgets. Record this outcome. Change numerical methods or available resources with evidence before increasing scope.
+
+Native CPU implementation changes and paired measurements are documented in
+[iterations 07–14](iterations/07-14-performance-results.md). The common Rust
+`performance_probe` and `validation/benchmark_native.py` compare fixed work with
+input/producer hashes, finite field comparisons and actual iteration counts.
+Kernel timing, complete-step timing, CLI timing and numerical/physical acceptance
+are separate observations. Preserve slower controls and the memory tradeoff;
+use unchanged scientific gates when testing future performance changes.

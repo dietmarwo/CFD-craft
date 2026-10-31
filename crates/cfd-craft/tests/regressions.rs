@@ -512,3 +512,80 @@ fn the_masked_pressure_operator_matches_an_assembled_reference() {
         );
     }
 }
+
+#[test]
+fn cancellation_inside_pressure_preserves_the_entire_step_and_history() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let mut c = canyon();
+    c.grid.cells = [18, 16, 12];
+    let g = Grid::build(&c).unwrap();
+    let mut state = solver::initial_state(&c, &g);
+    state.monitor_history = vec![vec![1.25, 2.5], vec![3.75, 5.0]];
+    let before = serde_json::to_vec(&state).unwrap();
+    let sources = cfd_craft::transport::source_fields(&c, &g).unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = calls.clone();
+    let control = Control::with_poll(20.0, move || {
+        if observed.fetch_add(1, Ordering::SeqCst) == 0 {
+            Ok(())
+        } else {
+            Err("cancelled".into())
+        }
+    });
+    let error = solver::step(&c, &g, &mut state, &sources, 0.001, &control).unwrap_err();
+    assert_eq!(error, "cancelled");
+    assert!(calls.load(Ordering::SeqCst) >= 2);
+    assert_eq!(serde_json::to_vec(&state).unwrap(), before);
+}
+
+#[test]
+fn invalid_history_is_checked_without_moving_it_out_of_a_failed_step() {
+    let mut c = tracer();
+    c.grid.cells = [8, 4, 4];
+    let g = Grid::build(&c).unwrap();
+    let mut state = solver::initial_state(&c, &g);
+    state.monitor_history = vec![vec![f64::NAN]];
+    let before = serde_json::to_vec(&state).unwrap();
+    let bits = state.monitor_history[0][0].to_bits();
+    let sources = cfd_craft::transport::source_fields(&c, &g).unwrap();
+    let error = solver::step(&c, &g, &mut state, &sources, 0.001, &Control::new(20.0)).unwrap_err();
+    assert!(error.contains("CFD-E051"));
+    assert_eq!(state.monitor_history[0][0].to_bits(), bits);
+    assert_eq!(serde_json::to_vec(&state).unwrap(), before);
+}
+
+#[test]
+fn a_late_positivity_failure_preserves_history_and_all_state_fields() {
+    let mut c = tracer();
+    c.grid.cells = [8, 4, 4];
+    c.numerics.transport = Advection::LinearUpwind;
+    let g = Grid::build(&c).unwrap();
+    let mut state = solver::initial_state(&c, &g);
+    state.concentrations[0].fill(0.0);
+    state.concentrations[0][0] = 1.0;
+    state.monitor_history = vec![vec![1.25, 2.5]];
+    let before = serde_json::to_vec(&state).unwrap();
+    let sources = vec![vec![0.0; g.count()]];
+    let error =
+        solver::step(&c, &g, &mut state, &sources, 1000.0, &Control::new(20.0)).unwrap_err();
+    assert!(error.contains("CFD-E053"), "{error}");
+    assert_eq!(serde_json::to_vec(&state).unwrap(), before);
+}
+
+#[test]
+fn a_successful_step_keeps_history_and_unsupplied_constituents() {
+    let mut c = tracer();
+    c.grid.cells = [8, 4, 4];
+    let g = Grid::build(&c).unwrap();
+    let mut state = solver::initial_state(&c, &g);
+    state.monitor_history = vec![vec![1.25, 2.5]];
+    let concentrations = state.concentrations.clone();
+    let history = state.monitor_history.clone();
+    solver::step(&c, &g, &mut state, &[], 0.001, &Control::new(20.0)).unwrap();
+    assert_eq!(state.concentrations, concentrations);
+    assert_eq!(state.monitor_history, history);
+    assert_eq!(state.steps, 1);
+}

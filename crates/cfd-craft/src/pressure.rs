@@ -14,7 +14,9 @@ pub struct LinearInfo {
 /// The solved operator and the recomputed residual remain unshifted.
 #[derive(Clone, Debug)]
 pub struct Factor {
-    lower: Vec<Vec<(usize, f64)>>,
+    row_offsets: Vec<usize>,
+    columns: Vec<usize>,
+    lower: Vec<f64>,
     diagonal: Vec<f64>,
 }
 impl Factor {
@@ -60,23 +62,40 @@ impl Factor {
                 .max(1e-12 * maxdiag)
                 .sqrt();
         }
+        let mut row_offsets = Vec::with_capacity(g.count() + 1);
+        let mut columns = Vec::new();
+        let mut values = Vec::new();
+        row_offsets.push(0);
+        for row in lower {
+            for (column, value) in row {
+                columns.push(column);
+                values.push(value);
+            }
+            row_offsets.push(columns.len());
+        }
         Self {
-            lower,
+            row_offsets,
+            columns,
+            lower: values,
             diagonal: diag,
         }
     }
     fn apply(&self, r: &[f64], z: &mut [f64]) {
-        z.copy_from_slice(r);
+        assert_eq!(r.len(), z.len());
         for i in 0..z.len() {
-            for &(j, l) in &self.lower[i] {
-                z[i] -= l * z[j];
+            let range = self.row_offsets[i]..self.row_offsets[i + 1];
+            let mut value = r[i];
+            for (&column, &lower) in self.columns[range.clone()].iter().zip(&self.lower[range]) {
+                value -= lower * z[column];
             }
-            z[i] /= self.diagonal[i];
+            z[i] = value / self.diagonal[i];
         }
         for i in (0..z.len()).rev() {
-            z[i] /= self.diagonal[i];
-            for &(j, l) in &self.lower[i] {
-                z[j] -= l * z[i];
+            let value = z[i] / self.diagonal[i];
+            z[i] = value;
+            let range = self.row_offsets[i]..self.row_offsets[i + 1];
+            for (&column, &lower) in self.columns[range.clone()].iter().zip(&self.lower[range]) {
+                z[column] -= lower * value;
             }
         }
     }
@@ -246,4 +265,121 @@ pub fn project(
     }
     center_nullspaces(g, p);
     Ok(info)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::case::{Block, Boundary, Case, Flow};
+
+    fn case(n: [usize; 3]) -> Case {
+        let mut c: Case = serde_json::from_str(include_str!(
+            "../../../cases/verification/periodic-tracer.json"
+        ))
+        .unwrap();
+        c.grid.cells = n;
+        c.domain.size_m = n.map(|v| v as f64);
+        c.flow = Flow::Laminar {
+            initial_velocity_m_s: [0.0; 3],
+            viscosity_m2_s: 0.01,
+            acceleration_m_s2: [0.0; 3],
+        };
+        c.constituents.clear();
+        c.initial_conditions.clear();
+        c.sources.clear();
+        c.receptors.clear();
+        c
+    }
+
+    // Assemble -D G from the grid's gradient/divergence, then form a dense IC(0)
+    // reference. This does not use the factor's sparse storage or face assembly.
+    fn dense_reference(g: &Grid, rhs: &[f64]) -> Vec<f64> {
+        let n = g.count();
+        let mut a = vec![vec![0.0; n]; n];
+        for j in 0..n {
+            let mut basis = vec![0.0; n];
+            basis[j] = 1.0;
+            for (i, v) in g.divergence(&g.gradient(&basis)).into_iter().enumerate() {
+                a[i][j] = -v;
+            }
+        }
+        let maximum = (0..n).map(|i| a[i][i]).fold(1.0, f64::max);
+        let mut l = vec![vec![0.0; n]; n];
+        for i in 0..n {
+            for j in 0..i {
+                if a[i][j] != 0.0 {
+                    let dot = (0..j).map(|k| l[i][k] * l[j][k]).sum::<f64>();
+                    l[i][j] = (a[i][j] - dot) / l[j][j];
+                }
+            }
+            let squared = (0..i).map(|j| l[i][j] * l[i][j]).sum::<f64>();
+            l[i][i] = (a[i][i] + 1e-6 * maximum - squared)
+                .max(1e-12 * maximum)
+                .sqrt();
+        }
+        let mut y = vec![0.0; n];
+        for i in 0..n {
+            y[i] = (rhs[i] - (0..i).map(|j| l[i][j] * y[j]).sum::<f64>()) / l[i][i];
+        }
+        let mut x = vec![0.0; n];
+        for i in (0..n).rev() {
+            x[i] = (y[i] - (i + 1..n).map(|j| l[j][i] * x[j]).sum::<f64>()) / l[i][i];
+        }
+        x
+    }
+
+    #[test]
+    fn compact_ic0_matches_dense_reference_with_periodic_duplicates_and_triangles() {
+        for n in [[2, 3, 2], [3, 3, 3], [4, 2, 3]] {
+            let c = case(n);
+            let g = Grid::build(&c).unwrap();
+            let r: Vec<_> = (0..g.count()).map(|i| (0.7 * i as f64).sin()).collect();
+            let expected = dense_reference(&g, &r);
+            let factor = Factor::build(&g);
+            for seed in [0.0, 42.0] {
+                let mut z = vec![seed; g.count()];
+                factor.apply(&r, &mut z);
+                for (a, b) in z.iter().zip(&expected) {
+                    assert!((a - b).abs() <= 1e-10 * b.abs().max(1.0));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn compact_ic0_matches_dense_reference_for_masked_closed_and_outlet_components() {
+        for open in [false, true] {
+            let mut c = case([6, 3, 2]);
+            c.boundaries.x = if open { Boundary::Open } else { Boundary::Wall };
+            if let Flow::Laminar {
+                initial_velocity_m_s,
+                ..
+            } = &mut c.flow
+                && open
+            {
+                *initial_velocity_m_s = [1.0, 0.0, 0.0];
+            }
+            c.geometry.push(Block {
+                id: "barrier".into(),
+                min_m: [2.0, 0.0, 0.0],
+                max_m: [3.0, 3.0, 2.0],
+            });
+            let g = Grid::build(&c).unwrap();
+            let r: Vec<_> = (0..g.count())
+                .map(|i| {
+                    if g.fluid[i] {
+                        (i as f64 * 0.73).cos()
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            let expected = dense_reference(&g, &r);
+            let mut actual = vec![0.0; g.count()];
+            Factor::build(&g).apply(&r, &mut actual);
+            for (a, b) in actual.iter().zip(expected) {
+                assert!((a - b).abs() <= 1e-10 * b.abs().max(1.0));
+            }
+        }
+    }
 }

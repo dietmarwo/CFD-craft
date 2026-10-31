@@ -20,6 +20,10 @@ guess, arithmetic order, compatibility test or residual tolerance. The
 [performance plan](../iterations/07-14-performance-plan.md) separates kernel cost
 from fixed-work and accepted-run throughput.
 
+IC(0) triangular sweeps use contiguous row offsets, column indices and values.
+The memory estimator includes a conservative extra 112 bytes/cell before its
+existing safety margin for factor-construction and compact pressure work.
+
 Projection residuals, actual face-flux continuity and boundary balance are separate checks. There is no multigrid, sparse direct factorization or MPI implementation in 0.1.
 
 ## Neutral turbulence package

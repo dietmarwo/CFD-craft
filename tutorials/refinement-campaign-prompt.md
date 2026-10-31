@@ -26,7 +26,7 @@ Ask the agent to carry out the following task:
 > measurement verdicts and the size of the grid changes. If either grid is not
 > accepted, state that mesh sensitivity was not assessed. Two grids provide
 > neither a GCI nor physical qualification. Describe the remaining inlet,
-> refinement and model-form work. Keep owner hardware, GPU and MPI tasks deferred.
+> refinement and model-form work. GPU and MPI work is out of scope.
 
 The guide supplies the exact commands and limits. For a quick smoke exercise,
 use an accepted cold cavity source and 400-iteration stages (up to four); its
@@ -40,4 +40,4 @@ Questions the finished report must answer:
 2. Which stage first met each gate, and what work was performed on each mesh?
 3. Did the final source/parent/archive checks still pass at collection?
 4. Which comparisons are assessed, and what does each `passed` field mean?
-5. Which remaining scientific question can the next cloud CPU trial resolve?
+5. Which remaining scientific question can the next bounded trial resolve?

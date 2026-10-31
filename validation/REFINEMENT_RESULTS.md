@@ -1,188 +1,211 @@
-# Bounded mapped refinement: actual results
+# Bounded mapped refinement: results
 
-30 October 2026. Source patch base: merged PR #6, `06bf8b5d894e5252a5b04d14ff04cda06e010bb8`.
+The declared level-2 backstep campaign of the
+[plan](../docs/iterations/06-refinement-campaign-plan.md), run on a
+GitHub-hosted runner on 31 October 2026 from commit
+`e7b095277ac1346806984ae4070bc18ac1e9aefe`. The campaign code of that commit is
+the current code; later commits change tests, notices and documentation only.
 
 ## Outcome
 
-The short local level-2 backstep proof **did not supply accepted fine-grid evidence**. Its exact stopping reason
-is `stage_limit`. Workflow collection completed:
-`True`. Scientific pass: `False`.
-Physical qualification remains **false**.
+The campaign **did not produce an accepted fine grid**. All three declared
+stages of 4000 iterations completed, and the stop reason is `stage_limit`. Every
+stage passed the independent audit (local flux and wall y+), but none passed the
+numerical gate: after 12000 fine iterations the final initial residuals of Uy
+(1.81e-7) and k (1.05e-7) are still above 1e-7, and the solver did not report
+convergence. The two-grid comparison was therefore not assessed. Physical
+qualification remains false.
 
-The final fine field was not numerically accepted, so the coarse/fine observable comparison was not assessed. Two levels do not provide a GCI. These are results of an external
-backstep experiment; the native canyon and passive-gas qualification gates are
-unchanged.
+The residuals fell steadily through all three stages. The Uy residual, which had
+seemed to level off near 1e-5 in shorter runs, fell by a factor of about 7 per
+stage. Whether one more stage would pass the gate is an extrapolation; this
+campaign does not show it.
+
+| Item | Value |
+|---|---|
+| Workflow run | [41151497327](https://github.com/dietmarwo/CFD-craft/actions/runs/41151497327), dispatch input `external=refinement` |
+| Runner | GitHub-hosted ubuntu-24.04, AMD EPYC 9V45, 4 CPUs (serial solve) |
+| Evidence | artifact `resolution-evidence` (13026704954, 139081798 bytes, `sha256:c05c07f37b68e395801a43a3fa8fd708170dd476bf8825a4a81c9ef70c440f72`), containing `runs/refinement-campaign/report.json` and `runs/refinement-campaign-evidence.zip` |
+| Workflow completed / passed | `True` / `False` |
+| Stop reason | `stage_limit` |
+| Completed / started fine iterations | 12000 / 12000 |
+| Source iterations (separate) | 18412 |
+| Archive checkpoints | 5 (source snapshot, three returned stages, final collection) |
+| Campaign wall time | 5507.2 s, of which preparation 23.5 s |
+| `refinement_campaign.py` | `6173411c59ed07a83c4d5f42836dbedb117507eb3bd07733f11825d2ce707b02` |
 
 ## Source and declared work
 
-The complete accepted cold level-1 source was recovered from GitHub run
-[41106074755](https://github.com/dietmarwo/CFD-craft/actions/runs/41106074755),
-artifact 13008679534. Its downloaded ZIP matched GitHub's published SHA-256:
-`34ff3df6f86741413aed94a4ffd5c34498de1bba8ce47f2191553d8445931322`.
-It passes the current archive verifier, independent audit and frozen measurement
-screen. Its exact runtime matches the local pinned runtime. The retained source
-manifest is `d90c70c78997c3de30b658cea631fd873fcbad5f2f02ea8793def42750c5284a`.
+The same job first ran the wall-resolved SIMPLEC level-1 backstep cold, in one
+run with a 20000-iteration budget (`backstep_resolution.py --preset smoke`).
+It converged at 18412 iterations in 1988.2 s, with a final pressure residual of
+1.20e-8. It passed the independent audit (max abs(div(phi))·H/U 6.4e-11, highest
+wall y+ 0.963 on the step wall) and the measurement screen:
 
-The source has 48896 cells and 18412 historical iterations; those are not new
-local work. The target has 195584 cells. Before execution the amended local proof froze at most
-2 stages of 400 iterations,
-450 seconds per execution, preparation
-180 seconds, 1024 MiB
-per-stage output and 4096 MiB child address space.
-Two longer host sessions had disappeared without returning or sealing fields,
-even with heartbeat monitoring. The plan amendment reduces work to fit a
-sustained local session; it changes no numerical or scientific gate. The full
-three-by-4000 campaign remains configured for manual CI and was not dispatched.
+| Source observable | Value | Screen target |
+|---|---|---|
+| U profile RMSE x/H = 1, 4, 6, 10 | 0.0449, 0.0646, 0.0931, 0.0912 | ≤ 0.10 each |
+| Signed Cf RMSE (17 points) | 4.17e-4 | ≤ 1e-3 |
+| Reattachment | 6.706 H | within 0.75 H of 6.26 H |
 
-| Fine stage | Execution | Completed iterations | Converged | Numerical | Audit | Measurement screen | Wall s |
-|---|---|---|---|---|---|---|---|
-| 1 | completed | 400 | fail | fail | pass | not assessed | 237.142964 |
-| 2 | completed | 400 | fail | fail | pass | not assessed | 285.98553 |
+The campaign took this archive (48896 cells) as its source and mapped it once to
+level 2 (195584 cells). The declared limits, frozen before mapping, were three
+stages of at most 4000 iterations, 3500 s per solve, 900 s for preparation,
+1024 MiB output and 4096 MiB child address space per stage. The mapping replay
+matched the earlier runs exactly: 185984 cells took their nearest source cell
+and 9600 another of the 27 nearest (largest rank 4, largest distance ratio
+1.1601).
 
-Completed fine work is **800 iterations**,
-separate from **18412 coarse iterations**. Preparation
-took 36.6527153 seconds; total new campaign wall
-time including verification and collection was 717.397537
-seconds. The source's historical wall time is provenance, not new CPU time.
-There was no new cold level-2 control and there is no new speedup claim.
+## Stages
 
-## Reproduce the amended local proof
+| Stage | Iterations | Wall s | Converged | Numerical | Audit | Measurement screen |
+|---|---:|---:|---|---|---|---|
+| 1 | 4000 | 1800.4 | no | fail | pass | not assessed |
+| 2 | 4000 | 1778.8 | no | fail | pass | not assessed |
+| 3 | 4000 | 1737.7 | no | fail | pass | not assessed |
 
-Use the patched repository, pinned runtime, explicitly fetched data and the
-complete `evidence/refinement-backstep/source` archive from the bundle:
+Final initial residual of each stage; the gate is ≤ 1e-7 for every field:
+
+| Field | Stage 1 | Stage 2 | Stage 3 | Reduction per stage |
+|---|---:|---:|---:|---|
+| Ux | 2.92e-7 | 1.22e-7 | **7.72e-8** | 2.4, 1.6 |
+| Uy | 9.06e-6 | 1.19e-6 | 1.81e-7 | 7.6, 6.6 |
+| p | 8.06e-7 | 1.03e-7 | **1.56e-8** | 7.8, 6.6 |
+| k | 6.93e-7 | 2.55e-7 | 1.05e-7 | 2.7, 2.4 |
+| omega | 1.60e-9 | 5.73e-10 | **2.46e-10** | 2.8, 2.3 |
+
+Bold values meet the gate. The pressure residual's median over the last tenth
+of each stage, against the tenth before, was 8.5e-7 / 9.7e-7, 1.13e-7 / 1.42e-7
+and 1.72e-8 / 2.11e-8.
+
+Each stage ran at about 0.44 s per iteration. The level-1 source ran at about
+0.11 s per iteration with a quarter of the cells.
+
+## Independent audit of the fine stages
+
+| Stage | max abs(div(phi))·H/U | Max relative cell imbalance |
+|---|---:|---:|
+| 1 | 1.29e-8 | 3.5e-6 |
+| 2 | 8.8e-10 | 3.5e-8 |
+| 3 | 2.4e-10 | 1.1e-7 |
+
+The local-flux target is ≤ 1e-4. Maximum y+ at stage 3: lower wall 0.253,
+upstream wall 0.473, upper wall 0.343, step wall 0.515 (target ≤ 1; the same to
+three digits in every stage). A passing audit of conservation and wall sampling
+does not establish nonlinear convergence.
+
+## Final-iterate observables
+
+These are metrics of fields that are **not numerically accepted**. The
+measurement screen was not assessed, and the differences from the source are not
+a mesh sensitivity.
+
+| Observable | Source (level 1, accepted) | Stage 1 | Stage 2 | Stage 3 |
+|---|---:|---:|---:|---:|
+| U profile RMSE x/H = 1 | 0.04493 | 0.04507 | 0.04508 | 0.04508 |
+| U profile RMSE x/H = 4 | 0.06459 | 0.06499 | 0.06501 | 0.06502 |
+| U profile RMSE x/H = 6 | 0.09314 | 0.09360 | 0.09379 | 0.09380 |
+| U profile RMSE x/H = 10 | 0.09119 | 0.09185 | 0.09191 | 0.09188 |
+| Signed Cf RMSE | 4.172e-4 | 3.918e-4 | 3.927e-4 | 3.929e-4 |
+| Reattachment x/H | 6.7064 | 6.6788 | 6.6811 | 6.6805 |
+
+Between stages 2 and 3 the reattachment length moved by 0.0006 H and the profile
+errors by at most 3e-5.
+
+## Two-grid comparison
+
+Not assessed: it requires both final numerical assessments and independent
+audits to pass. When assessed, velocity samples are paired by station, sample ID
+and physical y/H, and Cf is compared at common positive measured x/H positions
+without extrapolation. `mesh_sensitivity.passed` means both grids pass the
+original gates, not that their difference is below a threshold. Two grids do not
+give a GCI.
+
+## Integrity
+
+Every checkpoint passed: the copied source had the manifest the plan froze;
+each stage's receipt bound its parent's manifest, final time, fields, mesh,
+runtime and cumulative fine work; every archive kept the manifest of its first
+checkpoint; each sealed summary stated what its run returned; and the producing
+files kept the hashes the plan froze. The CI step zipped the complete campaign
+directory, including empty directories, and rejected symlinks.
+
+## Reproduce
+
+On a runner with the pinned Foundation-13 runtime, dispatch the CI workflow with
+`external=refinement`, or run:
 
 ```sh
-python validation/refinement_campaign.py --source SOURCE --foam-root ROOT --data DATA --iterations 400 --max-stages 2 --timeout-s 450 --preparation-s 180 --output-mib 1024 --memory-mib 4096 --output NEW_CAMPAIGN
+python validation/backstep_data.py --output runs/measurements
+python tutorials/backstep_resolution.py --preset smoke --iterations 20000 \
+  --timeout-s 3500 --data runs/measurements --foam-root ROOT \
+  --output runs/resolution-study
+python validation/refinement_campaign.py \
+  --source runs/resolution-study/wall-resolved-simplec-level1 \
+  --iterations 4000 --max-stages 3 --timeout-s 3500 --preparation-s 900 \
+  --data runs/measurements --foam-root ROOT --output runs/refinement-campaign
 ```
 
-## Actual final fields and gates
+Exit code 2 means a completed campaign with unaccepted evidence, as here.
 
-| Field | Final initial residual | Gate |
-|---|---|---|
-| Ux | 7.56855284e-07 | <= 1e-7 |
-| Uy | 1.04252155e-05 | <= 1e-7 |
-| p | 2.58771131e-06 | <= 1e-7 |
-| k | 2.07397116e-06 | <= 1e-7 |
-| omega | 5.91755728e-09 | <= 1e-7 |
+## Earlier executions
 
-Reported final local continuity: 6.01088324e-12
-(target <=1e-6). Stored boundary-flux imbalance:
-1.47058637e-13 (target <=1e-6).
-Independent max abs(div(phi))*H/U:
-2.40333222e-07
-(target <=1e-4). The archive verifier also checks finite/sign-valid returned
-U/p/k/omega/nut fields.
+These preceded the declared campaign. None supplied a source for it.
 
-| Wall | Maximum y+ | Gate |
-|---|---|---|
-| lowerWall | 0.252708115 | <= 1 |
-| upstreamWall | 0.472776443 | <= 1 |
-| upperWall | 0.343150518 | <= 1 |
-| stepWall | 0.515304066 | <= 1 |
+- **Reduced run (workflow check).** Two stages of 400 iterations, 450 s per
+  solve and 180 s preparation, on a cloud machine. It reused the accepted
+  level-1 archive of workflow run
+  [41106074755](https://github.com/dietmarwo/CFD-craft/actions/runs/41106074755)
+  (artifact 13008679534, SHA-256
+  `34ff3df6f86741413aed94a4ffd5c34498de1bba8ce47f2191553d8445931322`, source
+  manifest `d90c70c78997c3de30b658cea631fd873fcbad5f2f02ea8793def42750c5284a`).
+  It stopped at `stage_limit` after 800 fine iterations, with Uy at 1.04e-5
+  and p at 2.6e-6; all audits passed. Its limits were frozen in its report
+  before it started, but the plan was changed to declare it only afterwards.
+- **Runs that ended early.** A prototype was cancelled at started iteration 238
+  to correct the cancellation rule. Two runs of the declared campaign on the
+  same cloud machine ended at started iterations 1457 and 1193 without a
+  returned solver record or seal, for unknown reasons. Their records were kept;
+  nothing from them was continued.
+- **Cavity proof.** A real Foundation-13 cavity campaign passes: the cold
+  level-1 source converged in 696 iterations; the mapped level-2 chain took
+  1356 iterations in stages of 400, 400, 400 and 156. Both grids pass their
+  numerical, independent and Ghia-reference checks (maximum Ghia errors 0.00897
+  and 0.00708 against 0.06), and the largest centerline change between the grids
+  is 0.0075 lid-speed units. This is numerical verification, not physical
+  validation.
+- **Reappearing directory.** On the same cloud machine, a sealed cavity source
+  later showed an empty old time directory while every file still matched its
+  manifest. The archive checks rejected it; the cause is unproven. See the
+  [investigation](../docs/iterations/06-archive-investigation.md). It has not
+  occurred on GitHub.
 
-The final independent-audit verdict is `True`. An audit
-of conservation and wall sampling does not establish nonlinear convergence.
+## Tests
 
-| Final-iterate observable | Value | Original screen target |
-|---|---|---|
-| U profile x/H=1 | 0.0450744424 | RMSE <= 0.10 |
-| U profile x/H=4 | 0.0644289412 | RMSE <= 0.10 |
-| U profile x/H=6 | 0.0928660368 | RMSE <= 0.10 |
-| U profile x/H=10 | 0.0912487631 | RMSE <= 0.10 |
-| Signed Cf | 0.000389754549 | RMSE <= 0.001 |
-| Reattachment x/H | 6.65862688 | error <= 0.75 H from 6.26 H |
+The campaign tests run in normal and optimized Python. Without the runtime they
+cover limits, the source snapshot, observations, the two-grid comparison,
+lineage, checkpoints, stopping, cancellation, the command line and the CI
+notices. With `CFD_OPENFOAM_ROOT` set, five more tests run real cavity
+campaigns, including an archive changed after sealing and a reappearing empty
+directory; they passed on GitHub in run
+[41151500191](https://github.com/dietmarwo/CFD-craft/actions/runs/41151500191).
 
-These are metrics of the **actual final iterate**. The measurement-screen
-verdict is `not assessed` and its status is
-`not_assessed: the numerical gate failed; the metrics describe the final iterate only`. Individual metrics near their targets
-cannot override an unaccepted numerical or independent gate.
+## Open questions
 
-## Conditional two-grid comparison
+- **Another declared trial.** The stage-3 fields are retained and pass the audit.
+  An accepted level-2 backstep needs a new declared campaign with more fine work,
+  for example four or five stages of 4000 iterations, within the 360-minute job.
+  The number must be declared before it runs; this result does not justify a
+  smaller gate.
+- **Mesh sensitivity.** An accepted level-2 grid gives a two-grid comparison, not
+  a GCI. A third level requires chained mapping provenance, which the campaign
+  does not support.
+- **Other uncertainty.** Inlet and near-wall reconstruction, turbulence-model
+  form and measurement uncertainty remain open. The benchmark has no passive-gas
+  data.
+- **Native gates.** Native canyon throughput, building-wall treatment and
+  measured canyon and gas qualification are separate and unchanged.
 
-No inter-grid differences are promoted as accepted mesh sensitivity.
-
-When assessed, velocity sample identities match station, sample ID and physical
-y/H exactly; Cf is compared at common positive experimental x/H positions
-without extrapolation. `mesh_sensitivity.passed` means both grids pass the
-original gates, not that the difference between them is below an invented
-threshold. The native canyon's separate 5% target is not used here.
-
-## Retained accepted cavity proof
-
-The retained real Foundation-13 cavity campaign passes. Its cold source took
-696 iterations; the fine chain took
-1356 iterations in stages 400, 400, 400 and 156.
-Both grids pass their original numerical, independent and Ghia-reference gates.
-Maximum centreline change is 0.00753181251
-lid-speed units. The coarse and fine Ghia maximum errors are
-0.00896632356 and
-0.0070799887, against 0.06 each.
-This is a numerical-reference exercise, not physical validation. Its complete
-source/stage fields are retained separately as `evidence/refinement-cavity`;
-its work is not added to the backstep ledger.
-
-## Integrity, development finding and tests
-
-The report retains 4 successful archive
-checkpoints, including final collection. Every retained stage is bound to its
-actual parent, runtime, mesh, fields, final time and work. The complete source
-and stages remain available in the patch bundle; summary-only records are not
-used as restart sources.
-
-The late-file regression deliberately adds `case/123/U` after a real cavity
-archive is sealed. The campaign rejects it with CFD-X015 and the underlying
-CFD-X006, keeps the file and stops without a second stage or a new seal.
-A separate working-directory cavity source reproduced the strict progress
-failure: an empty `case/500/uniform` directory reappeared while every file still
-matched the original manifest. That source was quarantined, including its empty
-directory shape. The final retained positive cavity proof was regenerated under
-a fresh private path. A new real-runtime regression and retained probe recreate
-the empty-directory failure. The original mechanism remains unproven; no
-progress rule was relaxed. See the
-[investigation](../docs/iterations/06-archive-investigation.md).
-
-A pre-release review reproduced an acceptance/cancellation race in the new
-campaign layer. Cancellation now overrides acceptance even after a solver has
-returned; its regression passes normally and under `python -O`. An early fine
-trial was interrupted to deploy this fix (last observed started pseudo-time
-238, host session exit 130). It had no sealed final archive, was not
-used as a source and is not counted as completed work in the final trial.
-Its producer, partial report, log and interruption receipt are retained as
-development evidence in the bundle. Two subsequent host sessions disappeared at started iterations 1457 and
-1193 without solver returns or seals (exit statuses unknown), including the
-heartbeat repetition. Their records are retained; no partial snapshot was
-continued. The fresh amended short proof restarted from the same verified cold
-source. The larger convergence objective remains a CI experiment.
-
-All 30 campaign tests pass in normal and optimized Python, including five real
-Foundation-13 tests in each mode. All existing backend (38), resolution (41),
-restart (54), mapping (58) and CLI (35) tests also pass in both modes. That is
-256 tests per interpreter mode, with the runtime tests enabled. Core Rust
-format/clippy/release tests pass (32 tests), as do Ruff, native analytic/empty-ABL,
-flow-order, cavity and SciPy-reference verification. No native equation or
-experimental protocol changed.
-
-## Interpretation and remaining work
-
-The local implementation/returned-field proof is complete; the original long
-fine-grid convergence experiment is not. Run the configured larger manual-CI
-trial on a sustained runner to pursue accepted fine fields. Owner hardware is
-not required for that experiment.
-
-- Retain the exact fine-field outcome and residual trends when deciding another
-  budget or a separate solver-method experiment. A larger budget is not evidence
-  that convergence is guaranteed.
-- A successful numerical pair still needs another accepted refinement and a
-  defensible convergence regime before a GCI. Mapping an already mapped source
-  to another mesh requires separately tested chained provenance; it is not
-  enabled by this campaign.
-- Inlet/near-wall reconstruction uncertainty, model-form sensitivity and velocity
-  measurement uncertainty remain open. The benchmark has no passive-gas data.
-- Native canyon throughput, building-wall treatment and measured canyon/gas
-  qualification remain separate gates. Owner-machine, MPI and GPU work stays
-  deferred while the owner is travelling with a phone.
-
-The [guide](../integrations/REFINEMENT_CAMPAIGN.md),
-[plan](../docs/iterations/06-refinement-campaign-plan.md) and
+The [guide](../integrations/REFINEMENT_CAMPAIGN.md) and the
 [tutorial prompt](../tutorials/refinement-campaign-prompt.md) describe the
-implemented workflow and the meaning of its verdicts.
+workflow and the meaning of its verdicts.

@@ -38,11 +38,12 @@ For an acceptance-aware mapped/continued chain use the
 [results](../validation/REFINEMENT_RESULTS.md). It freezes limits and producer
 identities, snapshots a complete accepted cold source, maps once and retains
 every fine stage. Cumulative fine work excludes coarse work. Repeated parent
-and archive checks reject added/changed files without repair. Only numerically
-accepted, independently audited grids enter the descriptive observable
-comparison; its pass means both original reference screens pass, not mesh
-independence. Cancellation overrides campaign acceptance. Two grids do not give
-a GCI, and physical qualification stays false.
+and archive checks reject added or changed files without repair. Only
+numerically accepted, independently audited grids enter the descriptive
+observable comparison; its pass means both original reference screens pass, not
+mesh independence. Cancellation overrides campaign acceptance, but not an
+integrity error. Two grids do not give a GCI, and physical qualification stays
+false.
 
 1. Build with cargo build --release --locked. Inspect cfd-craft describe.
 2. Choose a canonical case. Run check before allocating a larger simulation. Each diagnostic names its element and field (for example `geometry[1]` or `sources[0].rate_kg_s_m`); [diagnostics](diagnostics.md) lists the codes. Invalid input exits 1 from check, run and preview, with the report on stdout. A check on a host too small for the case warns with CFD-W070 and skips the grid checks; run the case on a larger host, or preview it here.

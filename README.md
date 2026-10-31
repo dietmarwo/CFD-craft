@@ -114,9 +114,12 @@ an accepted cold coarse source, maps once and chains eligible fine stages under
 declared limits. Every stage keeps its own numerical, independent and reference
 verdicts; parent/archive checks run again at collection. A two-grid observable
 comparison requires accepted fields on both meshes and does not establish a
-GCI. See the [plan](docs/iterations/06-refinement-campaign-plan.md),
+GCI. The declared level-2 backstep campaign (three stages of 4000 iterations)
+ended at its stage limit without an accepted fine grid: every stage passed the
+audit, but the Uy and k residuals stayed above the gate. See the
+[plan](docs/iterations/06-refinement-campaign-plan.md),
 [tutorial](tutorials/refinement-campaign-prompt.md) and
-[actual results](validation/REFINEMENT_RESULTS.md).
+[results](validation/REFINEMENT_RESULTS.md).
 
 ## Ecosystem
 

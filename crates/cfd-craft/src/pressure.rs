@@ -317,16 +317,10 @@ pub fn solve_scaled(
     }
     Err(format!("CFD-E033: pressure iteration limit {max}"))
 }
-pub fn project(
-    g: &Grid,
-    u: &mut [f64],
-    p: &mut [f64],
-    dt: f64,
-    tol: f64,
-    max: usize,
-    control: &Control,
-) -> Result<LinearInfo> {
-    // Form both cell arrays in one pass; retain axis accumulation order.
+/// The projection's right-hand side, -div(u)/dt, and the per-cell magnitude of the
+/// terms it differences, sum(|u_lo| + |u_hi|)/dx/dt, which scales its round-off.
+/// Both are formed in one cell pass with the axis order of `Grid::divergence`.
+fn projection_rhs(g: &Grid, u: &[f64], dt: f64) -> (Vec<f64>, Vec<f64>) {
     let mut b = vec![-0.0; g.count()];
     let mut terms = vec![0.0; g.count()];
     for i in 0..g.count() {
@@ -344,6 +338,18 @@ pub fn project(
         // Round-off scales with the terms differenced, not with their small sum.
         terms[i] = scale / dt;
     }
+    (b, terms)
+}
+pub fn project(
+    g: &Grid,
+    u: &mut [f64],
+    p: &mut [f64],
+    dt: f64,
+    tol: f64,
+    max: usize,
+    control: &Control,
+) -> Result<LinearInfo> {
+    let (b, terms) = projection_rhs(g, u, dt);
     let (correction, info) = solve_scaled(g, &b, Some(&terms), tol, max, control)?;
     for (v, f) in u.iter_mut().zip(&g.faces) {
         let d = match f.kind {
@@ -511,6 +517,68 @@ mod tests {
             Operator::build(&g).apply(&x, &mut compact);
             assert_eq!(raw, compact);
         }
+    }
+
+    #[test]
+    fn compact_operator_matches_the_public_operator_bitwise_on_unequal_spacing() {
+        // Unit spacing hides a reassociated weight; this grid has three spacings.
+        for open in [false, true] {
+            let mut c = case([18, 9, 33]);
+            c.domain.size_m = [7.15, 42.45, 38.31];
+            if open {
+                c.boundaries.x = Boundary::Open;
+                if let Flow::Laminar {
+                    initial_velocity_m_s,
+                    ..
+                } = &mut c.flow
+                {
+                    *initial_velocity_m_s = [1.0, 0.0, 0.0];
+                }
+            }
+            let g = Grid::build(&c).unwrap();
+            let x: Vec<_> = (0..g.count()).map(|i| (0.73 * i as f64).sin()).collect();
+            let mut raw = vec![0.0; g.count()];
+            let mut compact = vec![0.0; g.count()];
+            apply(&g, &x, &mut raw);
+            Operator::build(&g).apply(&x, &mut compact);
+            let bits = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&raw), bits(&compact));
+        }
+    }
+
+    #[test]
+    fn projection_rhs_and_roundoff_scale_match_their_definitions() {
+        let mut c = case([18, 9, 33]);
+        c.domain.size_m = [7.15, 42.45, 38.31];
+        c.geometry.push(Block {
+            id: "barrier".into(),
+            min_m: [2.0, 0.0, 0.0],
+            max_m: [3.0, 20.0, 15.0],
+        });
+        let g = Grid::build(&c).unwrap();
+        // Mixed signs on opposite faces make |u_lo + u_hi| differ from |u_lo| + |u_hi|.
+        let u: Vec<_> = (0..g.faces.len())
+            .map(|i| 3.0 * (0.61 * i as f64).sin() - 0.4)
+            .collect();
+        let dt = 0.125;
+        let (b, terms) = projection_rhs(&g, &u, dt);
+        let divergence = g.divergence(&u);
+        for i in 0..g.count() {
+            assert_eq!(b[i], -divergence[i] / dt);
+            let expected = if g.fluid[i] {
+                (0..3)
+                    .map(|a| {
+                        let [lo, hi] = g.cell_faces[i][a];
+                        (u[lo].abs() + u[hi].abs()) / g.dx[a]
+                    })
+                    .sum::<f64>()
+                    / dt
+            } else {
+                0.0
+            };
+            assert_eq!(terms[i].to_bits(), expected.to_bits());
+        }
+        assert!(g.fluid.iter().any(|f| !f));
     }
 
     #[test]

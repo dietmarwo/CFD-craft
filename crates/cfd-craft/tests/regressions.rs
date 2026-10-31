@@ -589,3 +589,108 @@ fn a_successful_step_keeps_history_and_unsupplied_constituents() {
     assert_eq!(state.monitor_history, history);
     assert_eq!(state.steps, 1);
 }
+
+// Bit patterns of the RANS stencils, recorded from the merged implementation before
+// the neighbor lookups were shared. The fields are perturbed so that every
+// gradient, cross-stress and wall branch carries a distinct value; a change to
+// the arithmetic or to the neighbor/face selection changes the signature.
+fn stencil_signature(c: &Case) -> String {
+    let g = Grid::build(c).unwrap();
+    let s = solver::initial_state(c, &g);
+    let mut u: Vec<f64> = s
+        .velocity
+        .iter()
+        .enumerate()
+        .map(|(i, v)| v + 0.05 * (0.37 * i as f64).sin())
+        .collect();
+    g.enforce_velocity(c, &mut u);
+    let wave = |values: &[f64], w: f64| -> Vec<f64> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| v * (1.0 + 0.3 * (w * i as f64).cos()))
+            .collect()
+    };
+    let k = wave(&s.k, 0.11);
+    let eps = wave(&s.epsilon, 0.23);
+    let nut = flow::eddy_viscosity(&g, &k, &eps);
+    let momentum = flow::momentum_rhs(c, &g, &u, &nut);
+    let (production, walls) = flow::production(c, &g, &u, &nut, &k);
+    let (mut k2, mut eps2) = (k.clone(), eps.clone());
+    let floors = flow::turbulence_step(c, &g, &u, &mut k2, &mut eps2, 1e-3);
+    let mut bytes = Vec::new();
+    for values in [&momentum, &production, &k2, &eps2] {
+        bytes.extend(values.len().to_le_bytes());
+        for v in values {
+            bytes.extend(v.to_bits().to_le_bytes());
+        }
+    }
+    for wall in &walls {
+        bytes.extend(wall.map_or(u64::MAX, f64::to_bits).to_le_bytes());
+    }
+    bytes.extend(floors.to_le_bytes());
+    assert!(walls.iter().any(Option::is_some) && production.iter().any(|v| *v != 0.0));
+    hash_bytes(&bytes)
+}
+
+#[test]
+fn rans_stencils_keep_their_recorded_bits() {
+    let mut open = canyon();
+    open.grid.cells = [18, 6, 12];
+    let mut periodic = canyon();
+    periodic.grid.cells = [18, 2, 12];
+    periodic.boundaries.y = Boundary::Periodic;
+    // Recorded from 402a150 with this function; update only with a reviewed
+    // change to the RANS discretization.
+    for (c, expected) in [
+        (
+            open,
+            "e00ac47243809ffee7c118e3d96bb4fbca6a3b95c5ecc394361f3c31f9ea1e8d",
+        ),
+        (
+            periodic,
+            "bf8f2cb8552595b9d8c1829251bda9cf5767e173262daeb5776884107bd578df",
+        ),
+    ] {
+        assert_eq!(stencil_signature(&c), expected);
+    }
+}
+
+#[test]
+fn a_step_advances_the_counters_it_was_given() {
+    let c = canyon();
+    let g = Grid::build(&c).unwrap();
+    let sources = cfd_craft::transport::source_fields(&c, &g).unwrap();
+    let fresh = solver::initial_state(&c, &g);
+    let nut = flow::eddy_viscosity(&g, &fresh.k, &fresh.epsilon);
+    let dt = solver::timestep(&c, &g, &fresh, &nut);
+    let mut first = fresh.clone();
+    solver::step(&c, &g, &mut first, &sources, dt, &Control::new(60.0)).unwrap();
+    // The counters do not influence the fields, so a continued state adds the same work.
+    let mut continued = fresh;
+    continued.steps = 5;
+    continued.time_s = 2.5;
+    continued.pressure_iterations = 7;
+    continued.floor_events = 3;
+    solver::step(&c, &g, &mut continued, &sources, dt, &Control::new(60.0)).unwrap();
+    assert!(first.pressure_iterations > 0);
+    assert_eq!(continued.steps, 6);
+    assert_eq!(continued.time_s, 2.5 + dt);
+    assert_eq!(continued.pressure_iterations, 7 + first.pressure_iterations);
+    assert_eq!(continued.floor_events, 3 + first.floor_events);
+    assert_eq!(continued.velocity, first.velocity);
+    assert_eq!(continued.concentrations, first.concentrations);
+}
+
+#[test]
+fn the_memory_estimate_includes_the_pressure_workspace() {
+    // At one million cells the per-cell workspace of the pressure solve (about
+    // 130 MiB here) separates the estimate from an 1100 MiB allowance.
+    let mut c = tracer();
+    c.grid.cells = [100, 100, 100];
+    for (limit, rejected) in [(1100, true), (1250, false)] {
+        c.run.memory_limit_mib = limit;
+        let rejected_now = codes(&c).iter().any(|(code, _)| code == "CFD-E006");
+        assert_eq!(rejected_now, rejected, "{limit} MiB");
+    }
+}

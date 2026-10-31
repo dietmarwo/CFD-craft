@@ -51,11 +51,17 @@ fn main() -> cfd_craft::Result<()> {
             "CFD-U001 manual.checkpoint.replay: resumed state differs from cold state".into(),
         );
     }
+    // The same final state, but a different starting state: the identities differ.
+    if resumed.summary.initial_state_sha256 == cold.summary.initial_state_sha256 {
+        return Err(
+            "CFD-U001 manual.checkpoint.initial_state: resumed run reports the cold start".into(),
+        );
+    }
     println!(
         "{}",
         serde_json::json!({"passed":true,"partial_steps":partial.state.steps,
         "final_steps":resumed.state.steps,"final_time_s":resumed.state.time_s,
-        "same_state_as_cold":true,"initial_state_id_differs":resumed.summary.initial_state_sha256!=cold.summary.initial_state_sha256})
+        "same_state_as_cold":true,"initial_state_id_differs":true})
     );
     Ok(())
 }

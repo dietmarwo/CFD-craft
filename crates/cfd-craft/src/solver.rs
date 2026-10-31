@@ -31,6 +31,11 @@ impl Control {
             external: None,
         }
     }
+    /// A wall-time allowance plus an external cancellation or deadline poll.
+    ///
+    /// A poll error stops the run as `cancelled`, or as `wall_time_limit` when the
+    /// poll returns exactly that text. Its own message is not kept, so a run is
+    /// never reported as diverged because an external caller stopped it.
     pub fn with_poll(seconds: f64, poll: impl Fn() -> Result<()> + Send + Sync + 'static) -> Self {
         let mut c = Self::new(seconds);
         c.external = Some(Box::new(poll));
@@ -38,7 +43,13 @@ impl Control {
     }
     pub fn check(&self) -> Result<()> {
         if let Some(poll) = &self.external {
-            poll()?;
+            poll().map_err(|e| {
+                if e == "wall_time_limit" {
+                    e
+                } else {
+                    "cancelled".to_string()
+                }
+            })?;
         }
         if self.cancelled.load(Ordering::Relaxed) {
             Err("cancelled".into())

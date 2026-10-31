@@ -256,12 +256,62 @@ def mapped_start(report, title):
     return 0
 
 
+def refinement(report, title):
+    plan = report.get("plan") or {}
+    lines = [
+        f"workflow completed {report.get('workflow_completed')}; passed {report.get('passed')}; "
+        f"stop {report.get('stop_reason')}; error {report.get('error')}",
+        f"source iterations {report.get('source_iterations')} (separate from fine work); "
+        f"completed fine iterations {report.get('completed_fine_iterations')}; "
+        f"stages {len(report.get('stages') or [])}; limits {json.dumps(plan.get('limits'))}",
+        f"preparation {number(report.get('preparation_wall_s'), 5)} s; "
+        f"campaign wall {number(report.get('total_wall_s'), 5)} s; "
+        f"archive checkpoints {len(report.get('archive_checkpoints') or [])}",
+    ]
+    for row in report.get("stages") or []:
+        run = row.get("execution") or {}
+        work = run.get("numerical") or {}
+        observed = row.get("observation") or {}
+        comparison = observed.get("comparison") or {}
+        lines.append(
+            f"stage {row.get('stage')}: {run.get('execution_status')}; "
+            f"iterations {work.get('iterations')}; converged {work.get('solver_reported_convergence')}; "
+            f"numerically accepted {run.get('passed')}; "
+            f"independent accepted {(observed.get('independent') or {}).get('passed')}; "
+            f"measurement screen {comparison.get('measurement_screen_passed')}; "
+            f"wall {number(run.get('wall_s'), 5)} s"
+        )
+        lines += audit_lines(observed.get("independent"))
+        if work:
+            lines.append(
+                "final residuals "
+                + json.dumps(work.get("initial_residuals_final_iteration"))
+            )
+    sensitivity = report.get("mesh_sensitivity") or {}
+    lines.append(
+        "mesh sensitivity "
+        + json.dumps(
+            {
+                k: v
+                for k, v in sensitivity.items()
+                if k not in ["coarse", "fine", "cf_comparison_x_over_h"]
+            }
+        )
+    )
+    lines.append(f"physical qualification {report.get('physical_qualification')}")
+    lines += [f"{k} {v}" for k, v in (plan.get("implementation_sha256") or {}).items()]
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def main():
     report = json.loads(Path(sys.argv[1]).read_text())
     title = sys.argv[2] if len(sys.argv) > 2 else "restart comparison"
     if "rows" in report:
         return resolution(report)
     schema = str(report.get("schema_version", ""))
+    if schema.startswith("cfd-craft.refinement-campaign"):
+        return refinement(report, title)
     if schema.startswith("cfd-craft.mapping-experiment"):
         return mapping_experiment(report, title)
     if schema.startswith("cfd-craft.mapped-start"):

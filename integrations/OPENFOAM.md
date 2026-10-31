@@ -66,6 +66,11 @@ from same-mesh continuation: use accepted cold coarse fields, preserve generated
 fine boundaries and construct new phi in the target solver. It carries no
 fine-grid acceptance verdict; run the normal numerical/audit/screen checks.
 
+The [bounded refinement campaign](REFINEMENT_CAMPAIGN.md) connects that mapping
+to verified fine-grid stages, retains complete parent archives and compares
+observables only after both grids pass their numerical and independent gates.
+It has separate stopping, workflow and scientific verdicts.
+
 For a steady solve longer than one run's limits, see the
 [continuation guide](STEADY_RESTART.md). `prepare-restart` turns a completed
 archive into a fresh same-mesh input from its final fields and phi. The

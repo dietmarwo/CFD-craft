@@ -5,9 +5,9 @@ name: CFD checks
   workflow_dispatch:
     inputs:
       external:
-        description: "External-runtime work: all, backend, resolution (single and staged level 1) or mapping (single level 1, then the mapped and cold level-2 starts)"
+        description: "External work: all existing checks, backend, resolution, mapping, or refinement (accepted level 1, then up to three mapped/continued level-2 stages)"
         type: choice
-        options: [all, backend, resolution, mapping]
+        options: [all, backend, resolution, mapping, refinement]
         default: all
 permissions:
   contents: read
@@ -29,6 +29,8 @@ jobs:
       - run: python -O validation/test_restart.py -v
       - run: python validation/test_mapping.py -v
       - run: python -O validation/test_mapping.py -v
+      - run: python validation/test_refinement.py -v
+      - run: python -O validation/test_refinement.py -v
   external-backend:
     if: github.event_name == 'workflow_dispatch' && (inputs.external == 'all' || inputs.external == 'backend')
     runs-on: ubuntu-24.04
@@ -55,6 +57,8 @@ jobs:
       - run: python validation/unittest_notices.py validation/test_restart.py -O
       - run: python validation/unittest_notices.py validation/test_mapping.py
       - run: python validation/unittest_notices.py validation/test_mapping.py -O
+      - run: python validation/unittest_notices.py validation/test_refinement.py
+      - run: python validation/unittest_notices.py validation/test_refinement.py -O
       # The cavity mapped from level 1 against a cold level-2 control, with the bounds
       # of the mapping results. Exit 2 records unaccepted evidence.
       - run: |
@@ -101,7 +105,8 @@ jobs:
   external-resolution:
     if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend'
     runs-on: ubuntu-24.04
-    timeout-minutes: 300
+    # Coarse reference + up to three fine executions, with audit/upload overhead.
+    timeout-minutes: 360
     env:
       CFD_OPENFOAM_ROOT: ${{ github.workspace }}/runs/openfoam13/runtime/opt/openfoam13
       OMP_NUM_THREADS: "1"
@@ -125,17 +130,17 @@ jobs:
           test "$code" -eq 0 -o "$code" -eq 2
       - if: always()
         run: test ! -f runs/resolution-study/report.json || python validation/external_notices.py runs/resolution-study/report.json
-      - if: inputs.external != 'mapping'
+      - if: inputs.external == 'all' || inputs.external == 'resolution'
         run: |
           set +e
           python tutorials/backstep_resolution.py --preset smoke --iterations 6000 --max-stages 4 --timeout-s 3500 --data runs/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/resolution-staged
           code=$?
           test "$code" -eq 0 -o "$code" -eq 2
-      - if: always() && inputs.external != 'mapping'
+      - if: always() && (inputs.external == 'all' || inputs.external == 'resolution')
         run: test ! -f runs/resolution-staged/report.json || python validation/external_notices.py runs/resolution-staged/report.json
       # The staged chain's final stage against the single run: work, fields, audit and
       # measurement metrics, with the bounds of the continuation results.
-      - if: inputs.external != 'mapping'
+      - if: inputs.external == 'all' || inputs.external == 'resolution'
         run: |
           set +e
           final=$(python -c "import json; print(json.load(open('runs/resolution-staged/report.json'))['rows'][0]['stages'][-1]['run_directory'])")
@@ -145,13 +150,39 @@ jobs:
           test "$code" -eq 0 -o "$code" -eq 2
       # The accepted single run initializes level 2; a cold level-2 case is the control.
       # Both run 3000 iterations within 3500 s. Report only: no gate is applied.
-      - if: inputs.external != 'resolution'
+      - if: inputs.external == 'all' || inputs.external == 'mapping'
         run: |
           set +e
           python validation/mapped_start.py --source runs/resolution-study/wall-resolved-simplec-level1 --iterations 3000 --timeout-s 3500 --data runs/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/mapped-start
           code=$?
           test ! -f runs/mapped-start/report.json || python validation/external_notices.py runs/mapped-start/report.json "mapped start level 2"
           test "$code" -eq 0
+      # Explicit opt-in: keep this longer campaign out of the existing all budget.
+      # A completed unaccepted campaign exits 2; an invalid workflow exits 1.
+      - if: inputs.external == 'refinement'
+        run: |
+          set +e
+          python validation/refinement_campaign.py --source runs/resolution-study/wall-resolved-simplec-level1 --iterations 4000 --max-stages 3 --timeout-s 3500 --preparation-s 900 --data runs/measurements --foam-root "$CFD_OPENFOAM_ROOT" --output runs/refinement-campaign
+          code=$?
+          test ! -f runs/refinement-campaign/report.json || python validation/external_notices.py runs/refinement-campaign/report.json "refinement level 2"
+          test "$code" -eq 0 -o "$code" -eq 2
+      - name: Archive complete refinement evidence
+        if: always() && inputs.external == 'refinement'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          root = Path("runs/refinement-campaign")
+          if root.is_dir():
+              paths = sorted(root.rglob("*"))
+              for path in [root, *paths]:
+                  if path.is_symlink():
+                      field = str(path.relative_to(root)) if path != root else "source"
+                      raise ValueError(f"CFD-X015 refinement.archive.{field}: symlink rejected")
+              with zipfile.ZipFile("runs/refinement-campaign-evidence.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+                  for path in paths:
+                      archive.write(path, str(path.relative_to(root.parent)))
+          PY
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -166,6 +197,8 @@ jobs:
             runs/mapped-start/*-input/case.json
             runs/mapped-start/*/summary.json
             runs/mapped-start/*/*.log
+            runs/refinement-campaign/report.json
+            runs/refinement-campaign-evidence.zip
   rust:
     runs-on: ubuntu-latest
     strategy:

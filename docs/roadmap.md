@@ -94,9 +94,13 @@ The steady canyon cost grows roughly with the sixth power of the refinement rati
 
 The [mesh-initialization plan](iterations/05-mesh-initialization-plan.md)
 provides an explicit accepted-coarse-to-new-fine start, verified against a cold
-fine cavity ([results](../validation/MAPPING_RESULTS.md)). An accepted fine
-backstep, mesh sensitivity and inlet and model uncertainty still need a bounded
-campaign; a prepared mapped case is not a fine solution.
+fine cavity ([results](../validation/MAPPING_RESULTS.md)). An acceptance-aware
+[bounded campaign](../integrations/REFINEMENT_CAMPAIGN.md) now maps once and
+chains eligible fine stages, with complete retained parents and work/archive
+checks. Its [actual result](../validation/REFINEMENT_RESULTS.md) decides which
+numerical and observable comparisons are available; a prepared mapped case is
+not a fine solution. Mesh independence, inlet/model uncertainty and physical
+qualification remain separate open gates.
 
 The external-backend track has a separate
 [wall-resolution plan](iterations/03-wall-resolution-plan.md). Its wall-resolved

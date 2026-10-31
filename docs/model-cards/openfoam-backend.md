@@ -232,6 +232,27 @@ See the [guide](../../integrations/MESH_INITIALIZATION.md),
 numerical verification, the SST mapping check uses synthetic fields, and no
 accepted fine backstep is claimed.
 
+## Bounded mapped refinement campaign
+
+The [campaign driver](../../integrations/REFINEMENT_CAMPAIGN.md) snapshots an
+accepted, independently audited cold source, freezes producer identities and
+limits, maps to the next level once, and continues eligible completed stages on
+that same fine mesh. It rechecks the complete retained source/parent chain after
+each stage and at final collection. A changed archive stops the workflow; no
+repair or reseal is attempted. The exact stop and per-stage numerical,
+independent-audit and measurement verdicts are retained. Source work and fine
+work are separate, and cancellation overrides campaign acceptance.
+
+Only numerically accepted and independently audited coarse/fine fields enter
+the descriptive observable comparison. Velocity sample identities match
+exactly; Cf uses common experimental locations without extrapolation.
+`mesh_sensitivity.passed` means both original numerical/audit/reference gates
+pass. It does not bound the inter-grid change or certify mesh independence.
+Two grids do not give a GCI, and physical qualification remains false. The
+[actual results](../../validation/REFINEMENT_RESULTS.md) record what the bounded
+trial achieved. No native solver, SST, mapping, restart or measurement gate was
+changed by this campaign layer.
+
 ## Interpretation and open gates (all packages)
 
 Execution, numerical convergence, measurement screening and physical

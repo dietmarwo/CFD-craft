@@ -61,6 +61,8 @@ python validation/test_restart.py -v
 python -O validation/test_restart.py -v
 python validation/test_mapping.py -v
 python -O validation/test_mapping.py -v
+python validation/test_refinement.py -v
+python -O validation/test_refinement.py -v
 python validation/run_suite.py --preset smoke --output runs/verification
 python validation/flow_accuracy.py --output runs/flow-accuracy
 python validation/cavity.py --output runs/cavity
@@ -106,6 +108,15 @@ new face flux. Its receipt, an independent replay of the mapping and the rebuilt
 mesh and runtime are checked. A mapped and a cold level-2 cavity converge to the
 same fields ([mapping results](validation/MAPPING_RESULTS.md)); an accepted fine
 turbulent backstep and physical qualification remain open.
+
+The [bounded refinement campaign](integrations/REFINEMENT_CAMPAIGN.md) retains
+an accepted cold coarse source, maps once and chains eligible fine stages under
+declared limits. Every stage keeps its own numerical, independent and reference
+verdicts; parent/archive checks run again at collection. A two-grid observable
+comparison requires accepted fields on both meshes and does not establish a
+GCI. See the [plan](docs/iterations/06-refinement-campaign-plan.md),
+[tutorial](tutorials/refinement-campaign-prompt.md) and
+[actual results](validation/REFINEMENT_RESULTS.md).
 
 ## Ecosystem
 

@@ -137,8 +137,9 @@ The old comparator without `--grid-sweep` retains its three-method, balanced
 permutation experiment and fail-on-unaccepted behavior.
 
 For a hosted run, dispatch **CFD checks** with `external=accuracy`. It builds the
-release, installs the pinned runtime, runs the 24²/48² sweep and uploads the
-complete evidence. Notices show accepted-row counts, medians and unreached
+release, installs the pinned runtime, runs the 24²/48² sweep with a 600 s native
+budget (the recorded baseline used 180 s, which a GitHub runner did not finish at
+48²) and uploads the complete evidence. Notices show accepted-row counts, medians and unreached
 targets. This explicit opt-in is separate from the existing `all` budget.
 
 Transfer evidence with its directory entries. An OpenFOAM archive's progress

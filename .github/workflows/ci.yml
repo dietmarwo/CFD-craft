@@ -170,9 +170,13 @@ jobs:
       - run: cargo build --release --locked
       - run: python -m pip install -r requirements-validation.txt
       - run: mkdir -p runs && python integrations/install_openfoam13.py --output runs/openfoam13
+      - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
+      # The recorded baseline used 180 s per native run; native 48² needed 173 s
+      # there and did not finish within 180 s on a GitHub runner. This job declares
+      # 600 s so the 48² baseline completes; the acceptance gates are unchanged.
       - run: |
           set +e
-          python validation/compare_backends.py --grid-sweep --levels 1 2 --sweep-rounds 3 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/accuracy-sweep
+          python validation/compare_backends.py --grid-sweep --levels 1 2 --sweep-rounds 3 --native-wall-s 600 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/accuracy-sweep
           code=$?
           test ! -f runs/accuracy-sweep/report.json || python validation/external_notices.py runs/accuracy-sweep/report.json "cavity accuracy sweep"
           test "$code" -eq 0 -o "$code" -eq 2

@@ -5,8 +5,8 @@ structured mesh, buildings and illustrative flow/scalar lines, not a computed
 result or physical-validation claim. The meaningful alternative text in README
 also identifies the two supported backends.
 
-Created with the built-in image-generation tool. The final PNG is stored in the
-repository so the README works from branches, clones and patch application.
+Created with an image-generation tool and stored in the repository as a JPEG
+(1672×941), so the README works from branches and clones.
 
 Generation prompt:
 

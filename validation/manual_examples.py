@@ -131,15 +131,15 @@ def main():
             [sys.executable, ROOT / "validation/check_fields.py", out / "point-source"],
         )
         require(audit["passed"], "point-source.audit", "field check failed")
-        report["point_source_ug_m3"] = (
-            solved["constituents"][0]["receptors_kg_m3"]["R_down"] * 1e9
-        )
+        tracer = next(s for s in solved["constituents"] if s["id"] == "tracer")
+        report["point_source_ug_m3"] = tracer["receptors_kg_m3"]["R_down"] * 1e9
         report["passed"] = True
     except (
         ValueError,
         OSError,
         KeyError,
         TypeError,
+        StopIteration,
         subprocess.SubprocessError,
     ) as exc:
         report["error"] = (

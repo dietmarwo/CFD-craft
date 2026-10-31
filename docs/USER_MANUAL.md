@@ -54,6 +54,10 @@ Commands in this manual run from the repository root. Use Rust >=1.88. A
 Linux-like shell is used for the examples; the external runtime targets Linux.
 The core workspace has two crates and uses its committed Cargo lockfile.
 
+Every run writes to a new output path and refuses an existing one (E062 for
+the CLI, CFD-U001 for the example scripts). To repeat an example, delete its
+earlier output or choose a new name.
+
 ### Example 1: build and discover the schemas
 
 ```sh
@@ -176,8 +180,9 @@ that want to own those policies, including optimization workers.
 The grid is uniform Cartesian; cell sizes are domain lengths divided by cell
 counts. Every native axis needs at least two cells. Boxes mask cells using
 cell-center membership. An obstacle containing no cell center is rejected,
-rather than silently disappearing. The geometry archive records the actual
-mask and fluid components.
+rather than silently disappearing. `geometry.json` records the SHA-256 of the
+represented mask with its cell counts, solid volume, per-box cell counts and
+fluid components; the mask itself is rebuilt from the boxes in `case.json`.
 
 Concentrations, pressure, k and epsilon are cell quantities. Velocity components
 live on faces. For dimensions `[nx,ny,nz]`, cells are x-fastest; cell index is
@@ -215,7 +220,8 @@ MUSCL does not make momentum second order. Diffusion and advection constrain
 the timestep. `max_time_step_s` is a ceiling, not a promise of fixed dt.
 
 `run.mode=steady` still uses these time steps and stops when the steady gates
-pass. It does not select an implicit SIMPLE method. `transient` completes a
+pass; `end_time_s` does not bound a steady run (`max_steps` and the wall-time
+limit do), and its `physical_time_s` is pseudo-time. It does not select an implicit SIMPLE method. `transient` completes a
 physical interval and has its own acceptance meaning. Pressure iteration work,
 actual face-flux continuity and boundary balance are separate recorded checks.
 
@@ -272,8 +278,8 @@ and the [data inventory](../validation/data-inventory.json).
 
 ### Example 4: inspect the complete input
 
-Read [point-source.json](../examples/manual/point-source.json). Every group is
-present; no hidden simulator configuration is required.
+Read [point-source.json](../examples/manual/point-source.json). Nothing outside
+the case file configures the solver. The groups are:
 
 | Group | Responsibility |
 |---|---|
@@ -287,8 +293,9 @@ present; no hidden simulator configuration is required.
 | `run` | Mode, endpoint, step/time/thread/memory budgets |
 | `output` | Field/checkpoint retention and output budget |
 
-`moving_walls` defaults to an empty list when omitted. Other fields and variants
-must match `describe`. A similarly named field from another CFD package is not
+`moving_walls` (omitted in this example), `geometry`, `constituents`,
+`initial_conditions`, `sources` and `receptors` default to empty lists when
+omitted. Other fields and variants must match `describe`. A similarly named field from another CFD package is not
 accepted. The point coordinate is `point_m`, not `position_m`.
 
 ### Example 5: modify an input without changing the original
@@ -355,9 +362,9 @@ Python example handles and records process failures.
 
 | Command outcome | Exit | Interpretation |
 |---|---:|---|
-| Valid check, accepted solve, or consistent native archive | 0 | Meaning depends on the command |
+| Valid check, accepted solve with all artifacts, consistent native archive, or passed `verify` fixture | 0 | Meaning depends on the command |
 | Invalid input or execution/I/O error | 1 | Inspect coded diagnostic/path or stderr |
-| Solve completed its request with incomplete/failed numerical evidence | 2 | Keep the archive and inspect termination/assessment |
+| `run` with incomplete or failed numerical evidence, or an accepted solve that omitted artifacts over its output budget (E061); a failed `verify` fixture | 2 | Keep the archive and inspect termination/assessment |
 
 `report` can exit 0 for an intact **incomplete** run. It can also repeat an
 artifact-omission warning and exit 0. Never use its exit alone as a convergence
@@ -427,7 +434,7 @@ flowchart TD
 |---|---|
 | `case.json` | Normalized consumed case, including defaults |
 | `summary.json` | Status, checks, work, units, receptor values and model scope |
-| `geometry.json` | Actual represented mask, box cells and fluid components |
+| `geometry.json` | Mask SHA-256, cell counts, solid volume, box cells and fluid components |
 | `probes.csv` | Final named receptor concentrations in kg/m3 |
 | `fields.json` | Optional full state, native face velocity and cumulative budgets |
 | `checkpoint.json` | Optional checksummed state and physics identity |
@@ -472,9 +479,10 @@ relative/absolute scales and unavailable values.
 
 ### Example 12: interrupt by work, then resume to the same endpoint
 
-Use the fully runnable [Python workflow](../examples/manual/cli_workflow.py)
-for this sequence. Its periodic-tracer case keeps end_time_s=2.0 and changes
-only max_steps to 5 for the partial run:
+Run [Example 18](#example-18-execute-the-complete-native-api-cookbook) first:
+its [Python workflow](../examples/manual/cli_workflow.py) writes
+`runs/manual-cli/partial.json` and `full.json`, the periodic-tracer case with
+end_time_s=2.0, the partial one changing only max_steps to 5:
 
 ```sh
 target/release/cfd-craft run runs/manual-cli/partial.json --output runs/partial-demo
@@ -485,21 +493,24 @@ target/release/cfd-craft run runs/manual-cli/full.json \
   --restart runs/partial-demo/checkpoint.json --output runs/resumed-demo
 ```
 
-`runs/manual-cli/partial.json` and `full.json` are created by Example 18.
 Use these commands interactively with explicit expected exits rather than
 hiding exit 2 in a shell pipeline. The complete workflow checks those exits.
 
-Checkpoint identity excludes name, run budgets and output policy. It includes
-the grid, physics, sources, receptor definitions and numerics. A checkpoint
-beyond the new requested step or physical horizon is rejected. A changed grid
-is not a compatible native restart.
+Checkpoint identity (the physics hash) excludes `name`, the whole `run` group
+(mode, endpoint, budgets, threads) and `output`. It includes the grid, physics,
+sources, receptor definitions and numerics. A checkpoint beyond the new
+requested step or physical horizon is rejected (E066). A changed grid is not a
+compatible native restart.
 
 The endpoint is unchanged so the same final clipped timestep is used. Compare
-the resumed and uninterrupted full `fields.json` to test exact state replay.
+`runs/resumed-demo/fields.json` with the uninterrupted run of Example 18,
+`runs/manual-cli/cold/fields.json`, to test exact state replay.
 Changing the physical endpoint of the partial case can change its clipped
 step, so it is not an exact replay experiment.
 
 ### Example 13: inspect an interrupted calculation safely
+
+This reads the partial archive written by Example 18.
 
 ```python
 import json
@@ -539,7 +550,7 @@ revision in a reproducible build.
 | `Grid::build(&case)` | Build represented topology; source/receptor checks also need transport setup |
 | `Source::rate()` | Integrated physical kg/s for the declared source variant |
 | `Control::new(seconds)` | Cooperative finite positive wall-time allowance |
-| `Control::with_poll(seconds, closure)` | Integrate a fallible external deadline/cancellation checkpoint |
+| `Control::with_poll(seconds, closure)` | Integrate a fallible external deadline/cancellation checkpoint; any poll error stops the run as `cancelled` (or `wall_time_limit` if the poll returns exactly that text) |
 | `solver::run(&case, &control, restart)` | `Result<RunResult>` with summary, state and geometry |
 | `output::checkpoint_bytes`, `read_checkpoint` | Checksummed compatible-state export/import |
 | `output::create_run_dir`, `write_run` | Publication primitives; caller owns provenance and error policy |
@@ -563,8 +574,12 @@ objective. Its central calls are:
 ```rust
 let control = Control::new(case.run.wall_time_limit_s);
 let run = pool.install(|| solver::run(&case, &control, None))?;
+// Ok(RunResult) can also contain cancellation or an incomplete solve.
 if run.summary.assessment != "steady_discrete_solution" {
-    return Err(format!("unexpected assessment: {}", run.summary.assessment));
+    return Err(format!(
+        "CFD-U001 manual.library.assessment: {} / {}",
+        run.summary.termination, run.summary.assessment
+    ));
 }
 ```
 
@@ -588,7 +603,10 @@ cargo run --release --locked -p cfd-craft --example manual_control
 
 The [source](../crates/cfd-craft/examples/manual_control.rs) demonstrates a
 pre-set atomic cancellation flag and a fallible external poll during solving.
-Both return cancelled/incomplete results with their actual work. A job worker
+Both return cancelled/incomplete results with their actual work. Whatever
+message the poll returns, the run ends as `cancelled` (or `wall_time_limit`
+when the poll returns exactly that text); the poll's own message is not kept,
+so record it in the caller if needed. A job worker
 uses its SimContext checkpoint as the external poll. Cancellation is cooperative;
 it does not promise interruption between every pair of floating-point operations.
 The CLI registers SIGINT/SIGTERM and retains a cancelled run archive.
@@ -603,8 +621,8 @@ cargo run --release --locked -p cfd-craft --example manual_checkpoint \
 The [source](../crates/cfd-craft/examples/manual_checkpoint.rs) stops the
 periodic case after five steps, writes a **new checkpoint file**, reads it for
 the full case, resumes and requires exact state equality with an uninterrupted
-run. It also checks that the initial-state identities differ. The file is a
-checkpoint, not a complete native run archive.
+run, and requires the resumed and cold runs to report different initial-state
+identities. The file is a checkpoint, not a complete native run archive.
 
 ### Example 17: read a CLI archive from Rust
 
@@ -655,7 +673,8 @@ make source recovery unidentifiable even when the optimizer fits well.
 python integrations/install_openfoam13.py --output runs/openfoam13
 ```
 
-This fetches pinned packages, verifies SHA-256 and extracts a user-owned runtime.
+This downloads one pinned Ubuntu package, verifies its SHA-256 and extracts a
+user-owned runtime with `dpkg-deb`, which must be installed.
 It does not install system packages or bundle OpenFOAM into the Rust workspace.
 A working existing Foundation-13 runtime can also be supplied. The following
 commands use `runs/openfoam13/runtime/opt/openfoam13` as the runtime root.
@@ -776,6 +795,9 @@ steady CFD solve; SDK deadlines/cancellation propagate through Control.
 ```sh
 python integrations/run_jobs.py --runner /path/to/optimization-run --output runs/manual-jobs
 ```
+
+This uses the worker built in Example 26 (`--worker` defaults to its release
+path).
 
 Build optimization-run from optimization-jobs with its lockfile; the existing
 integration guide and CI pin the tested runner revision. The script discovers

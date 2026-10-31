@@ -87,7 +87,9 @@ def workflow(binary, output):
             "scaled.assessment",
             "not accepted",
         )
-        twice_r1 = twice["constituents"][0]["receptors_kg_m3"]["R1"]
+        twice_r1 = next(s for s in twice["constituents"] if s["id"] == "tracer")[
+            "receptors_kg_m3"
+        ]["R1"]
         require(
             math.isclose(twice_r1, 2 * r1, rel_tol=1e-6),
             "scaled.R1",

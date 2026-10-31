@@ -1,14 +1,14 @@
 # Detailed user manual and project banner
 
-Base: merged PR #9 (`4f156e5`); confirm the full base identity before packaging.
+Base: merged PR #9 (`4f156e5`).
 
 ## Scope
 
 Provide one human entry point that explains the architecture, numerical and
 evidence concepts, and the actual supported APIs. Cover the merged native
-solver, OpenFOAM adapter and existing optimization-jobs/fcmaes integration.
-The separate fine-dust patch is not on this base and is outside this manual's
-implemented feature claims. Preserve the reviewed backend timing definitions,
+solver, OpenFOAM adapter and existing optimization-jobs/fcmaes integration;
+describe only implemented features (particles, for example, are not part of
+the native model). Preserve the reviewed backend timing definitions,
 shared cavity helpers and numerical/physical acceptance distinctions.
 
 ## Deliverables
@@ -25,9 +25,8 @@ shared cavity helpers and numerical/physical acceptance distinctions.
 3. A generated engineering banner under `docs/images/`, displayed at the top
    of README with meaningful alternative text and a prominent manual link.
    Treat the artwork as illustration, not a CFD result or validation badge.
-4. Documentation-example checks in CI, plus source and archive evidence of the
-   real local executions. Deliver mail patch and combined diff against the
-   exact merged base, with a standalone implementation log.
+4. Documentation-example checks in CI: the small native examples on every
+   push, and the manual's OpenFOAM recipes in the manual external backend job.
 
 ## Implementation and acceptance
 
@@ -49,9 +48,8 @@ shared cavity helpers and numerical/physical acceptance distinctions.
 - Run locked workspace release tests, fmt/clippy, Python Ruff and the relevant
   CLI/backend/benchmark/integration contracts. Do not rerun expensive unrelated
   campaigns for a documentation change or weaken scientific thresholds.
-- Check Markdown links/anchors and example-to-manual references. Inspect banner
-  text/appearance and the README reference. Include the exact asset in both
-  patch formats, verify checksums, and apply each to a pristine base checkout.
+- Check Markdown links/anchors and example-to-manual references. Inspect the
+  banner's text and appearance and the README reference.
 
 ## Boundaries
 

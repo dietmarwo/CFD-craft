@@ -326,25 +326,39 @@ pub fn project(
     max: usize,
     control: &Control,
 ) -> Result<LinearInfo> {
-    let b: Vec<_> = g.divergence(u).iter().map(|x| -x / dt).collect();
-    // Round-off in a divergence scales with the face velocities it differences.
-    let terms: Vec<f64> = (0..g.count())
-        .map(|i| {
-            if !g.fluid[i] {
-                return 0.0;
-            }
-            (0..3)
-                .map(|a| {
-                    let [lo, hi] = g.cell_faces[i][a];
-                    (u[lo].abs() + u[hi].abs()) / g.dx[a]
-                })
-                .sum::<f64>()
-                / dt
-        })
-        .collect();
+    // Form both cell arrays in one pass; retain axis accumulation order.
+    let mut b = vec![-0.0; g.count()];
+    let mut terms = vec![0.0; g.count()];
+    for i in 0..g.count() {
+        if !g.fluid[i] {
+            continue;
+        }
+        let mut divergence = 0.0;
+        let mut scale = 0.0;
+        for a in 0..3 {
+            let [lo, hi] = g.cell_faces[i][a];
+            divergence += (u[hi] - u[lo]) / g.dx[a];
+            scale += (u[lo].abs() + u[hi].abs()) / g.dx[a];
+        }
+        b[i] = -divergence / dt;
+        // Round-off scales with the terms differenced, not with their small sum.
+        terms[i] = scale / dt;
+    }
     let (correction, info) = solve_scaled(g, &b, Some(&terms), tol, max, control)?;
-    let grad = g.gradient(&correction);
-    for (v, d) in u.iter_mut().zip(grad) {
+    for (v, f) in u.iter_mut().zip(&g.faces) {
+        let d = match f.kind {
+            FaceKind::Interior => {
+                (correction[f.hi.unwrap()] - correction[f.lo.unwrap()]) / f.distance
+            }
+            FaceKind::Outlet => {
+                if let Some(i) = f.lo {
+                    -correction[i] / f.distance
+                } else {
+                    correction[f.hi.unwrap()] / f.distance
+                }
+            }
+            _ => 0.0,
+        };
         *v -= dt * d;
     }
     for (p, q) in p.iter_mut().zip(correction) {
@@ -527,6 +541,60 @@ mod tests {
             for (a, b) in solved.iter().zip(&exact) {
                 assert!((a - b).abs() < 1e-10);
             }
+        }
+    }
+
+    #[test]
+    fn fused_projection_matches_composed_divergence_and_gradient() {
+        for boundary in [Boundary::Periodic, Boundary::Wall, Boundary::Open] {
+            let mut c = case([6, 3, 2]);
+            c.boundaries.x = boundary;
+            if let Flow::Laminar {
+                initial_velocity_m_s,
+                ..
+            } = &mut c.flow
+            {
+                *initial_velocity_m_s = [1.0, 0.0, 0.0];
+            }
+            c.geometry.push(Block {
+                id: "barrier".into(),
+                min_m: [2.0, 0.0, 0.0],
+                max_m: [3.0, 3.0, 2.0],
+            });
+            let g = Grid::build(&c).unwrap();
+            let potential: Vec<_> = (0..g.count()).map(|i| (i as f64 * 0.37).sin()).collect();
+            // A compatible gradient perturbation works for both closed components
+            // and pressure outlets without manufacturing net inlet flux.
+            let mut u = g.gradient(&potential);
+            let mut reference_u = u.clone();
+            let mut p = vec![0.0; g.count()];
+            let dt = 0.125;
+            let b: Vec<_> = g.divergence(&u).iter().map(|x| -x / dt).collect();
+            let terms: Vec<_> = (0..g.count())
+                .map(|i| {
+                    if !g.fluid[i] {
+                        return 0.0;
+                    }
+                    (0..3)
+                        .map(|a| {
+                            let [lo, hi] = g.cell_faces[i][a];
+                            (u[lo].abs() + u[hi].abs()) / g.dx[a]
+                        })
+                        .sum::<f64>()
+                        / dt
+                })
+                .collect();
+            let (mut reference_p, reference_info) =
+                solve_scaled(&g, &b, Some(&terms), 1e-12, 2000, &Control::new(20.0)).unwrap();
+            for (v, d) in reference_u.iter_mut().zip(g.gradient(&reference_p)) {
+                *v -= dt * d;
+            }
+            center_nullspaces(&g, &mut reference_p);
+            let info = project(&g, &mut u, &mut p, dt, 1e-12, 2000, &Control::new(20.0)).unwrap();
+            assert_eq!(info.iterations, reference_info.iterations);
+            assert_eq!(info.relative_residual, reference_info.relative_residual);
+            assert_eq!(u, reference_u);
+            assert_eq!(p, reference_p);
         }
     }
 }

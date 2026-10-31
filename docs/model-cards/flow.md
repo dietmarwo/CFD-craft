@@ -29,6 +29,10 @@ precomputing weights for repeated PCG products. The plan is local to that solve,
 so changes to public grid coefficients are observed. The final true residual
 uses the original uncompressed face operator, independently of this plan.
 
+Projection forms its RHS and compatibility scales in one cell pass and applies
+the correction directly to faces, avoiding temporary divergence and gradient
+arrays. Axis order, boundary gradients and round-off scales are unchanged.
+
 Projection residuals, actual face-flux continuity and boundary balance are separate checks. There is no multigrid, sparse direct factorization or MPI implementation in 0.1.
 
 ## Neutral turbulence package

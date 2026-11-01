@@ -221,8 +221,14 @@ rejected explicitly. The fine equation and acceptance gates are unchanged.
 Strong unequal uniform spacings select exact symmetric line/small-plane blocks
 and semicoarsening; isotropic levels keep the original point cycle. This has
 extra setup/memory cost, so compare complete repeated workloads with IC(0).
-See the [algorithm, API and examples](PRESSURE_MULTIGRID.md). Momentum advection is donor-cell first order; selecting scalar
-MUSCL does not make momentum second order. Diffusion and advection constrain
+See the [algorithm, API and examples](PRESSURE_MULTIGRID.md). Momentum advection is donor-cell first order by default;
+selecting scalar MUSCL does not make momentum second order. Opt-in
+`numerics.momentum_advection` selects a conservative second-order flux form:
+`second_order_upwind` (unlimited) or `limited_upwind` with
+`numerics.momentum_limiter` = `van_albada`, `van_leer` or `monotonized_central`.
+It supports walls, moving walls, slip, periodic axes and masks; open boundaries
+and RANS are rejected (CFD-E038, CFD-E039). See the
+[flow model card](model-cards/flow.md). Diffusion and advection constrain
 the timestep. `max_time_step_s` is a ceiling, not a promise of fixed dt.
 
 `run.mode=steady` still uses these time steps and stops when the steady gates

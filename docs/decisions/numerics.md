@@ -7,3 +7,4 @@
 5. Keep one neutral inlet/wall/turbulence combination. Its coefficient and upper-boundary choices are recorded; a change needs the empty-ABL test.
 6. Keep execution artifacts separate from optimization claims. A completed command is not an inferred optimization optimum or a validated CFD result.
 7. Keep generated performance failures. A change in hardware or work budget needs a new run identity and evidence.
+8. Offer conservative second-order momentum advection as an opt-in selection beside the donor-cell default. Allow the unbounded `second_order_upwind` scheme, which matches the external cavity reference's scheme class, and keep limited schemes for cases that need boundedness. A default change waits for a matched-accuracy measurement and is a separate, announced change of results and hashes.

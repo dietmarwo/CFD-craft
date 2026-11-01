@@ -68,6 +68,9 @@ more than the host can hold.
 | CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid was selected with a mask; the library also rejects a masked/disconnected grid or nonpositive/nonfinite pressure weights |
 | CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |
 | CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
+| CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
+| CFD-E038 | error | `numerics.momentum_advection`: a second-order momentum scheme with an open boundary, which has no verified outlet or inflow closure yet |
+| CFD-E039 | error | `numerics.momentum_advection`: a second-order momentum scheme with `neutral_rans`, not yet verified with the empty-ABL check |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |

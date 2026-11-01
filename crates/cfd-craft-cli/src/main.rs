@@ -175,6 +175,8 @@ fn describe() -> Result<()> {
         "physics":["prescribed_uniform","laminar","neutral_rans"],
         "scalar_advection":["linear_upwind","muscl"],"pressure":"matrix_free_ic0_pcg",
         "pressure_preconditioners":["ic0","multigrid"],"default_pressure_preconditioner":"ic0",
+        "momentum_advection":["donor_cell","second_order_upwind","limited_upwind"],"default_momentum_advection":"donor_cell",
+        "momentum_limiters":["van_albada","van_leer","monotonized_central"],
         "case_schema":schemars::schema_for!(Case),"result_schema":schemars::schema_for!(Summary),
         "phase_profile_schema":schemars::schema_for!(Profile),
         "profiling":"profile CASE --output NEW_DIR: native archive in run/, versioned profile.json alongside it",
@@ -184,7 +186,7 @@ fn describe() -> Result<()> {
             "1":"invalid input or an execution/I/O error; check reports are printed on stdout",
             "2":"completed execution with incomplete or failed numerical evidence"},
         "experimental_validation":"not_validated",
-        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum","explicit diffusion","no particles, vegetation, LES, annual statistics or GPU"]
+        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum by default; opt-in second-order momentum without open boundaries or RANS","explicit diffusion","no particles, vegetation, LES, annual statistics or GPU"]
     }))
 }
 

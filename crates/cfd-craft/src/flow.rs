@@ -132,7 +132,161 @@ fn cell_neighbors(g: &Grid, i: usize) -> [[usize; 2]; 3] {
     })
 }
 
+/// Face reconstruction of the transported momentum component on a momentum
+/// control-volume face, phi_f = phi_U + s(a, b) / 2 with a = phi_U - phi_UU and
+/// b = phi_D - phi_U (van Leer's MUSCL, Sweby's limiter notation). Division-free.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reconstruction {
+    /// s = 0: flux-form first-order upwind. A test control only; it is not the
+    /// production donor-cell scheme, which uses the advective form.
+    FirstOrder,
+    /// s = a: unlimited second-order upwind.
+    SecondOrder,
+    VanAlbada,
+    VanLeer,
+    MonotonizedCentral,
+}
+impl Reconstruction {
+    pub fn of(numerics: &Numerics) -> Option<Self> {
+        match (numerics.momentum_advection, numerics.momentum_limiter) {
+            (MomentumAdvection::DonorCell, _) => None,
+            (MomentumAdvection::SecondOrderUpwind, _) => Some(Self::SecondOrder),
+            (MomentumAdvection::LimitedUpwind, Some(MomentumLimiter::VanAlbada)) => {
+                Some(Self::VanAlbada)
+            }
+            (MomentumAdvection::LimitedUpwind, Some(MomentumLimiter::VanLeer)) => {
+                Some(Self::VanLeer)
+            }
+            (MomentumAdvection::LimitedUpwind, Some(MomentumLimiter::MonotonizedCentral)) => {
+                Some(Self::MonotonizedCentral)
+            }
+            // Rejected by case validation (CFD-E037).
+            (MomentumAdvection::LimitedUpwind, None) => Some(Self::FirstOrder),
+        }
+    }
+    pub fn slope(self, a: f64, b: f64) -> f64 {
+        match self {
+            Self::FirstOrder => 0.0,
+            Self::SecondOrder => a,
+            _ if a * b <= 0.0 => 0.0,
+            Self::VanAlbada => a * b * (a + b) / (a * a + b * b),
+            Self::VanLeer => 2.0 * a * b / (a + b),
+            Self::MonotonizedCentral => {
+                b.signum() * (2.0 * a.abs()).min(0.5 * (a + b).abs()).min(2.0 * b.abs())
+            }
+        }
+    }
+}
+
+// A face that carries a real interior velocity sample for the momentum stencil.
+fn interior(g: &Grid, face: Option<usize>) -> Option<usize> {
+    face.filter(|&j| matches!(g.faces[j].kind, FaceKind::Interior | FaceKind::Outlet))
+}
+
+/// Conservative flux-form advection of the face-normal velocities on the
+/// staggered grid (Harlow and Welch; Morinishi et al. 1998). Each momentum control
+/// volume is centered on its face. The advecting velocity on a control-volume face
+/// is the classic MAC average of the two face velocities that meet there, and the
+/// transported component is reconstructed upwind with `reconstruction`. Every
+/// control-volume face flux is a function of that face alone, so the two momentum
+/// cells that share it see the same value and the fluxes telescope. Walls and
+/// solids use the viscous ghost values for the near samples; where the far-upwind
+/// sample is not an interior face, the face falls back to first order (s = 0).
+/// Returns -div(u u_a) on interior faces and zero elsewhere.
+pub fn flux_form_advection(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    nut: &[f64],
+    reconstruction: Reconstruction,
+) -> Vec<f64> {
+    let cell_u = g.cell_velocity(u);
+    let cell_u = &cell_u;
+    // Flux through the control-volume face at the center of cell `cell`, between
+    // the a-faces L (below) and H (above) of that cell.
+    let center_flux = |a: usize, cell: usize| -> f64 {
+        let [lo, hi] = g.cell_faces[cell][a];
+        let advecting = 0.5 * (u[lo] + u[hi]);
+        let (up, down, far) = if advecting >= 0.0 {
+            (lo, hi, g.faces[lo].lo.map(|k| g.cell_faces[k][a][0]))
+        } else {
+            (hi, lo, g.faces[hi].hi.map(|k| g.cell_faces[k][a][1]))
+        };
+        let s = match interior(g, far) {
+            Some(far) => reconstruction.slope(u[up] - u[far], u[down] - u[up]),
+            None => 0.0,
+        };
+        advecting * (u[up] + 0.5 * s)
+    };
+    // Flux through the control-volume face between the a-face at q (L, below in d)
+    // and the a-face at q + e_d (H). Either may be missing or a wall face.
+    let edge_flux = |a: usize, d: usize, q: [isize; 3]| -> f64 {
+        let at = |axis: usize, offset: [isize; 3]| {
+            g.face_at(c, axis, std::array::from_fn(|k| q[k] + offset[k]))
+        };
+        let mut up_d = [0; 3];
+        up_d[d] = 1;
+        let mut d_back_a = up_d;
+        d_back_a[a] = -1;
+        let (Some(d0), Some(d1)) = (at(d, up_d), at(d, d_back_a)) else {
+            return 0.0;
+        };
+        let advecting = 0.5 * (u[d0] + u[d1]);
+        let low = interior(g, at(a, [0; 3]));
+        let high = interior(g, at(a, up_d));
+        let value = |own: Option<usize>, other: Option<usize>, side: isize| -> Option<f64> {
+            match (own, other) {
+                (Some(j), _) => Some(u[j]),
+                // The missing sample is the neighbor of `other` on this side.
+                (None, Some(j)) => Some(wall_ghost(c, g, j, d, side, u, nut, cell_u)),
+                (None, None) => None,
+            }
+        };
+        let (Some(phi_low), Some(phi_high)) = (value(low, high, -1), value(high, low, 1)) else {
+            return 0.0;
+        };
+        let mut down_d = [0; 3];
+        down_d[d] = -1;
+        let mut up2_d = [0; 3];
+        up2_d[d] = 2;
+        let (phi_up, phi_down, far) = if advecting >= 0.0 {
+            (phi_low, phi_high, low.and(interior(g, at(a, down_d))))
+        } else {
+            (phi_high, phi_low, high.and(interior(g, at(a, up2_d))))
+        };
+        let s = match far {
+            Some(far) => reconstruction.slope(phi_up - u[far], phi_down - phi_up),
+            None => 0.0,
+        };
+        advecting * (phi_up + 0.5 * s)
+    };
+    g.faces
+        .par_iter()
+        .map(|f| {
+            if !matches!(f.kind, FaceKind::Interior | FaceKind::Outlet) {
+                return 0.0;
+            }
+            let a = f.axis;
+            let q = f.coord.map(|v| v as isize);
+            let mut rhs = 0.0;
+            for d in 0..3 {
+                let (low, high) = if d == a {
+                    (center_flux(a, f.lo.unwrap()), center_flux(a, f.hi.unwrap()))
+                } else {
+                    let mut below = q;
+                    below[d] -= 1;
+                    (edge_flux(a, d, below), edge_flux(a, d, q))
+                };
+                rhs -= (high - low) / g.dx[d];
+            }
+            rhs
+        })
+        .collect()
+}
+
 pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
+    let reconstruction = Reconstruction::of(&c.numerics);
+    let advection = reconstruction.map(|r| flux_form_advection(c, g, u, nut, r));
     let cell_u = g.cell_velocity(u);
     // Remaining variable-viscosity symmetric-stress term:
     // div(mu grad(u)^T)_a = sum_d (d_d mu)(d_a u_d), for divergence-free flow.
@@ -166,7 +320,7 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 (Some(i), None) | (None, Some(i)) => cell_u[i][a],
                 _ => 0.0,
             });
-            let mut rhs = 0.0;
+            let mut rhs = advection.as_ref().map_or(0.0, |adv| adv[fi]);
             for d in 0..3 {
                 let mut q = f.coord.map(|v| v as isize);
                 q[d] -= 1;
@@ -176,12 +330,14 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 let lo = sample(c, g, fi, d, -1, lo_face, u, nut, &cell_u);
                 let hi = sample(c, g, fi, d, 1, hi_face, u, nut, &cell_u);
                 // Donor-cell momentum, direct second-order viscous stencil on the staggered grid.
-                rhs -= velocity[d]
-                    * if velocity[d] >= 0.0 {
-                        (u[fi] - lo) / g.dx[d]
-                    } else {
-                        (hi - u[fi]) / g.dx[d]
-                    };
+                if advection.is_none() {
+                    rhs -= velocity[d]
+                        * if velocity[d] >= 0.0 {
+                            (u[fi] - lo) / g.dx[d]
+                        } else {
+                            (hi - u[fi]) / g.dx[d]
+                        };
+                }
                 // Variable-viscosity flux includes the derivative of the eddy viscosity.
                 let mu = c.flow.viscosity() + adjacent_mean(f, nut);
                 let mut mu_lo = mu;

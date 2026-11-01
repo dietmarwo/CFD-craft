@@ -8,7 +8,36 @@ Within one face evaluation, the advective samples and the viscous coefficients
 use the same staggered neighbor faces: wall ghosts at wall and blocked faces,
 periodic wrapping and outlet sampling.
 
-The momentum predictor uses first-order donor-cell advection of each staggered velocity component and an explicit variable-viscosity stencil. The extra variable-viscosity symmetric-stress contribution is reconstructed from cell gradients under the incompressibility assumption. It is not a claim of globally second-order momentum accuracy.
+By default the momentum predictor uses first-order donor-cell advection of each staggered velocity component and an explicit variable-viscosity stencil. The extra variable-viscosity symmetric-stress contribution is reconstructed from cell gradients under the incompressibility assumption. It is not a claim of globally second-order momentum accuracy.
+
+`numerics.momentum_advection` selects, opt-in, a conservative flux form of the
+advective term instead (Harlow and Welch, 1965; Morinishi, Lund, Vasilyev and
+Moin, 1998; Ferziger, Perić and Street, ch. 7):
+
+- each momentum control volume is centered on its face; the advecting velocity
+  on a control-volume face is the MAC average of the two face velocities that
+  meet there;
+- the transported component is reconstructed upwind, φ_f = φ_U + ½·s(a, b)
+  with a = φ_U − φ_UU and b = φ_D − φ_U (van Leer, 1974, in Sweby's 1984
+  notation), division-free;
+- `second_order_upwind` uses s = a (unlimited, not bounded). `limited_upwind`
+  with `numerics.momentum_limiter` uses van Albada (van Albada, van Leer and
+  Roberts, 1982), van Leer, or monotonized central (van Leer, 1977);
+- every control-volume face carries one flux shared by its two momentum cells,
+  so momentum is conserved to round-off in a periodic box;
+- the near samples at walls and solids use the same ghost values as the viscous
+  term. Where the far-upwind sample is not an interior face, that face falls
+  back to s = 0 (first order), so no stencil reaches through a solid.
+
+Open boundaries (CFD-E038) and `neutral_rans` (CFD-E039) are rejected with these
+schemes until their closures are verified; donor-cell remains the default, and
+default runs are byte-identical to the earlier release. Time integration
+(SSPRK2 with a projection per stage) and the CFL cap are unchanged. The
+[second-order momentum results](../../validation/SECOND_ORDER_MOMENTUM_RESULTS.md)
+record operator orders of 2.06 (unlimited) and 1.92–1.95 mean L1 (limited),
+translating-vortex orders of 2.0–2.3, momentum conservation to 1e-16, bounded
+limited schemes, and a steady Re=100 cavity Ghia error of 0.005–0.006 at 24²,
+against 0.028 for donor-cell.
 
 An incremental projection is applied to each SSPRK2 velocity stage. Tests recover second-order decay for periodic viscous shear. General unsteady open-boundary pressure order is not established by that fixture. The intended urban use is a checked steady solution.
 

@@ -299,6 +299,31 @@ impl PressurePreconditioner {
         *self == Self::Ic0
     }
 }
+/// Momentum advection on the staggered grid. Donor-cell (advective form) is the
+/// default; the others are conservative flux forms with an upwind-biased
+/// reconstruction of the transported component (van Leer's MUSCL in Sweby's notation).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MomentumAdvection {
+    #[default]
+    DonorCell,
+    /// Unlimited second-order upwind: face value 1.5 phi_U - 0.5 phi_UU. Not bounded.
+    SecondOrderUpwind,
+    /// Second-order upwind with the limiter in `numerics.momentum_limiter`.
+    LimitedUpwind,
+}
+impl MomentumAdvection {
+    fn is_default(&self) -> bool {
+        *self == Self::DonorCell
+    }
+}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MomentumLimiter {
+    VanAlbada,
+    VanLeer,
+    MonotonizedCentral,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Numerics {
@@ -310,6 +335,12 @@ pub struct Numerics {
     /// Omitted/default IC(0) preserves existing normalized case/checkpoint hashes.
     #[serde(default, skip_serializing_if = "PressurePreconditioner::is_default")]
     pub pressure_preconditioner: PressurePreconditioner,
+    /// Omitted/default donor-cell preserves existing case and checkpoint hashes.
+    #[serde(default, skip_serializing_if = "MomentumAdvection::is_default")]
+    pub momentum_advection: MomentumAdvection,
+    /// Required with `limited_upwind`, rejected otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub momentum_limiter: Option<MomentumLimiter>,
     pub steady_residual_tolerance: f64,
     pub steady_monitor_tolerance: f64,
     pub monitor_window: usize,
@@ -490,6 +521,42 @@ impl Case {
                 "numerics.pressure_preconditioner",
                 "Multigrid currently requires an unmasked Cartesian grid; use ic0 for geometry masks.",
             );
+        }
+        match (
+            self.numerics.momentum_advection,
+            self.numerics.momentum_limiter,
+        ) {
+            (MomentumAdvection::LimitedUpwind, None) => add(
+                "CFD-E037",
+                "error",
+                "numerics.momentum_limiter",
+                "limited_upwind needs a limiter: van_albada, van_leer or monotonized_central.",
+            ),
+            (MomentumAdvection::DonorCell | MomentumAdvection::SecondOrderUpwind, Some(_)) => add(
+                "CFD-E037",
+                "error",
+                "numerics.momentum_limiter",
+                "A momentum limiter is used only with momentum_advection = limited_upwind.",
+            ),
+            _ => {}
+        }
+        if self.numerics.momentum_advection != MomentumAdvection::DonorCell {
+            if (0..3).any(|a| self.boundaries.at(a) == Boundary::Open) {
+                add(
+                    "CFD-E038",
+                    "error",
+                    "numerics.momentum_advection",
+                    "Second-order momentum advection has no outlet or inflow closure yet; use donor_cell with open boundaries.",
+                );
+            }
+            if self.flow.rans() {
+                add(
+                    "CFD-E039",
+                    "error",
+                    "numerics.momentum_advection",
+                    "Second-order momentum advection is not verified with neutral_rans yet; use donor_cell.",
+                );
+            }
         }
         if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid {
             let dx = std::array::from_fn(|a| self.domain.size_m[a] / self.grid.cells[a] as f64);

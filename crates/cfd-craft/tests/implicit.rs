@@ -425,6 +425,11 @@ fn implicit_projection_cavities_restart_bit_for_bit_and_ramp_deterministically()
         state.steps = steps;
         let dt = cfd_craft::solver::timestep(&c, &g, &state, &nut);
         let cfl = cfd_craft::momentum_solve::ramp_cfl(steps);
+        // The ramp saturates at the predeclared cap.
+        assert_eq!(
+            cfd_craft::momentum_solve::ramp_cfl(steps + 9),
+            5.0f64.min(1.2f64.powi(steps as i32 + 9))
+        );
         assert_eq!(cfl, 1.0 * 1.2f64.powi(steps as i32));
         assert!((dt - (cfl / rate).min(0.1)).abs() <= 1e-14, "{steps}: {dt}");
     }

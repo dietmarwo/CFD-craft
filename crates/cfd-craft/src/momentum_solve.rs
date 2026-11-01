@@ -570,10 +570,13 @@ pub fn solve_implicit(
 
 /// Predeclared pseudo-time schedule of the implicit steady iteration:
 /// CFL_n = min(CFL_MAX, CFL_START * GROWTH^n), Δτ = CFL_n / Σ_a max|u_a|/h_a,
-/// capped by `numerics.max_time_step_s`.
+/// capped by `numerics.max_time_step_s`. CFL_MAX was chosen on the development
+/// cases (the 24² and 48² cavities and the development canyon): with a
+/// non-binding `max_time_step_s`, caps of 5–50 all reach the canyon's gates in
+/// 400 outer iterations, and 5 gives the cavities the fewest (180 and 300).
 pub const CFL_START: f64 = 1.0;
 pub const CFL_GROWTH: f64 = 1.2;
-pub const CFL_MAX: f64 = 1e6;
+pub const CFL_MAX: f64 = 5.0;
 
 pub fn ramp_cfl(steps: usize) -> f64 {
     CFL_START

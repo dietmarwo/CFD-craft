@@ -108,6 +108,7 @@ class Sweep(unittest.TestCase):
             dict(unknown="x"),
             dict(momentum_limiter=True),
             dict(pressure_relative_tolerance=0.5),
+            dict(max_time_step_s=10.0),
             dict(pressure_relative_tolerance="0.1"),
         ]:
             with self.subTest(value=value):

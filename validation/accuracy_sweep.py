@@ -24,6 +24,8 @@ NATIVE_NUMERICS = dict(
     # Inexact inner projections for the implicit steady algorithm (relTol-style);
     # the steady gates, including local continuity, are unchanged.
     pressure_relative_tolerance=(0.1, 0.01),
+    # A non-binding pseudo-time cap, so the implicit CFL ramp alone sets the step.
+    max_time_step_s=(100.0,),
 )
 
 

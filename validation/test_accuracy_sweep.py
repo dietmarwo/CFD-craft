@@ -71,6 +71,69 @@ class Sweep(unittest.TestCase):
                 ):
                     self.run_sweep(native_pressure_preconditioner=value)
 
+    def test_native_numerics_are_validated_and_recorded_only_when_selected(self):
+        report = self.run_sweep(levels=[1], rounds=1, native_diagnostic=False)
+        self.assertNotIn("native_numerics", report["plan"]["limits"])
+        selection = dict(
+            momentum_limiter="van_leer", momentum_advection="limited_upwind"
+        )
+        report = s.sweep(
+            self.binary,
+            self.foam,
+            self.root / "selected",
+            runner=self.runner,
+            levels=[1],
+            rounds=1,
+            native_diagnostic=False,
+            native_numerics=selection,
+        )
+        self.assertEqual(
+            list(report["plan"]["limits"]["native_numerics"]),
+            ["momentum_advection", "momentum_limiter"],
+        )
+        self.assertEqual(
+            s.native_numerics_selection(
+                dict(
+                    steady_algorithm="implicit_projection",
+                    pressure_relative_tolerance=0.1,
+                )
+            ),
+            dict(
+                pressure_relative_tolerance=0.1, steady_algorithm="implicit_projection"
+            ),
+        )
+        for value in [
+            [],
+            dict(momentum_advection="donor_cell"),
+            dict(unknown="x"),
+            dict(momentum_limiter=True),
+            dict(pressure_relative_tolerance=0.5),
+            dict(max_time_step_s=10.0),
+            dict(pressure_relative_tolerance="0.1"),
+        ]:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "sweep.native_numerics"):
+                    self.run_sweep(native_numerics=value)
+
+    def test_the_native_span_is_validated_and_recorded_only_when_two_dimensional(self):
+        report = self.run_sweep(levels=[1], rounds=1, native_diagnostic=False)
+        self.assertNotIn("native_span", report["plan"]["limits"])
+        report = s.sweep(
+            self.binary,
+            self.foam,
+            self.root / "flat",
+            runner=self.runner,
+            levels=[1],
+            rounds=1,
+            native_diagnostic=False,
+            native_span=1,
+        )
+        self.assertEqual(report["plan"]["limits"]["native_span"], 1)
+        for value in [0, 3, 1.0, True, "1"]:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "sweep.native_span"):
+                    self.run_sweep(native_span=value)
+
     def run_sweep(self, runner=None, **kw):
         return s.sweep(
             self.binary,

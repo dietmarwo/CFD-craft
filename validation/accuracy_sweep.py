@@ -15,6 +15,37 @@ from check_fields import check as audit
 from process_measure import measure
 
 METHODS = ["native-steady", "openfoam-steady"]
+# Opt-in native numerics a sweep may select, by field. Only non-default values are
+# allowed: the consumed case omits defaults, and must equal the planned case.
+NATIVE_NUMERICS = dict(
+    momentum_advection=("second_order_upwind", "limited_upwind"),
+    momentum_limiter=("van_albada", "van_leer", "monotonized_central"),
+    steady_algorithm=("implicit_viscous", "implicit_projection"),
+    # Inexact inner projections for the implicit steady algorithm (relTol-style);
+    # the steady gates, including local continuity, are unchanged.
+    pressure_relative_tolerance=(0.1, 0.01),
+    # A non-binding pseudo-time cap, so the implicit CFL ramp alone sets the step.
+    max_time_step_s=(100.0,),
+)
+
+
+def native_numerics_selection(selection):
+    """Validated numerics overrides; the case's own check rejects bad combinations."""
+    require(
+        isinstance(selection, dict)
+        and all(
+            type(k) is str
+            and k in NATIVE_NUMERICS
+            and type(v) in (str, float)
+            and v in NATIVE_NUMERICS[k]
+            for k, v in selection.items()
+        ),
+        "native_numerics",
+        f"select non-default values of {sorted(NATIVE_NUMERICS)}",
+    )
+    return dict(sorted(selection.items()))
+
+
 SCHEMA = "cfd-craft.accuracy-sweep/0.1"
 
 
@@ -51,12 +82,14 @@ def run_method(method, grid, destination, binary, foam_root, limits):
     archive = destination / "run"
     if method == "native-steady":
         case = cmp.native_case(method)
-        case["grid"]["cells"] = [grid, 2, grid]
+        # One span cell is a two-dimensional native run, like OpenFOAM's.
+        case["grid"]["cells"] = [grid, limits.get("native_span", 2), grid]
         case["run"]["wall_time_limit_s"] = limits["native_wall_s"]
         case["run"]["max_steps"] = limits["native_max_steps"]
         selection = limits.get("native_pressure_preconditioner", "ic0")
         if selection != "ic0":
             case["numerics"]["pressure_preconditioner"] = selection
+        case["numerics"].update(limits.get("native_numerics", {}))
         input_file = destination / "input.json"
         cmp.backend.write_json(input_file, case)
         usage = measure(
@@ -427,7 +460,9 @@ def sweep(
     native_pressure_preconditioner="ic0",
     grids=None,
     runner=run_method,
+    native_numerics=None,
     collector=None,
+    native_span=2,
 ):
     require(
         isinstance(levels, (list, tuple))
@@ -450,7 +485,15 @@ def sweep(
         "native_pressure_preconditioner",
         "select ic0 or multigrid",
     )
+    native_numerics = native_numerics_selection(
+        {} if native_numerics is None else native_numerics
+    )
     require(type(native_diagnostic) is bool, "native_diagnostic", "boolean required")
+    require(
+        type(native_span) is int and native_span in (1, 2),
+        "native_span",
+        "select 1 or 2 periodic span cells",
+    )
     if grids is not None:
         require(
             isinstance(grids, (list, tuple))
@@ -484,6 +527,11 @@ def sweep(
         foam_iterations=foam_iterations,
         native_pressure_preconditioner=native_pressure_preconditioner,
     )
+    # Omitted when empty or default, so earlier plans keep their recorded limits.
+    if native_numerics:
+        limits["native_numerics"] = native_numerics
+    if native_span != 2:
+        limits["native_span"] = native_span
     output = Path(output)
     cmp.backend.claim_directory(output)
     report = dict(

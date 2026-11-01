@@ -169,6 +169,44 @@ class Momentum(unittest.TestCase):
             ):
                 b.compare_defaults(a, c)
 
+    def test_self_convergence_requires_a_same_scheme_reference(self):
+        with tempfile.TemporaryDirectory() as temp:
+            sweep_dir, ref_dir = Path(temp, "sweep"), Path(temp, "reference")
+            (ref_dir / "native-96" / "run").mkdir(parents=True)
+            sweep_dir.mkdir()
+            selected = dict(momentum_advection="second_order_upwind")
+            (sweep_dir / "report.json").write_text(
+                json.dumps(
+                    dict(
+                        plan=dict(
+                            shared_grids=[], limits=dict(native_numerics=selected)
+                        ),
+                        rows=[],
+                    )
+                )
+            )
+            (ref_dir / "reference.json").write_text(
+                json.dumps(dict(row=dict(accepted=True, run_directory="native-96")))
+            )
+            run = ref_dir / "native-96" / "run"
+            (run / "fields.json").write_text("{}")
+            with patch.object(b.sweep, "audit", return_value=dict(passed=True)):
+                for numerics, ok in [({}, False), (selected, True)]:
+                    (run / "case.json").write_text(json.dumps(dict(numerics=numerics)))
+                    with self.subTest(numerics=numerics):
+                        if ok:
+                            # Reaches the centerline evaluation of the stub fields.
+                            with self.assertRaises(
+                                (KeyError, TypeError, ValueError)
+                            ) as e:
+                                b.self_convergence(sweep_dir, ref_dir)
+                            self.assertNotIn("self.scheme", str(e.exception))
+                        else:
+                            with self.assertRaisesRegex(
+                                ValueError, "momentum.self.scheme"
+                            ):
+                                b.self_convergence(sweep_dir, ref_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

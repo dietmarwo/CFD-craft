@@ -1,14 +1,26 @@
 # Agent entry point
 
 For native accuracy and steady-solver work, start with the
-[Stage V protocol](iterations/20-momentum-verification-plan.md) and
-[measured donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md).
+[plan](ACCURACY_STEADY_PLAN.md), the
+[Stage V protocol](iterations/20-momentum-verification-plan.md),
+[measured donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md)
+and the [second-order momentum results](../validation/SECOND_ORDER_MOMENTUM_RESULTS.md).
 Use `compare_backends.py --grid-sweep --grids 16 24 32 48` to test both backends
-on the same list. Stage V changes verification only. Opt-in conservative
-second-order momentum (P3a) comes next, before implicit diffusion (P4) and an
-implicit steady algorithm (P5a). Keep the default donor-cell/explicit path,
-acceptance thresholds and failed measurements. A missed 0.01 Ghia objective
-still has no finite matched-accuracy runtime ratio.
+on the same list; `--native-numerics JSON` selects opt-in native numerics.
+Opt-in conservative second-order momentum advection (P3a,
+`numerics.momentum_advection`) reaches 0.01 Ghia error at 24² like OpenFOAM;
+donor-cell needed 96². Opt-in `numerics.steady_algorithm = implicit_projection`
+(P5a, a SIMPLEC-type implicit correction with a projection per outer iteration)
+reaches the unchanged steady gates 18–40× faster than the explicit march; see
+the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). With
+both, the hosted paired sweep had native at 0.74× OpenFOAM's solver time at the
+0.01 target, and 0.111× with the implicit recipe below and one span cell
+([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)).
+`implicit_projection` also runs `neutral_rans` and constituents (P5c, P5d); for
+implicit runs use `"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`
+and, for a two-dimensional problem, one cell on its periodic axis
+([performance](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)). Keep the
+default donor-cell/explicit path, acceptance thresholds and failed measurements.
 
 CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.
 

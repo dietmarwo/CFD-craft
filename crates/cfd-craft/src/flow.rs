@@ -22,7 +22,7 @@ pub fn eddy_viscosity(g: &Grid, k: &[f64], eps: &[f64]) -> Vec<f64> {
         })
         .collect()
 }
-fn adjacent_mean(f: &crate::grid::Face, v: &[f64]) -> f64 {
+pub(crate) fn adjacent_mean(f: &crate::grid::Face, v: &[f64]) -> f64 {
     match (f.lo, f.hi) {
         (Some(i), Some(j)) => 0.5 * (v[i] + v[j]),
         (Some(i), None) | (None, Some(i)) => v[i],
@@ -30,7 +30,7 @@ fn adjacent_mean(f: &crate::grid::Face, v: &[f64]) -> f64 {
     }
 }
 #[allow(clippy::too_many_arguments)]
-fn wall_ghost(
+pub(crate) fn wall_ghost(
     c: &Case,
     g: &Grid,
     fi: usize,
@@ -40,8 +40,39 @@ fn wall_ghost(
     nut: &[f64],
     cell_u: &[[f64; 3]],
 ) -> f64 {
+    ghost_value(c, g, fi, d, side, u[fi], nut, cell_u)
+}
+/// The ghost value of face `fi` beyond direction `d` and `side`, for the face
+/// value `value`. It is affine in `value` with `nut` and `cell_u` held fixed,
+/// which is how the implicit steady iterations read its coefficient.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ghost_value(
+    c: &Case,
+    g: &Grid,
+    fi: usize,
+    d: usize,
+    side: isize,
+    value: f64,
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+) -> f64 {
+    ghost_values(c, g, fi, d, side, [value], nut, cell_u)[0]
+}
+/// `ghost_value` for several face values at once: the boundary branch, the wall
+/// speed and the logarithms are evaluated once, and each value then goes
+/// through the same arithmetic as a single call.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ghost_values<const N: usize>(
+    c: &Case,
+    g: &Grid,
+    fi: usize,
+    d: usize,
+    side: isize,
+    values: [f64; N],
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+) -> [f64; N] {
     let f = &g.faces[fi];
-    let value = u[fi];
     let at_domain = if side < 0 {
         f.center[d] < g.dx[d]
     } else {
@@ -49,14 +80,15 @@ fn wall_ghost(
     };
     let bc = c.boundaries.at(d);
     if at_domain && matches!(bc, Boundary::Slip) {
-        return value;
+        return values;
     }
     if at_domain && bc == Boundary::Open {
         let speed = c.flow.vector(f.center[2])[d] * side as f64;
         return if speed < -1e-12 {
-            2.0 * c.flow.vector(f.center[2])[f.axis] - value
+            let inflow = c.flow.vector(f.center[2])[f.axis];
+            values.map(|value| 2.0 * inflow - value)
         } else {
-            value
+            values
         };
     }
     if c.flow.rans() {
@@ -64,7 +96,8 @@ fn wall_ghost(
             let v = c.flow.vector(c.domain.size_m[2]);
             let speed = (v[0] * v[0] + v[1] * v[1]).sqrt();
             let stress = c.flow.ustar().powi(2) * v[f.axis] / speed.max(1e-30);
-            return value + stress * g.dx[d] / (c.flow.viscosity() + adjacent_mean(f, nut));
+            let mu = c.flow.viscosity() + adjacent_mean(f, nut);
+            return values.map(|value| value + stress * g.dx[d] / mu);
         }
         let i = f.lo.or(f.hi).unwrap();
         let velocity = cell_u[i];
@@ -81,8 +114,11 @@ fn wall_ghost(
                 roughness_m.min(0.001 * g.dx[d])
             };
             let us = 0.4 * speed / ((z + z0) / z0).ln();
-            let stress = us * us * value / speed.max(1e-30);
-            return value - stress * g.dx[d] / (c.flow.viscosity() + adjacent_mean(f, nut));
+            let mu = c.flow.viscosity() + adjacent_mean(f, nut);
+            return values.map(|value| {
+                let stress = us * us * value / speed.max(1e-30);
+                value - stress * g.dx[d] / mu
+            });
         }
     }
     let target = if at_domain {
@@ -94,7 +130,7 @@ fn wall_ghost(
     } else {
         0.0
     };
-    2.0 * target - value
+    values.map(|value| 2.0 * target - value)
 }
 #[allow(clippy::too_many_arguments)]
 fn sample(
@@ -132,8 +168,240 @@ fn cell_neighbors(g: &Grid, i: usize) -> [[usize; 2]; 3] {
     })
 }
 
+/// Face reconstruction of the transported momentum component on a momentum
+/// control-volume face, phi_f = phi_U + s(a, b) / 2 with a = phi_U - phi_UU and
+/// b = phi_D - phi_U (van Leer's MUSCL, Sweby's limiter notation). Division-free.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reconstruction {
+    /// s = 0: flux-form first-order upwind. A test control only; it is not the
+    /// production donor-cell scheme, which uses the advective form.
+    FirstOrder,
+    /// s = a: unlimited second-order upwind.
+    SecondOrder,
+    VanAlbada,
+    VanLeer,
+    MonotonizedCentral,
+}
+impl Reconstruction {
+    pub fn of(numerics: &Numerics) -> Option<Self> {
+        match (numerics.momentum_advection, numerics.momentum_limiter) {
+            (MomentumAdvection::DonorCell, _) => None,
+            (MomentumAdvection::SecondOrderUpwind, _) => Some(Self::SecondOrder),
+            (MomentumAdvection::LimitedUpwind, Some(MomentumLimiter::VanAlbada)) => {
+                Some(Self::VanAlbada)
+            }
+            (MomentumAdvection::LimitedUpwind, Some(MomentumLimiter::VanLeer)) => {
+                Some(Self::VanLeer)
+            }
+            (MomentumAdvection::LimitedUpwind, Some(MomentumLimiter::MonotonizedCentral)) => {
+                Some(Self::MonotonizedCentral)
+            }
+            // Rejected by case validation (CFD-E037).
+            (MomentumAdvection::LimitedUpwind, None) => Some(Self::FirstOrder),
+        }
+    }
+    pub fn slope(self, a: f64, b: f64) -> f64 {
+        match self {
+            Self::FirstOrder => 0.0,
+            Self::SecondOrder => a,
+            _ if a * b <= 0.0 => 0.0,
+            Self::VanAlbada => a * b * (a + b) / (a * a + b * b),
+            Self::VanLeer => 2.0 * a * b / (a + b),
+            Self::MonotonizedCentral => {
+                b.signum() * (2.0 * a.abs()).min(0.5 * (a + b).abs()).min(2.0 * b.abs())
+            }
+        }
+    }
+}
+
+// A face that carries a real interior velocity sample for the momentum stencil.
+fn interior(g: &Grid, face: Option<usize>) -> Option<usize> {
+    face.filter(|&j| matches!(g.faces[j].kind, FaceKind::Interior | FaceKind::Outlet))
+}
+
+/// Conservative flux-form advection of the face-normal velocities on the
+/// staggered grid (Harlow and Welch; Morinishi et al. 1998). Each momentum control
+/// volume is centered on its face. The advecting velocity on a control-volume face
+/// is the classic MAC average of the two face velocities that meet there, and the
+/// transported component is reconstructed upwind with `reconstruction`. Every
+/// control-volume face flux is a function of that face alone, so the two momentum
+/// cells that share it see the same value and the fluxes telescope. Walls and
+/// solids use the viscous ghost values for the near samples; where the far-upwind
+/// sample is not an interior face, the face falls back to first order (s = 0).
+/// Returns -div(u u_a) on interior faces and zero elsewhere.
+pub fn flux_form_advection(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    nut: &[f64],
+    reconstruction: Reconstruction,
+) -> Vec<f64> {
+    flux_form_advection_with(c, g, u, nut, &g.cell_velocity(u), reconstruction)
+}
+
+// Each control-volume face flux is evaluated once and shared by the two momentum
+// cells that meet there: center fluxes per fluid cell and axis, edge fluxes per
+// a-face and direction d ≠ a (the edge above the face in d). The arithmetic of
+// every flux is unchanged, so the result is bit-identical to evaluating each
+// flux from both sides.
+fn flux_form_advection_with(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+    reconstruction: Reconstruction,
+) -> Vec<f64> {
+    // Flux through the control-volume face at the center of cell `cell`, between
+    // the a-faces L (below) and H (above) of that cell.
+    let center_flux = |a: usize, cell: usize| -> f64 {
+        let [lo, hi] = g.cell_faces[cell][a];
+        let advecting = 0.5 * (u[lo] + u[hi]);
+        let (up, down, far) = if advecting >= 0.0 {
+            (lo, hi, g.faces[lo].lo.map(|k| g.cell_faces[k][a][0]))
+        } else {
+            (hi, lo, g.faces[hi].hi.map(|k| g.cell_faces[k][a][1]))
+        };
+        let s = match interior(g, far) {
+            Some(far) => reconstruction.slope(u[up] - u[far], u[down] - u[up]),
+            None => 0.0,
+        };
+        advecting * (u[up] + 0.5 * s)
+    };
+    // Flux through the control-volume face between the a-face at q (L, below in d)
+    // and the a-face at q + e_d (H). Either may be missing or a wall face. The
+    // faces it needs, as `face_at` finds them: the d-faces at q + e_d and
+    // q + e_d − e_a, and the a-faces at q, q + e_d, q − e_d and q + 2e_d.
+    let edge_core = |d: usize,
+                     d_faces: [Option<usize>; 2],
+                     [at_q, above, below, above2]: [Option<usize>; 4]|
+     -> f64 {
+        // At an outlet's momentum cell only the inside cell's d-face exists; its
+        // velocity is extrapolated (zero gradient) to the outer half.
+        let advecting = match d_faces {
+            [Some(d0), Some(d1)] => 0.5 * (u[d0] + u[d1]),
+            [Some(d0), None] | [None, Some(d0)] => u[d0],
+            [None, None] => return 0.0,
+        };
+        let low = interior(g, at_q);
+        let high = interior(g, above);
+        let value = |own: Option<usize>, other: Option<usize>, side: isize| -> Option<f64> {
+            match (own, other) {
+                (Some(j), _) => Some(u[j]),
+                // The missing sample is the neighbor of `other` on this side.
+                (None, Some(j)) => Some(wall_ghost(c, g, j, d, side, u, nut, cell_u)),
+                (None, None) => None,
+            }
+        };
+        let (Some(phi_low), Some(phi_high)) = (value(low, high, -1), value(high, low, 1)) else {
+            return 0.0;
+        };
+        let (phi_up, phi_down, far) = if advecting >= 0.0 {
+            (phi_low, phi_high, low.and(interior(g, below)))
+        } else {
+            (phi_high, phi_low, high.and(interior(g, above2)))
+        };
+        let s = match far {
+            Some(far) => reconstruction.slope(phi_up - u[far], phi_down - phi_up),
+            None => 0.0,
+        };
+        advecting * (phi_up + 0.5 * s)
+    };
+    let edge_flux = |a: usize, d: usize, q: [isize; 3]| -> f64 {
+        let at = |axis: usize, offset: [isize; 3]| {
+            g.face_at(c, axis, std::array::from_fn(|k| q[k] + offset[k]))
+        };
+        let shift = |k: isize, back_a: isize| {
+            let mut o = [0; 3];
+            o[d] = k;
+            o[a] += back_a;
+            o
+        };
+        edge_core(
+            d,
+            [at(d, shift(1, 0)), at(d, shift(1, -1))],
+            [
+                at(a, [0; 3]),
+                at(a, shift(1, 0)),
+                at(a, shift(-1, 0)),
+                at(a, shift(2, 0)),
+            ],
+        )
+    };
+    let neighbor_faces = g.neighbor_faces(c);
+    let edge_faces = g.edge_faces(c);
+    let centers: Vec<[f64; 3]> = (0..g.count())
+        .into_par_iter()
+        .map(|cell| {
+            if g.fluid[cell] {
+                std::array::from_fn(|a| center_flux(a, cell))
+            } else {
+                [0.0; 3]
+            }
+        })
+        .collect();
+    // The edge above each a-face in d, from the cached face tables (the same
+    // faces `edge_flux` would look up).
+    let edges: Vec<[f64; 3]> = g
+        .faces
+        .par_iter()
+        .enumerate()
+        .map(|(fi, f)| {
+            std::array::from_fn(|d| {
+                if d == f.axis {
+                    0.0
+                } else {
+                    let [below, above] = neighbor_faces[fi][d];
+                    let above2 = above.and_then(|j| neighbor_faces[j][d][1]);
+                    edge_core(d, edge_faces[fi][d], [Some(fi), above, below, above2])
+                }
+            })
+        })
+        .collect();
+    g.faces
+        .par_iter()
+        .enumerate()
+        .map(|(fi, f)| {
+            if !matches!(f.kind, FaceKind::Interior | FaceKind::Outlet) {
+                return 0.0;
+            }
+            let a = f.axis;
+            let q = f.coord.map(|v| v as isize);
+            let mut rhs = 0.0;
+            for d in 0..3 {
+                let (low, high) = if d == a {
+                    // Outlet closure: the outer half of an outlet's momentum cell
+                    // advects with the outlet velocity and a zero-gradient value
+                    // (s = 0); an inflow face is prescribed and has no equation.
+                    let outer = u[fi] * u[fi];
+                    (
+                        f.lo.map_or(outer, |cell| centers[cell][a]),
+                        f.hi.map_or(outer, |cell| centers[cell][a]),
+                    )
+                } else {
+                    let mut below = q;
+                    below[d] -= 1;
+                    // The edge below is the edge above the a-face below, when that
+                    // face exists (face_at wraps periodic axes the same way).
+                    let low = match neighbor_faces[fi][d][0] {
+                        Some(j) => edges[j][d],
+                        None => edge_flux(a, d, below),
+                    };
+                    (low, edges[fi][d])
+                };
+                rhs -= (high - low) / g.dx[d];
+            }
+            rhs
+        })
+        .collect()
+}
+
+/// The steady momentum right-hand side on every face (zero on faces without an
+/// equation). `nut` enters only with `neutral_rans`; laminar flow has none.
 pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
+    let reconstruction = Reconstruction::of(&c.numerics);
     let cell_u = g.cell_velocity(u);
+    let advection = reconstruction.map(|r| flux_form_advection_with(c, g, u, nut, &cell_u, r));
     // Remaining variable-viscosity symmetric-stress term:
     // div(mu grad(u)^T)_a = sum_d (d_d mu)(d_a u_d), for divergence-free flow.
     let mut cross = vec![[0.0; 3]; g.count()];
@@ -154,6 +422,14 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
             }
         }
     }
+    let neighbor_faces = g.neighbor_faces(c);
+    let nu = c.flow.viscosity();
+    let rans = c.flow.rans();
+    let mean: Vec<f64> = if rans {
+        g.faces.iter().map(|f| adjacent_mean(f, nut)).collect()
+    } else {
+        Vec::new()
+    };
     g.faces
         .par_iter()
         .enumerate()
@@ -166,31 +442,32 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 (Some(i), None) | (None, Some(i)) => cell_u[i][a],
                 _ => 0.0,
             });
-            let mut rhs = 0.0;
+            let mut rhs = advection.as_ref().map_or(0.0, |adv| adv[fi]);
             for d in 0..3 {
-                let mut q = f.coord.map(|v| v as isize);
-                q[d] -= 1;
-                let lo_face = g.face_at(c, f.axis, q);
-                q[d] += 2;
-                let hi_face = g.face_at(c, f.axis, q);
+                let [lo_face, hi_face] = neighbor_faces[fi][d];
                 let lo = sample(c, g, fi, d, -1, lo_face, u, nut, &cell_u);
                 let hi = sample(c, g, fi, d, 1, hi_face, u, nut, &cell_u);
                 // Donor-cell momentum, direct second-order viscous stencil on the staggered grid.
-                rhs -= velocity[d]
-                    * if velocity[d] >= 0.0 {
-                        (u[fi] - lo) / g.dx[d]
-                    } else {
-                        (hi - u[fi]) / g.dx[d]
-                    };
+                if advection.is_none() {
+                    rhs -= velocity[d]
+                        * if velocity[d] >= 0.0 {
+                            (u[fi] - lo) / g.dx[d]
+                        } else {
+                            (hi - u[fi]) / g.dx[d]
+                        };
+                }
                 // Variable-viscosity flux includes the derivative of the eddy viscosity.
-                let mu = c.flow.viscosity() + adjacent_mean(f, nut);
+                // Laminar: nut is zero, so every face viscosity is exactly nu.
+                let mu = nu + if rans { mean[fi] } else { 0.0 };
                 let mut mu_lo = mu;
                 let mut mu_hi = mu;
-                for (neighbor, dst) in [(lo_face, &mut mu_lo), (hi_face, &mut mu_hi)] {
-                    if let Some(j) = neighbor
-                        && g.faces[j].kind == FaceKind::Interior
-                    {
-                        *dst = 0.5 * (mu + c.flow.viscosity() + adjacent_mean(&g.faces[j], nut));
+                if rans {
+                    for (neighbor, dst) in [(lo_face, &mut mu_lo), (hi_face, &mut mu_hi)] {
+                        if let Some(j) = neighbor
+                            && g.faces[j].kind == FaceKind::Interior
+                        {
+                            *dst = 0.5 * (mu + nu + mean[j]);
+                        }
                     }
                 }
                 rhs += (mu_hi * (hi - u[fi]) - mu_lo * (u[fi] - lo)) / (g.dx[d] * g.dx[d]);
@@ -276,14 +553,27 @@ pub fn production(
     }
     (p, eps_wall)
 }
-pub fn turbulence_step(
+/// The k and epsilon transport parts of the turbulence equations, and the
+/// terms they need: production, wall epsilon and the diffusivities.
+pub(crate) struct TurbulenceTerms {
+    pub(crate) production: Vec<f64>,
+    pub(crate) wall_epsilon: Vec<Option<f64>>,
+    pub(crate) dk: Vec<f64>,
+    pub(crate) de: Vec<f64>,
+    pub(crate) k_transport: Vec<f64>,
+    pub(crate) e_transport: Vec<f64>,
+    /// Coefficient of k (or epsilon) in the upper-boundary diffusion term of
+    /// each cell, so the transport parts' linear operators can include it.
+    pub(crate) k_top: Vec<f64>,
+    pub(crate) e_top: Vec<f64>,
+}
+pub(crate) fn turbulence_terms(
     c: &Case,
     g: &Grid,
     u: &[f64],
-    k: &mut [f64],
-    eps: &mut [f64],
-    dt: f64,
-) -> usize {
+    k: &[f64],
+    eps: &[f64],
+) -> TurbulenceTerms {
     let nut = eddy_viscosity(g, k, eps);
     let (p, walls) = production(c, g, u, &nut, k);
     let zeros = vec![0.0; g.count()];
@@ -298,6 +588,8 @@ pub fn turbulence_step(
     let mut er = transport::rhs(g, eps, u, &de, &zeros, Advection::LinearUpwind, |f| {
         c.flow.turbulence(f.center[2]).1
     });
+    let mut k_top = vec![0.0; g.count()];
+    let mut e_top = vec![0.0; g.count()];
     // The equilibrium ABL has nonzero epsilon diffusion at the upper boundary.
     // Zero-gradient epsilon there destroys horizontal homogeneity.
     for f in &g.faces {
@@ -316,8 +608,38 @@ pub fn turbulence_step(
                 / f.distance
                 * f.area
                 / g.volume;
+            k_top[i] -= 0.5 * (dk[i] + c.flow.viscosity() + nb) / f.distance * f.area / g.volume;
+            e_top[i] -= 0.5 * (de[i] + c.flow.viscosity() + nb / SIGMA_EPSILON) / f.distance
+                * f.area
+                / g.volume;
         }
     }
+    TurbulenceTerms {
+        production: p,
+        wall_epsilon: walls,
+        dk,
+        de,
+        k_transport: kr.values,
+        e_transport: er.values,
+        k_top,
+        e_top,
+    }
+}
+pub fn turbulence_step(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    k: &mut [f64],
+    eps: &mut [f64],
+    dt: f64,
+) -> usize {
+    let TurbulenceTerms {
+        production: p,
+        wall_epsilon: walls,
+        k_transport,
+        e_transport,
+        ..
+    } = turbulence_terms(c, g, u, k, eps);
     let mut floors = 0;
     for i in 0..g.count() {
         if !g.fluid[i] {
@@ -325,8 +647,8 @@ pub fn turbulence_step(
         }
         let oldk = k[i].max(1e-14);
         let olde = eps[i].max(1e-14);
-        let nk = (k[i] + dt * (kr.values[i] + p[i])) / (1.0 + dt * olde / oldk);
-        let ne = (eps[i] + dt * (er.values[i] + C1 * p[i] * olde / oldk))
+        let nk = (k[i] + dt * (k_transport[i] + p[i])) / (1.0 + dt * olde / oldk);
+        let ne = (eps[i] + dt * (e_transport[i] + C1 * p[i] * olde / oldk))
             / (1.0 + dt * C2 * olde / oldk);
         if !nk.is_finite() || !ne.is_finite() {
             k[i] = f64::NAN;

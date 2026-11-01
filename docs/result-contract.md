@@ -37,6 +37,12 @@ The run directory is created before the solve: a missing parent (CFD-E063) or an
 
 `report` rejects an archive with CFD-E064 when the completion marker or manifest is missing or altered, a listed artifact changed, an entry is not listed, a file is not a regular file, an artifact the case requested is missing without being listed as omitted, summary.json does not describe case.json, or the manifest and summary disagree on the source or initial state. For an archive whose manifest lists omitted artifacts it prints the summary, repeats CFD-E061 with the omitted names on stderr, and exits 0. Unkeyed hashes do not stop someone from rewriting and rehashing an archive on purpose; validation/check_fields.py recomputes the physics checks for that reason.
 
+With an implicit `numerics.steady_algorithm`, `summary.json` also reports
+`momentum_solver_iterations`, the cumulative inner iterations of the implicit
+momentum-correction solves; `steps` then counts outer iterations. The field is
+omitted for the explicit default, as is the matching checkpoint field, so
+existing results and checkpoints are unchanged.
+
 ## Numerical check scope
 
 Current steady targets are normalized local continuity 1e-4, net boundary balance 1e-5, physical equation residual from the case, and three stable monitor windows. Scalar cumulative relative budget defect is bounded by 1e-9, with tighter results observed on analytic fixtures. Floor events are forbidden for accepted turbulence runs.

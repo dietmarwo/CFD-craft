@@ -39,6 +39,12 @@ pub struct Grid {
     pub pressure_factor: std::sync::OnceLock<crate::pressure::Factor>,
     pub pressure_preconditioner: PressurePreconditioner,
     pub(crate) pressure_multigrid: std::sync::Arc<crate::multigrid::Cache>,
+    /// Built on first use by the implicit pseudo-time algorithms.
+    pub(crate) momentum_stencil: std::sync::OnceLock<crate::momentum_solve::Stencil>,
+    /// Same-axis neighbor faces of every face, [direction][side], from `face_at`.
+    pub(crate) neighbor_faces: std::sync::OnceLock<Vec<[[Option<usize>; 2]; 3]>>,
+    /// For an a-face at q and d ≠ a, the d-faces at q + e_d and q + e_d − e_a.
+    pub(crate) edge_faces: std::sync::OnceLock<Vec<[[Option<usize>; 2]; 3]>>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryEvidence {
@@ -97,6 +103,9 @@ impl Grid {
             pressure_factor: std::sync::OnceLock::new(),
             pressure_preconditioner: c.numerics.pressure_preconditioner,
             pressure_multigrid: Default::default(),
+            momentum_stencil: std::sync::OnceLock::new(),
+            neighbor_faces: std::sync::OnceLock::new(),
+            edge_faces: std::sync::OnceLock::new(),
         };
         let mut box_cells = vec![0usize; c.geometry.len()];
         for i in 0..count {
@@ -252,13 +261,27 @@ impl Grid {
     /// Fluid-component and solid-cell counts of the case's grid, computed from the cell
     /// mask with a union-find over 4 bytes per cell, without building faces or the pressure
     /// operator. Cells connect through shared faces, including periodic wraps, as in
-    /// [`Grid::build`]. Needs only valid axes (2..4096 cells, at most 1e8 in total).
+    /// [`Grid::build`]. Needs only valid axes (2..4096 cells, or 1..4096 on a
+    /// periodic axis, at most 1e8 in total).
     pub fn mask_topology(c: &Case) -> Result<MaskTopology> {
         let n = c.grid.cells;
         let count = n.iter().try_fold(1usize, |p, v| p.checked_mul(*v));
+        let valid = (0..3).all(|a| {
+            let minimum = if c.boundaries.at(a) == Boundary::Periodic {
+                1
+            } else {
+                2
+            };
+            (minimum..=4096).contains(&n[a])
+        });
         let count = match count {
-            Some(v) if n.iter().all(|v| (2..=4096).contains(v)) && v <= 100_000_000 => v,
-            _ => return Err("the grid needs 2..4096 cells per axis and at most 1e8 cells".into()),
+            Some(v) if valid && v <= 100_000_000 => v,
+            _ => {
+                return Err(
+                    "the grid needs 2..4096 cells per axis (1..4096 on a periodic axis) and at most 1e8 cells"
+                        .into(),
+                );
+            }
         };
         const SOLID: u32 = u32::MAX;
         let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
@@ -327,6 +350,46 @@ impl Grid {
             mask_sha256: hash_bytes(&self.fluid.iter().map(|v| u8::from(*v)).collect::<Vec<_>>()),
             box_cells: self.box_cells.clone(),
         }
+    }
+    /// The same-axis neighbors of every face in direction d and side (lower,
+    /// upper), as `face_at` finds them; built once per grid.
+    pub(crate) fn neighbor_faces(&self, c: &Case) -> &[[[Option<usize>; 2]; 3]] {
+        self.neighbor_faces.get_or_init(|| {
+            self.faces
+                .iter()
+                .map(|f| {
+                    std::array::from_fn(|d| {
+                        std::array::from_fn(|side| {
+                            let mut q = f.coord.map(|v| v as isize);
+                            q[d] += if side == 0 { -1 } else { 1 };
+                            self.face_at(c, f.axis, q)
+                        })
+                    })
+                })
+                .collect()
+        })
+    }
+    /// For every a-face at q and direction d ≠ a, the two d-faces whose mean
+    /// advects through the momentum control-volume edge above it: the d-faces
+    /// at q + e_d and q + e_d − e_a, as `face_at` finds them; built once.
+    pub(crate) fn edge_faces(&self, c: &Case) -> &[[[Option<usize>; 2]; 3]] {
+        self.edge_faces.get_or_init(|| {
+            self.faces
+                .iter()
+                .map(|f| {
+                    std::array::from_fn(|d| {
+                        if d == f.axis {
+                            return [None; 2];
+                        }
+                        let mut q = f.coord.map(|v| v as isize);
+                        q[d] += 1;
+                        let upper = self.face_at(c, d, q);
+                        q[f.axis] -= 1;
+                        [upper, self.face_at(c, d, q)]
+                    })
+                })
+                .collect()
+        })
     }
     pub fn face_at(&self, c: &Case, a: usize, mut q: [isize; 3]) -> Option<usize> {
         for (d, qd) in q.iter_mut().enumerate() {

@@ -105,7 +105,14 @@ pub struct State {
     pub budgets: Vec<Budget>,
     pub floor_events: usize,
     pub pressure_iterations: usize,
+    /// Inner iterations of implicit momentum-correction solves; omitted when
+    /// zero, so explicit checkpoints keep their bytes.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub momentum_solver_iterations: usize,
     pub monitor_history: Vec<Vec<f64>>,
+}
+fn is_zero(v: &usize) -> bool {
+    *v == 0
 }
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -152,6 +159,9 @@ pub struct Summary {
     pub physical_time_s: f64,
     pub elapsed_s: f64,
     pub pressure_iterations: usize,
+    /// Inner iterations of implicit momentum-correction solves, when selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub momentum_solver_iterations: Option<usize>,
     pub turbulent_floor_events: usize,
     pub fluid_cells: usize,
     pub solid_cells: usize,
@@ -208,6 +218,7 @@ pub fn initial_state(c: &Case, g: &Grid) -> State {
         budgets,
         floor_events: 0,
         pressure_iterations: 0,
+        momentum_solver_iterations: 0,
         monitor_history: vec![],
     }
 }
@@ -267,6 +278,9 @@ fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
         .collect()
 }
 pub fn timestep(c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
+    timestep_for(c.numerics.steady_algorithm, c, g, s, nut)
+}
+fn timestep_for(algorithm: SteadyAlgorithm, c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
     let mut umax = [0.0f64; 3];
     for (f, u) in g.faces.iter().zip(&s.velocity) {
         umax[f.axis] = umax[f.axis].max(u.abs());
@@ -287,9 +301,22 @@ pub fn timestep(c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
         .map(|x| x.diffusivity_m2_s + maxnut / sc)
         .fold(c.flow.viscosity() + maxnut, f64::max);
     let diffusion = 2.0 * dmax * g.dx.iter().map(|h| 1.0 / (h * h)).sum::<f64>();
-    c.numerics
-        .max_time_step_s
-        .min(c.numerics.advective_cfl_max.min(0.45) / (adv + diffusion).max(1e-30))
+    match algorithm {
+        SteadyAlgorithm::Explicit => c
+            .numerics
+            .max_time_step_s
+            .min(c.numerics.advective_cfl_max.min(0.45) / (adv + diffusion).max(1e-30)),
+        // Implicit viscosity removes the diffusive limit; advection stays explicit.
+        SteadyAlgorithm::ImplicitViscous => c
+            .numerics
+            .max_time_step_s
+            .min(c.numerics.advective_cfl_max.min(0.45) / adv.max(1e-30)),
+        // A deterministic CFL ramp from the outer-iteration count; restarts need no state.
+        SteadyAlgorithm::ImplicitProjection => c
+            .numerics
+            .max_time_step_s
+            .min(crate::momentum_solve::ramp_cfl(s.steps) / adv.max(1e-30)),
+    }
 }
 fn flow_euler(
     c: &Case,
@@ -299,19 +326,31 @@ fn flow_euler(
     nut: &[f64],
     dt: f64,
     control: &Control,
-) -> Result<(Vec<f64>, Vec<f64>, usize)> {
+) -> Result<(Vec<f64>, Vec<f64>, usize, usize)> {
     let rhs = {
         let _phase = control.span(Phase::MomentumRhs);
         flow::momentum_rhs(c, g, u, nut)
     };
     let velocity_update = control.span(Phase::VelocityUpdate);
     let grad = g.gradient(p);
-    let mut v: Vec<_> = u
-        .iter()
-        .zip(rhs)
-        .zip(grad)
-        .map(|((u, r), p)| u + dt * (r - p))
-        .collect();
+    let mut inner = 0;
+    let mut v: Vec<_> = if c.numerics.steady_algorithm == SteadyAlgorithm::ImplicitViscous {
+        // Delta form: (I - dt L_nu) delta = dt R with the full steady residual R.
+        let b: Vec<_> = rhs.iter().zip(&grad).map(|(r, p)| dt * (r - p)).collect();
+        let stencil = g
+            .momentum_stencil
+            .get_or_init(|| crate::momentum_solve::Stencil::build(c, g));
+        let (delta, info) =
+            crate::momentum_solve::solve_viscous(stencil, c.flow.viscosity(), dt, &b, control)?;
+        inner = info.iterations;
+        u.iter().zip(delta).map(|(u, d)| u + d).collect()
+    } else {
+        u.iter()
+            .zip(rhs)
+            .zip(grad)
+            .map(|((u, r), p)| u + dt * (r - p))
+            .collect()
+    };
     g.enforce_velocity(c, &mut v);
     let mut pp = p.to_vec();
     drop(velocity_update);
@@ -325,8 +364,122 @@ fn flow_euler(
         control,
     )?;
     g.enforce_velocity(c, &mut v);
-    Ok((v, pp, info.iterations))
+    Ok((v, pp, info.iterations, inner))
 }
+/// One outer iteration of the implicit steady algorithm (P5a), in delta form:
+/// A δ = R(u, p), u* = u + δ, then a projection at the pseudo-time step. At a
+/// fixed point δ = 0 and the projection's correction is zero, so R = 0 and the
+/// velocity is solenoidal, which is what `assess` checks.
+fn implicit_iteration(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    p: &[f64],
+    nut: &[f64],
+    dt: f64,
+    control: &Control,
+) -> Result<(Vec<f64>, Vec<f64>, usize, usize)> {
+    let rhs = {
+        let _phase = control.span(Phase::MomentumRhs);
+        flow::momentum_rhs(c, g, u, nut)
+    };
+    let velocity_update = control.span(Phase::VelocityUpdate);
+    let residual: Vec<_> = rhs.iter().zip(g.gradient(p)).map(|(r, p)| r - p).collect();
+    let stencil = g
+        .momentum_stencil
+        .get_or_init(|| crate::momentum_solve::Stencil::build(c, g));
+    let matrix = if c.flow.rans() {
+        stencil.implicit_matrix_rans(c, g, u, nut, dt)
+    } else {
+        stencil.implicit_matrix(u, c.flow.viscosity(), dt)
+    };
+    drop(velocity_update);
+    let (delta, info) =
+        crate::momentum_solve::solve_implicit(stencil, &matrix, &residual, control)?;
+    let mut v: Vec<_> = u.iter().zip(delta).map(|(u, d)| u + d).collect();
+    g.enforce_velocity(c, &mut v);
+    let mut pp = p.to_vec();
+    let projection = pressure::project(
+        g,
+        &mut v,
+        &mut pp,
+        dt,
+        c.numerics.pressure_relative_tolerance,
+        c.numerics.pressure_max_iterations,
+        control,
+    )?;
+    g.enforce_velocity(c, &mut v);
+    Ok((v, pp, projection.iterations, info.iterations))
+}
+/// Cap on explicit scalar sub-steps per implicit outer iteration (P5d). The
+/// constituents then advance by at most this many explicit stable steps per
+/// outer iteration; their steady state does not depend on the step sizes.
+pub const SCALAR_SUBSTEPS_MAX: usize = 16;
+
+/// Sub-step count and size for a pseudo-time step `dt` with explicit stable
+/// step `stable`: the fewest equal sub-steps of at most `stable`, capped at
+/// `SCALAR_SUBSTEPS_MAX` steps of size `stable`.
+pub fn scalar_substeps(dt: f64, stable: f64) -> (usize, f64) {
+    let needed = (dt / stable).ceil();
+    if needed <= SCALAR_SUBSTEPS_MAX as f64 {
+        let n = (needed as usize).max(1);
+        (n, dt / n as f64)
+    } else {
+        (SCALAR_SUBSTEPS_MAX, stable)
+    }
+}
+
+/// Reused buffers of the SSPRK2 scalar step.
+#[derive(Default)]
+struct ScalarBuffers {
+    r1: Vec<f64>,
+    stage: Vec<f64>,
+    r2: Vec<f64>,
+}
+
+/// One SSPRK2 step of scalar transport, with its budget increments, written
+/// into `concentration` in place.
+#[allow(clippy::too_many_arguments)]
+fn advance_scalar(
+    c: &Case,
+    g: &Grid,
+    concentration: &mut [f64],
+    velocity: &[f64],
+    d: &[f64],
+    source: &[f64],
+    dt: f64,
+    budget: &mut Budget,
+    buffers: &mut ScalarBuffers,
+    fixed: Option<&transport::FixedRhs>,
+) {
+    let ScalarBuffers { r1, stage, r2 } = buffers;
+    // Linear upwind with a fixed flow: evaluate from the gathered faces.
+    let fixed = fixed.filter(|_| c.numerics.transport == crate::case::Advection::LinearUpwind);
+    let rhs = |x: &[f64], out: &mut Vec<f64>| match fixed {
+        Some(op) => op.eval(x, source, out),
+        None => transport::rhs_into(
+            g,
+            x,
+            velocity,
+            d,
+            source,
+            c.numerics.transport,
+            |_| 0.0,
+            out,
+        ),
+    };
+    let (source1, inflow1, outflow1) = rhs(concentration, r1);
+    stage.clear();
+    stage.extend(concentration.iter().zip(r1.iter()).map(|(a, b)| a + dt * b));
+    let (source2, inflow2, outflow2) = rhs(stage, r2);
+    for ((a, b), r) in concentration.iter_mut().zip(stage.iter()).zip(r2.iter()) {
+        *a = 0.5 * (*a + b + dt * r);
+    }
+    budget.emitted_kg += 0.5 * dt * (source1 + source2);
+    budget.inflow_kg += 0.5 * dt * (inflow1 + inflow2);
+    budget.outflow_kg += 0.5 * dt * (outflow1 + outflow2);
+}
+
 pub fn step(
     c: &Case,
     g: &Grid,
@@ -358,11 +511,32 @@ pub fn step(
         budgets: s.budgets.clone(),
         floor_events: s.floor_events,
         pressure_iterations: s.pressure_iterations,
+        momentum_solver_iterations: s.momentum_solver_iterations,
         monitor_history: Vec::new(),
     };
-    if !c.flow.prescribed() {
-        let (v, p, n1) = flow_euler(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
-        let (v2, p2, n2) = flow_euler(c, g, &v, &p, &nut, dt, control)?;
+    if c.numerics.steady_algorithm == SteadyAlgorithm::ImplicitProjection {
+        let (v, p, n, m) = implicit_iteration(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
+        next.velocity = v;
+        next.pressure = p;
+        next.pressure_iterations += n;
+        next.momentum_solver_iterations += m;
+        if c.flow.rans() {
+            let _phase = control.span(Phase::Turbulence);
+            let info = crate::turbulence_solve::implicit_step(
+                c,
+                g,
+                &next.velocity,
+                &mut next.k,
+                &mut next.epsilon,
+                dt,
+                control,
+            )?;
+            next.floor_events += info.floor_events;
+        }
+    } else if !c.flow.prescribed() {
+        let (v, p, n1, m1) = flow_euler(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
+        let (v2, p2, n2, m2) = flow_euler(c, g, &v, &p, &nut, dt, control)?;
+        next.momentum_solver_iterations += m1 + m2;
         next.velocity = s
             .velocity
             .iter()
@@ -378,42 +552,42 @@ pub fn step(
                 flow::turbulence_step(c, g, &next.velocity, &mut next.k, &mut next.epsilon, dt);
         }
     }
-    for (j, source) in sources.iter().enumerate() {
-        let _phase = control.span(Phase::ScalarTransport);
-        let d = diffusivity(c, &nut, j);
-        let r1 = transport::rhs(
-            g,
-            &s.concentrations[j],
-            &next.velocity,
-            &d,
-            source,
-            c.numerics.transport,
-            |_| 0.0,
-        );
-        let v: Vec<_> = s.concentrations[j]
-            .iter()
-            .zip(&r1.values)
-            .map(|(a, b)| a + dt * b)
-            .collect();
-        let r2 = transport::rhs(
-            g,
-            &v,
-            &next.velocity,
-            &d,
-            source,
-            c.numerics.transport,
-            |_| 0.0,
-        );
-        let concentration = s.concentrations[j]
-            .iter()
-            .zip(v)
-            .zip(r2.values)
-            .map(|((a, b), r)| 0.5 * (a + b + dt * r))
-            .collect();
-        next.concentrations.push(concentration);
-        next.budgets[j].emitted_kg += 0.5 * dt * (r1.source + r2.source);
-        next.budgets[j].inflow_kg += 0.5 * dt * (r1.inflow + r2.inflow);
-        next.budgets[j].outflow_kg += 0.5 * dt * (r1.outflow + r2.outflow);
+    if !sources.is_empty() {
+        // The implicit steady algorithm's pseudo-time step exceeds the explicit
+        // transport limits, so constituents advance in explicit sub-steps (P5d).
+        let (substeps, sub_dt) = if c.numerics.steady_algorithm == SteadyAlgorithm::Explicit {
+            (1, dt)
+        } else {
+            scalar_substeps(
+                dt,
+                timestep_for(SteadyAlgorithm::Explicit, c, g, &next, &nut),
+            )
+        };
+        for (j, source) in sources.iter().enumerate() {
+            let _phase = control.span(Phase::ScalarTransport);
+            let d = diffusivity(c, &nut, j);
+            let mut concentration = s.concentrations[j].clone();
+            let mut buffers = ScalarBuffers::default();
+            // Several sub-steps share one flow: gather its faces once.
+            let fixed = (substeps > 1
+                && c.numerics.transport == crate::case::Advection::LinearUpwind)
+                .then(|| transport::FixedRhs::new(g, &next.velocity, &d));
+            for _ in 0..substeps {
+                advance_scalar(
+                    c,
+                    g,
+                    &mut concentration,
+                    &next.velocity,
+                    &d,
+                    source,
+                    sub_dt,
+                    &mut next.budgets[j],
+                    &mut buffers,
+                    fixed.as_ref(),
+                );
+            }
+            next.concentrations.push(concentration);
+        }
     }
     // Preserve the public step function's unchanged trailing constituents when
     // a caller supplies only a prefix of source arrays.
@@ -553,7 +727,9 @@ pub fn assess(
         Some(residual)
     };
     let turbulence = if c.flow.rans() {
-        let dt = 1e-6 * timestep(c, g, s, &nut);
+        // The residual probe uses the explicit step size for every algorithm,
+        // so the reported residual does not depend on the pseudo-time step.
+        let dt = 1e-6 * timestep_for(SteadyAlgorithm::Explicit, c, g, s, &nut);
         let mut k = s.k.clone();
         let mut e = s.epsilon.clone();
         flow::turbulence_step(c, g, &s.velocity, &mut k, &mut e, dt);
@@ -828,6 +1004,8 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         physical_time_s: state.time_s,
         elapsed_s: control.elapsed(),
         pressure_iterations: state.pressure_iterations,
+        momentum_solver_iterations: (c.numerics.steady_algorithm != SteadyAlgorithm::Explicit)
+            .then_some(state.momentum_solver_iterations),
         turbulent_floor_events: state.floor_events,
         fluid_cells: geo.fluid_cells,
         solid_cells: geo.solid_cells,

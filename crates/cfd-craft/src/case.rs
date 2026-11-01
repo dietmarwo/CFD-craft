@@ -299,6 +299,51 @@ impl PressurePreconditioner {
         *self == Self::Ic0
     }
 }
+/// Momentum advection on the staggered grid. Donor-cell (advective form) is the
+/// default; the others are conservative flux forms with an upwind-biased
+/// reconstruction of the transported component (van Leer's MUSCL in Sweby's notation).
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MomentumAdvection {
+    #[default]
+    DonorCell,
+    /// Unlimited second-order upwind: face value 1.5 phi_U - 0.5 phi_UU. Not bounded.
+    SecondOrderUpwind,
+    /// Second-order upwind with the limiter in `numerics.momentum_limiter`.
+    LimitedUpwind,
+}
+impl MomentumAdvection {
+    fn is_default(&self) -> bool {
+        *self == Self::DonorCell
+    }
+}
+/// Steady pseudo-time algorithm. `explicit` is the SSPRK2 march of the earlier
+/// release. The implicit options solve for a correction driven by the full
+/// steady residual (delta form), so they share its fixed point.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SteadyAlgorithm {
+    #[default]
+    Explicit,
+    /// SSPRK2 stages with an implicit viscous term: (I − Δτ L_ν) δ = Δτ R.
+    ImplicitViscous,
+    /// One implicit correction per outer iteration, A δ = R with a Picard
+    /// first-order upwind and viscous Jacobian and a CFL ramp, followed by a
+    /// projection at the pseudo-time step (a SIMPLEC-type coupling).
+    ImplicitProjection,
+}
+impl SteadyAlgorithm {
+    fn is_default(&self) -> bool {
+        *self == Self::Explicit
+    }
+}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MomentumLimiter {
+    VanAlbada,
+    VanLeer,
+    MonotonizedCentral,
+}
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Numerics {
@@ -310,6 +355,15 @@ pub struct Numerics {
     /// Omitted/default IC(0) preserves existing normalized case/checkpoint hashes.
     #[serde(default, skip_serializing_if = "PressurePreconditioner::is_default")]
     pub pressure_preconditioner: PressurePreconditioner,
+    /// Omitted/default donor-cell preserves existing case and checkpoint hashes.
+    #[serde(default, skip_serializing_if = "MomentumAdvection::is_default")]
+    pub momentum_advection: MomentumAdvection,
+    /// Required with `limited_upwind`, rejected otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub momentum_limiter: Option<MomentumLimiter>,
+    /// Omitted/default explicit pseudo-time preserves existing hashes.
+    #[serde(default, skip_serializing_if = "SteadyAlgorithm::is_default")]
+    pub steady_algorithm: SteadyAlgorithm,
     pub steady_residual_tolerance: f64,
     pub steady_monitor_tolerance: f64,
     pub monitor_window: usize,
@@ -491,6 +545,46 @@ impl Case {
                 "Multigrid currently requires an unmasked Cartesian grid; use ic0 for geometry masks.",
             );
         }
+        match (
+            self.numerics.momentum_advection,
+            self.numerics.momentum_limiter,
+        ) {
+            (MomentumAdvection::LimitedUpwind, None) => add(
+                "CFD-E037",
+                "error",
+                "numerics.momentum_limiter",
+                "limited_upwind needs a limiter: van_albada, van_leer or monotonized_central.",
+            ),
+            (MomentumAdvection::DonorCell | MomentumAdvection::SecondOrderUpwind, Some(_)) => add(
+                "CFD-E037",
+                "error",
+                "numerics.momentum_limiter",
+                "A momentum limiter is used only with momentum_advection = limited_upwind.",
+            ),
+            _ => {}
+        }
+        if self.numerics.steady_algorithm != SteadyAlgorithm::Explicit {
+            let path = "numerics.steady_algorithm";
+            if self.run.mode != Mode::Steady {
+                add(
+                    "CFD-E045",
+                    "error",
+                    path,
+                    "Implicit pseudo-time changes the time accuracy; use it only with run.mode = steady.",
+                );
+            }
+            if self.flow.prescribed()
+                || (self.flow.rans()
+                    && self.numerics.steady_algorithm == SteadyAlgorithm::ImplicitViscous)
+            {
+                add(
+                    "CFD-E047",
+                    "error",
+                    path,
+                    "Prescribed flow needs no steady algorithm, and implicit_viscous supports laminar flow only; use explicit, or implicit_projection for neutral_rans.",
+                );
+            }
+        }
         if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid {
             let dx = std::array::from_fn(|a| self.domain.size_m[a] / self.grid.cells[a] as f64);
             let axes = crate::multigrid::line_axes(self.grid.cells, dx);
@@ -516,12 +610,17 @@ impl Case {
                     "Supported lengths are 1e-6..1e9 m.",
                 );
             }
-            if self.grid.cells[a] < 2 || self.grid.cells[a] > 4096 {
+            let minimum = if self.boundaries.at(a) == Boundary::Periodic {
+                1
+            } else {
+                2
+            };
+            if self.grid.cells[a] < minimum || self.grid.cells[a] > 4096 {
                 add(
                     "CFD-E004",
                     "error",
                     &format!("grid.cells[{a}]"),
-                    "Each axis needs 2..4096 cells.",
+                    "Each axis needs 2..4096 cells; a periodic axis may have one (a two-dimensional run).",
                 );
             }
             if a != 2 && self.boundaries.at(a) == Boundary::GroundOpenTop {

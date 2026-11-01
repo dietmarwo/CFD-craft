@@ -3,12 +3,14 @@
 pub mod case;
 pub mod flow;
 pub mod grid;
+pub mod momentum_solve;
 pub mod multigrid;
 pub mod output;
 pub mod pressure;
 pub mod profiling;
 pub mod solver;
 pub mod transport;
+pub mod turbulence_solve;
 pub mod verification;
 
 pub type Result<T> = std::result::Result<T, String>;

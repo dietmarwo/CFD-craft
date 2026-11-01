@@ -86,7 +86,7 @@ fn strong_anisotropy_between_coarsened_axes_is_a_check_warning() {
 #[test]
 fn manufactured_pressure_and_projection_match_independent_gradient_divergence() {
     for boundary in [Boundary::Wall, Boundary::Periodic, Boundary::Open] {
-        for n in [[9, 2, 7], [8, 5, 6], [2, 2, 2]] {
+        for n in [[9, 2, 7], [8, 5, 6], [2, 2, 2], [9, 1, 7]] {
             let c = case(n, boundary);
             let g = Grid::build(&c).unwrap();
             let mut exact: Vec<_> = (0..g.count()).map(|i| (0.37 * i as f64).sin()).collect();

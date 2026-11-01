@@ -95,9 +95,11 @@ impl Factor {
     fn build(g: &Grid) -> Self {
         // Reserve row segments with two linear face passes. A short periodic
         // direction can connect a pair twice, so capacity and live count differ.
+        // A one-cell periodic axis gives faces that join a cell to itself; they
+        // carry no pressure difference and are not part of the operator.
         let mut row_offsets = vec![0; g.count() + 1];
         for f in &g.faces {
-            if f.kind == FaceKind::Interior {
+            if f.kind == FaceKind::Interior && f.lo != f.hi {
                 let row = f.lo.unwrap().max(f.hi.unwrap());
                 row_offsets[row + 1] += 1;
             }
@@ -113,6 +115,7 @@ impl Factor {
         for f in &g.faces {
             let w = f.area / (f.distance * g.volume);
             match f.kind {
+                FaceKind::Interior if f.lo == f.hi => {}
                 FaceKind::Interior => {
                     let i = f.lo.unwrap();
                     let j = f.hi.unwrap();
@@ -518,7 +521,7 @@ mod tests {
 
     #[test]
     fn compact_ic0_matches_dense_reference_with_periodic_duplicates_and_triangles() {
-        for n in [[2, 3, 2], [3, 3, 3], [4, 2, 3]] {
+        for n in [[2, 3, 2], [3, 3, 3], [4, 2, 3], [3, 1, 4], [1, 3, 1]] {
             let c = case(n);
             let g = Grid::build(&c).unwrap();
             let r: Vec<_> = (0..g.count()).map(|i| (0.7 * i as f64).sin()).collect();

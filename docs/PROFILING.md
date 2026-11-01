@@ -64,6 +64,21 @@ multilevel work; see the [multigrid guide](PRESSURE_MULTIGRID.md). A factor-setu
 only when construction runs, including a zero-RHS first projection. Timers and
 locks occur at phase boundaries; inner iterations update local integer counters.
 
+With an implicit `numerics.steady_algorithm`, `momentum_solve` records the
+inexact momentum-correction solves: `work_units` counts inner iterations, and
+`operator_applications` is one per iteration for `implicit_viscous` (CG) and two
+for `implicit_projection` (BiCGStab). The envelope then carries
+`initial_momentum_solver_iterations`, and the checker requires the retained
+`summary.momentum_solver_iterations` to equal the attempted work for a run that
+ended without an error, and at most 50 iterations per solve.
+
+With `implicit_projection` and `neutral_rans`, `turbulence_solve` (inside
+`turbulence`) records the implicit k and ε correction solves of each outer
+iteration: one call per outer iteration, `work_units` the inner BiCGStab
+iterations of both solves, `operator_applications` two per iteration. The
+checker requires that relation, at most 2 × 50 iterations per call, and no
+`turbulence_solve` calls for other algorithms or laminar flow.
+
 Anisotropic levels add block updates, solves and level visits. The checker
 requires two block updates per block-level visit and total smoothing updates
 `4 * residual_cell_updates - 2 * block_level_cell_visits`. Point-only records

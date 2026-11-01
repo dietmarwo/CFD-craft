@@ -322,6 +322,68 @@ def check(root):
             "work.multigrid",
             "missing selected preconditioner work",
         )
+    algorithm = regular(archive / "case.json")["numerics"].get(
+        "steady_algorithm", "explicit"
+    )
+    momentum = phases.get("momentum_solve", {})
+    inner = momentum.get("work_units", 0)
+    if algorithm == "explicit":
+        require(
+            not momentum.get("calls", 0)
+            and "momentum_solver_iterations" not in summary
+            and "initial_momentum_solver_iterations" not in p,
+            "work.momentum_solve",
+            "explicit pseudo-time did implicit momentum work",
+        )
+    else:
+        require(
+            "initial_momentum_solver_iterations" in p
+            and "momentum_solver_iterations" in summary,
+            "initial_momentum_solver_iterations",
+            "implicit pseudo-time must record its inner work",
+        )
+        initial_inner = number(
+            p["initial_momentum_solver_iterations"],
+            "initial_momentum_solver_iterations",
+            integer=True,
+        )
+        delta_inner = (
+            number(
+                summary["momentum_solver_iterations"],
+                "summary.momentum_solver_iterations",
+                integer=True,
+            )
+            - initial_inner
+        )
+        require(
+            momentum.get("operator_applications", 0)
+            == MOMENTUM_APPLICATIONS_PER_ITERATION[algorithm] * inner
+            and momentum.get("preconditioner_applications", 0) <= inner
+            and inner <= MOMENTUM_ITERATION_CAP[algorithm] * momentum.get("calls", 0),
+            "work.momentum_solve",
+            "inner work differs from its operator applications or exceeds the cap",
+        )
+        require(
+            0 <= delta_inner <= inner and (stopped or delta_inner == inner),
+            "work.momentum_solver_iterations",
+            "retained inner work differs from attempted work",
+        )
+    # Implicit k and epsilon solves (P5c): two BiCGStab solves per call.
+    turbulence = phases.get("turbulence_solve", {})
+    turbulence_inner = turbulence.get("work_units", 0)
+    rans = regular(archive / "case.json")["flow"]["kind"] == "neutral_rans"
+    require(
+        (algorithm == "implicit_projection" and rans) or not turbulence.get("calls", 0),
+        "work.turbulence_solve",
+        "only implicit_projection with neutral_rans solves implicit k and epsilon",
+    )
+    require(
+        turbulence.get("operator_applications", 0) == 2 * turbulence_inner
+        and turbulence_inner
+        <= 2 * TURBULENCE_ITERATION_CAP * turbulence.get("calls", 0),
+        "work.turbulence_solve",
+        "inner work differs from its operator applications or exceeds the cap",
+    )
     pressure = linear.get("work_units", 0)
     require(
         linear.get("operator_applications", 0)
@@ -362,6 +424,14 @@ def check(root):
         retained_new_pressure_iterations=delta_pressure,
         physical_qualification=False,
     )
+
+
+# Predeclared inner caps per solve (crates/cfd-craft/src/momentum_solve.rs).
+MOMENTUM_ITERATION_CAP = dict(implicit_viscous=50, implicit_projection=50)
+# CG applies its operator once per iteration, BiCGStab twice.
+MOMENTUM_APPLICATIONS_PER_ITERATION = dict(implicit_viscous=1, implicit_projection=2)
+# Predeclared cap per k or epsilon solve (crates/cfd-craft/src/turbulence_solve.rs).
+TURBULENCE_ITERATION_CAP = 50
 
 
 def main():

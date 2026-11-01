@@ -6,6 +6,7 @@ use cfd_craft::{
     grid::{FaceKind, Grid},
     output, pressure, solver,
     solver::Control,
+    transport,
 };
 
 fn tracer() -> Case {
@@ -203,6 +204,10 @@ fn the_mask_topology_matches_the_built_grid() {
         });
         cases.push(c);
     }
+    // A two-dimensional variant: one cell on the periodic y axis.
+    let mut flat = cases[3].clone();
+    flat.grid.cells = [12, 1, 6];
+    cases.push(flat);
     let mut components = vec![];
     for c in &cases {
         let g = Grid::build(c).unwrap().evidence();
@@ -212,7 +217,7 @@ fn the_mask_topology_matches_the_built_grid() {
         assert!((t.solid_volume_m3 - g.solid_volume_m3).abs() <= 1e-12 * g.solid_volume_m3);
         components.push(t.fluid_components);
     }
-    assert_eq!(components, vec![1, 1, 2, 1]);
+    assert_eq!(components, vec![1, 1, 2, 1, 1]);
 }
 
 #[test]
@@ -389,25 +394,35 @@ fn dense_solve(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Vec<f64> {
 fn the_masked_pressure_operator_matches_an_assembled_reference() {
     // A RANS street with a sealed 2x2x2 pocket inside a hollow box: one component
     // anchored by its outlet and one closed component with a gauge.
-    for periodic_y in [false, true] {
+    // The third variant is two-dimensional: one cell on the periodic y axis.
+    for (periodic_y, span) in [(false, 6), (true, 6), (true, 1)] {
         let mut c = canyon();
         c.constituents.clear();
         c.sources.clear();
         c.receptors.clear();
         c.initial_conditions.clear();
-        c.domain.size_m = [10.0, 6.0, 5.0];
-        c.grid.cells = [10, 6, 5];
+        c.domain.size_m = [10.0, span as f64, 5.0];
+        c.grid.cells = [10, span, 5];
         if periodic_y {
             c.boundaries.y = Boundary::Periodic;
         }
-        let shell = [
-            ([3.0, 1.0, 0.0], [7.0, 5.0, 1.0]),
-            ([3.0, 1.0, 3.0], [7.0, 5.0, 4.0]),
-            ([3.0, 1.0, 1.0], [4.0, 5.0, 3.0]),
-            ([6.0, 1.0, 1.0], [7.0, 5.0, 3.0]),
-            ([4.0, 1.0, 1.0], [6.0, 2.0, 3.0]),
-            ([4.0, 4.0, 1.0], [6.0, 5.0, 3.0]),
-        ];
+        let shell: Vec<([f64; 3], [f64; 3])> = if span == 1 {
+            vec![
+                ([3.0, 0.0, 0.0], [7.0, 1.0, 1.0]),
+                ([3.0, 0.0, 3.0], [7.0, 1.0, 4.0]),
+                ([3.0, 0.0, 1.0], [4.0, 1.0, 3.0]),
+                ([6.0, 0.0, 1.0], [7.0, 1.0, 3.0]),
+            ]
+        } else {
+            vec![
+                ([3.0, 1.0, 0.0], [7.0, 5.0, 1.0]),
+                ([3.0, 1.0, 3.0], [7.0, 5.0, 4.0]),
+                ([3.0, 1.0, 1.0], [4.0, 5.0, 3.0]),
+                ([6.0, 1.0, 1.0], [7.0, 5.0, 3.0]),
+                ([4.0, 1.0, 1.0], [6.0, 2.0, 3.0]),
+                ([4.0, 4.0, 1.0], [6.0, 5.0, 3.0]),
+            ]
+        };
         c.geometry = shell
             .iter()
             .enumerate()
@@ -724,4 +739,143 @@ fn an_external_poll_error_stops_the_run_as_cancelled_not_diverged() {
     let control = Control::with_poll(60.0, || Err("wall_time_limit".into()));
     let run = solver::run(&c, &control, None).unwrap();
     assert_eq!(run.summary.termination, "wall_time_limit");
+}
+
+// Bits of every momentum, implicit-matrix, turbulence and scalar kernel on
+// laminar, masked, open, periodic and RANS grids, for each momentum scheme.
+// Performance changes must keep them; update only with a reviewed change to
+// the discretization.
+fn kernel_signature(c: &Case) -> String {
+    let g = Grid::build(c).unwrap();
+    let s = solver::initial_state(c, &g);
+    let mut u: Vec<f64> = s
+        .velocity
+        .iter()
+        .enumerate()
+        .map(|(i, v)| v + 0.05 * (0.37 * i as f64).sin() + 0.02 * (1.3 * i as f64).cos())
+        .collect();
+    g.enforce_velocity(c, &mut u);
+    let wave = |values: &[f64], w: f64| -> Vec<f64> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| v * (1.0 + 0.3 * (w * i as f64).cos()))
+            .collect()
+    };
+    let (k, eps) = (wave(&s.k, 0.11), wave(&s.epsilon, 0.23));
+    let nut = flow::eddy_viscosity(&g, &k, &eps);
+    let mut bytes = Vec::new();
+    let mut push = |values: &[f64]| {
+        bytes.extend(values.len().to_le_bytes());
+        for v in values {
+            bytes.extend(v.to_bits().to_le_bytes());
+        }
+    };
+    let stencil = cfd_craft::momentum_solve::Stencil::build(c, &g);
+    for (advection, limiter) in [
+        (MomentumAdvection::DonorCell, None),
+        (MomentumAdvection::SecondOrderUpwind, None),
+        (
+            MomentumAdvection::LimitedUpwind,
+            Some(MomentumLimiter::VanAlbada),
+        ),
+        (
+            MomentumAdvection::LimitedUpwind,
+            Some(MomentumLimiter::VanLeer),
+        ),
+        (
+            MomentumAdvection::LimitedUpwind,
+            Some(MomentumLimiter::MonotonizedCentral),
+        ),
+    ] {
+        let mut c = c.clone();
+        c.numerics.momentum_advection = advection;
+        c.numerics.momentum_limiter = limiter;
+        push(&flow::momentum_rhs(&c, &g, &u, &nut));
+    }
+    let matrix = if c.flow.rans() {
+        stencil.implicit_matrix_rans(c, &g, &u, &nut, 0.7)
+    } else {
+        stencil.implicit_matrix(&u, c.flow.viscosity(), 0.7)
+    };
+    push(&matrix.diagonal);
+    push(
+        &matrix
+            .off
+            .iter()
+            .flatten()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>(),
+    );
+    let mut applied = vec![0.0; u.len()];
+    matrix.apply(&stencil, &u, &mut applied);
+    push(&applied);
+    if c.flow.rans() {
+        let (mut k2, mut e2) = (k.clone(), eps.clone());
+        let info = cfd_craft::turbulence_solve::implicit_step(
+            c,
+            &g,
+            &u,
+            &mut k2,
+            &mut e2,
+            0.4,
+            &Control::new(60.0),
+        )
+        .unwrap();
+        push(&k2);
+        push(&e2);
+        push(&[info.iterations as f64, info.floor_events as f64]);
+    }
+    let concentration = wave(&vec![1.0; g.count()], 0.17);
+    let source = wave(&vec![1e-3; g.count()], 0.29);
+    let d = vec![0.02; g.count()];
+    for scheme in [Advection::LinearUpwind, Advection::Muscl] {
+        let r = transport::rhs(&g, &concentration, &u, &d, &source, scheme, |_| 0.0);
+        push(&r.values);
+        push(&[r.source, r.inflow, r.outflow]);
+    }
+    hash_bytes(&bytes)
+}
+
+#[test]
+fn kernels_keep_their_recorded_bits() {
+    let mut cavity: Case =
+        serde_json::from_str(include_str!("../../../cases/verification/lid-cavity.json")).unwrap();
+    cavity.grid.cells = [9, 3, 7];
+    let mut masked = cavity.clone();
+    masked.geometry.push(Block {
+        id: "step".into(),
+        min_m: [0.4, 0.0, 0.0],
+        max_m: [0.7, 1.0, 0.35],
+    });
+    let mut open: Case =
+        serde_json::from_str(include_str!("../../../cases/verification/poiseuille.json")).unwrap();
+    open.grid.cells = [7, 3, 6];
+    open.boundaries.x = Boundary::Open;
+    if let Flow::Laminar {
+        initial_velocity_m_s,
+        ..
+    } = &mut open.flow
+    {
+        *initial_velocity_m_s = [0.4, 0.0, 0.0];
+    }
+    let mut rans = canyon();
+    rans.grid.cells = [18, 6, 12];
+    let mut periodic = canyon();
+    periodic.grid.cells = [18, 2, 12];
+    periodic.boundaries.y = Boundary::Periodic;
+    let signatures: Vec<_> = [cavity, masked, open, rans, periodic]
+        .iter()
+        .map(kernel_signature)
+        .collect();
+    // Recorded before the performance iterations (stage P5c/P5d code).
+    let expected = [
+        "1c496fb4b81741b42cc989e45e496c257afc340f721b277252900f89e21543ab",
+        "05ec7b8ea4ff3c721cf790452413f8d473fb3e3d2ab82b9535f713f701729adc",
+        "b77bfad0124234a51cc41cd495902ee77f82422a408d0ad6d92fbea02e4ef457",
+        "9d7a56c57237360196067b4e022d20f63e53a109002f1645291040c7bf74daf7",
+        "15fc8260d766cf4432f4878b65b989d768518c5e19d3244389f0e534e7277eb3",
+    ];
+    assert_eq!(signatures, expected);
 }

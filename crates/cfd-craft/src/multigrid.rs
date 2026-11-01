@@ -780,8 +780,14 @@ mod tests {
     #[test]
     fn the_fixed_cycle_is_linear_symmetric_and_positive_on_its_entire_subspace() {
         for boundary in [Boundary::Wall, Boundary::Periodic, Boundary::Open] {
-            for scales in [[1., 1., 1.], [0.02, 1., 1.], [0.02, 1., 0.02]] {
-                let mut g = grid([5, 3, 3], boundary);
+            for (n, scales) in [
+                ([5, 3, 3], [1., 1., 1.]),
+                ([5, 3, 3], [0.02, 1., 1.]),
+                ([5, 3, 3], [0.02, 1., 0.02]),
+                // One cell on the periodic axis: a two-dimensional grid.
+                ([5, 1, 4], [1., 1., 1.]),
+            ] {
+                let mut g = grid(n, boundary);
                 for (d, s) in g.dx.iter_mut().zip(scales) {
                     *d *= s;
                 }

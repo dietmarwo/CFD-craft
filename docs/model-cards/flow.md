@@ -8,9 +8,112 @@ Within one face evaluation, the advective samples and the viscous coefficients
 use the same staggered neighbor faces: wall ghosts at wall and blocked faces,
 periodic wrapping and outlet sampling.
 
-The momentum predictor uses first-order donor-cell advection of each staggered velocity component and an explicit variable-viscosity stencil. The extra variable-viscosity symmetric-stress contribution is reconstructed from cell gradients under the incompressibility assumption. It is not a claim of globally second-order momentum accuracy.
+By default the momentum predictor uses first-order donor-cell advection of each staggered velocity component and an explicit variable-viscosity stencil. The extra variable-viscosity symmetric-stress contribution is reconstructed from cell gradients under the incompressibility assumption. It is not a claim of globally second-order momentum accuracy.
+
+`numerics.momentum_advection` selects, opt-in, a conservative flux form of the
+advective term instead (Harlow and Welch, 1965; Morinishi, Lund, Vasilyev and
+Moin, 1998; Ferziger, Perić and Street, ch. 7):
+
+- each momentum control volume is centered on its face; the advecting velocity
+  on a control-volume face is the MAC average of the two face velocities that
+  meet there;
+- the transported component is reconstructed upwind, φ_f = φ_U + ½·s(a, b)
+  with a = φ_U − φ_UU and b = φ_D − φ_U (van Leer, 1974, in Sweby's 1984
+  notation), division-free;
+- `second_order_upwind` uses s = a (unlimited, not bounded). `limited_upwind`
+  with `numerics.momentum_limiter` uses van Albada (van Albada, van Leer and
+  Roberts, 1982), van Leer, or monotonized central (van Leer, 1977);
+- every control-volume face carries one flux shared by its two momentum cells,
+  so momentum is conserved to round-off in a periodic box;
+- the near samples at walls and solids use the same ghost values as the viscous
+  term. Where the far-upwind sample is not an interior face, that face falls
+  back to s = 0 (first order), so no stencil reaches through a solid.
+
+At an open boundary (stage P3b) the outer half of an outlet's momentum cell
+advects with the outlet face velocity and a zero-gradient value (s = 0); its
+tangential faces extrapolate the inside cell's advecting velocity. Inflow faces
+are prescribed. With `neutral_rans` the near-wall samples use the wall-function
+ghosts as before, and the k and ε equations keep their first-order upwind
+transport. These closures passed the empty-ABL check with unchanged gates and
+the development canyon with zero floor events for all four schemes before
+`neutral_rans` was allowed. Donor-cell remains the default, and default runs
+are byte-identical to the earlier release. Time integration
+(SSPRK2 with a projection per stage) and the CFL cap are unchanged. The
+[second-order momentum results](../../validation/SECOND_ORDER_MOMENTUM_RESULTS.md)
+record operator orders of 2.06 (unlimited) and 1.92–1.95 mean L1 (limited),
+translating-vortex orders of 2.0–2.3, momentum conservation to 1e-16, bounded
+limited schemes, and a steady Re=100 cavity Ghia error of 0.005–0.006 at 24²,
+against 0.028 for donor-cell.
 
 An incremental projection is applied to each SSPRK2 velocity stage. Tests recover second-order decay for periodic viscous shear. General unsteady open-boundary pressure order is not established by that fixture. The intended urban use is a checked steady solution.
+
+### Steady pseudo-time algorithms
+
+In steady mode, `numerics.steady_algorithm` selects how pseudo-time advances.
+All options are written in delta form: they solve for a correction δ driven by
+the full steady residual R(u, p) = `momentum_rhs`(u) − G p, which is exactly
+what `assess` recomputes. Inexact inner solves, approximate Jacobians and the
+pseudo-time step change only the path; at a fixed point δ = 0 and the pressure
+correction is zero (Beam and Warming, 1978; Ferziger, Perić and Street, ch. 8).
+
+- `explicit` (default): SSPRK2 with a projection per stage, Δτ limited by
+  advection and diffusion together. Unchanged from the earlier release.
+- `implicit_viscous` (stage P4): the same SSPRK2 stages, each solving
+  (I − Δτ·ν·L) δ = Δτ·R with the existing viscous stencil (wall ghosts are
+  affine, so δ obeys the homogeneous ghost relation). Δτ follows the advective
+  limit only. Jacobi-preconditioned CG from δ = 0, relative tolerance 1e-3,
+  at most 50 iterations per solve.
+- `implicit_projection` (stage P5a): one outer iteration solves
+  A δ = R with A = I/Δτ + first-order upwind advection with advecting velocities
+  frozen at uⁿ (Picard) − ν·L. The second-order part of the advection enters
+  only through R (deferred correction: Khosla and Rubin, 1974; Hayase, Humphrey
+  and Greif, 1992). Then u* = uⁿ + δ is projected at scale Δτ and the pressure
+  correction is added in full. With a uniform Δτ, a_P − Σ a_nb = 1/Δτ away from
+  walls, the consistent SIMPLEC coefficient (Van Doormaal and Raithby, 1984), so
+  this is a SIMPLEC-type coupling. A is diagonally dominant with nonpositive
+  couplings. The inner solve is Jacobi-preconditioned BiCGStab (van der Vorst,
+  1992) from δ = 0 to a relative residual of 0.1, at most 50 iterations,
+  selected by a predeclared pilot against symmetric Gauss–Seidel. Pseudo-time
+  follows a deterministic CFL ramp CFL_n = min(5, 1.0·1.2ⁿ), Δτ = CFL_n / Σ_a
+  max|u_a|/h_a, capped by `max_time_step_s`; restarts need no extra state. The
+  cap of 5 was chosen on the development cases (24² and 48² cavities,
+  development canyon); before it the ramp grew to 1e6 and only
+  `max_time_step_s` bounded it. Each projection is a correction: at a fixed
+  point it requires div u = 0 whatever its inner tolerance, so a relTol-style
+  `pressure_relative_tolerance` of 0.1 changes the path, not the steady state.
+  The recommended implicit recipe is that tolerance with a non-binding
+  `max_time_step_s` (100) so the ramp sets the step
+  ([performance results](../../validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
+
+- `implicit_projection` with `neutral_rans` (stage P5c): A uses the face
+  viscosities of the momentum right-hand side (ν + ν_t, averaged with an
+  interior neighbor), and wall-function ghosts are linearized with ν_t and the
+  cell velocities lagged at uⁿ, because the wall functions are nonlinear. The
+  variable-viscosity cross term stays explicit. After the momentum–pressure
+  update, segregated implicit k and ε steps in delta form follow (see the
+  [turbulence package](#neutral-turbulence-package)).
+- Constituents (stage P5d) advance in explicit SSPRK2 sub-steps within each
+  outer iteration of either implicit algorithm: the fewest equal sub-steps of
+  at most the explicit stable step (the explicit algorithm's step formula at the
+  new velocity), capped at 16 steps of that size. The transport scheme, budgets,
+  positivity and receptors are those of the explicit step; only the pseudo-time
+  the constituents cover per outer iteration changes, and with it the path, not
+  the steady state.
+
+The implicit options run in steady mode only (CFD-E045). Prescribed flow, and
+`implicit_viscous` with RANS, are rejected (CFD-E047). A singular or nonfinite
+correction system stops the run with CFD-E056 (momentum) or CFD-E057 (k, ε).
+`steps` counts outer iterations, `physical_time_s` accumulates
+pseudo-time, and `momentum_solver_iterations` the inner iterations. Acceptance,
+the monitor window and all thresholds are unchanged. See the
+[implicit steady results](../../validation/IMPLICIT_STEADY_RESULTS.md): on the
+Re=100 cavity, `implicit_projection` reaches the unchanged gates in 180–300
+outer iterations, 18–40× faster than the explicit mode at the same accuracy.
+With RANS and a tracer ([P5c/P5d results](../../validation/IMPLICIT_RANS_RESULTS.md))
+it keeps the explicit fixed point (round-off pair to 1.5e-10), the empty-ABL
+check and zero floor events, and accepts the 27k and 93k canyons; the
+predeclared tightening statistic fails for U on one decade, where the
+difference is the explicit run's own convergence error.
 
 Stage V adds [momentum verification](../../validation/MOMENTUM_VERIFICATION_RESULTS.md)
 without changing these equations. Eight shifted periodic Taylor–Green operator
@@ -23,7 +126,7 @@ These are analytic verification fixtures, not experimental validation.
 
 ## Pressure
 
-The matrix-free operator is minus divergence times gradient. Internal faces have one shared flux. Pressure-outlet correction is zero; fixed normal-velocity faces use a homogeneous correction derivative. A closed fluid component has a mean-zero gauge and a compatibility check.
+The matrix-free operator is minus divergence times gradient. Internal faces have one shared flux. On a periodic axis with one cell (a two-dimensional run) a face joins a cell to itself; it carries no pressure difference, and the IC(0) factor skips it. Pressure-outlet correction is zero; fixed normal-velocity faces use a homogeneous correction derivative. A closed fluid component has a mean-zero gauge and a compatibility check.
 
 By default PCG uses a cached incomplete Cholesky factor with zero fill. A tiny shift regularizes only the preconditioner, not the solved operator. Recomputed residuals use the compatible mean-zero right-hand side in closed components. The nominal recurrent tolerance is checked against an independently formed operator residual, allowing a documented round-off margin of ten times the target plus 1e-12.
 
@@ -82,6 +185,20 @@ turbulence-step results on an open and a periodic canyon grid.
 
 Turbulence destruction terms use positive implicit denominators. Wall epsilon is an explicit algebraic constraint; tiny k/epsilon floors are counted. Any floor event prevents numerical acceptance. Excessive eddy viscosity causes a reported divergence instead of silent clipping.
 
+With `steady_algorithm = implicit_projection` (stage P5c), each outer
+iteration solves, after the momentum–pressure update,
+(I/Δτ − T_k + ε/k) δk = T_k(k) + P − ε and
+(I/Δτ − T_ε + C_ε2 ε/k) δε = T_ε(ε) + C_ε1 P ε/k − C_ε2 ε²/k.
+T is the first-order upwind transport of the explicit step (its linear part,
+including the upper-boundary diffusion term); P, the diffusivities, ε/k and the
+wall functions are lagged at the start of the iteration, and the implicit
+destruction terms are the explicit step's. Wall-function cells keep the
+algebraic ε, as identity rows δε = ε_wall − ε. Each solve is Jacobi-preconditioned
+BiCGStab from δ = 0 to a relative residual of 0.1, at most 50 iterations,
+profiled as `turbulence_solve`. Floors are counted as in the explicit step. At a
+fixed point δ = 0, so the explicit step's residuals are zero there too; the
+steady residual is measured with the explicit step size for every algorithm.
+
 The counter covers state-update floors. The wall algebraic relation itself has a minimum epsilon of 1e-14 and is not separately counted by that field; its activity must be treated as an additional regime check before physical qualification.
 
 ## Evidence and limitations
@@ -90,4 +207,4 @@ Verification covers Poisson/projection identities, gauges, analytic channels, Co
 
 The illustrative canyon examples are not exact CODASC geometry/inflow reproductions. Their coarse-grid numerical convergence does not validate urban dispersion. Fine-grid pressure/explicit-time throughput is an open performance gate. No buoyancy, stratification, traffic turbulence, particles, vegetation, chemistry or unsteady turbulent statistics are represented.
 
-Method references: Richards and Hoxey (1993), Richards and Norris (2011), and the [OpenFOAM atmospheric-boundary implementation documentation](https://cpp.openfoam.org/v13/atmBoundaryLayer_8H_source.html). No OpenFOAM source code is included.
+Method references: Richards and Hoxey (1993), Richards and Norris (2011), and Hargreaves and Wright, "On the use of the k–ε model in commercial CFD software to model the neutral atmospheric boundary layer", J. Wind Eng. Ind. Aerodyn. 95 (2007) 355–369. No OpenFOAM source code is included or was consulted for these methods.

@@ -21,6 +21,9 @@ NATIVE_NUMERICS = dict(
     momentum_advection=("second_order_upwind", "limited_upwind"),
     momentum_limiter=("van_albada", "van_leer", "monotonized_central"),
     steady_algorithm=("implicit_viscous", "implicit_projection"),
+    # Inexact inner projections for the implicit steady algorithm (relTol-style);
+    # the steady gates, including local continuity, are unchanged.
+    pressure_relative_tolerance=(0.1, 0.01),
 )
 
 
@@ -29,7 +32,10 @@ def native_numerics_selection(selection):
     require(
         isinstance(selection, dict)
         and all(
-            type(k) is str and k in NATIVE_NUMERICS and v in NATIVE_NUMERICS[k]
+            type(k) is str
+            and k in NATIVE_NUMERICS
+            and type(v) in (str, float)
+            and v in NATIVE_NUMERICS[k]
             for k, v in selection.items()
         ),
         "native_numerics",

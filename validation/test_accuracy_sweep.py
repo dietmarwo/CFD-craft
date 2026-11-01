@@ -91,11 +91,24 @@ class Sweep(unittest.TestCase):
             list(report["plan"]["limits"]["native_numerics"]),
             ["momentum_advection", "momentum_limiter"],
         )
+        self.assertEqual(
+            s.native_numerics_selection(
+                dict(
+                    steady_algorithm="implicit_projection",
+                    pressure_relative_tolerance=0.1,
+                )
+            ),
+            dict(
+                pressure_relative_tolerance=0.1, steady_algorithm="implicit_projection"
+            ),
+        )
         for value in [
             [],
             dict(momentum_advection="donor_cell"),
             dict(unknown="x"),
             dict(momentum_limiter=True),
+            dict(pressure_relative_tolerance=0.5),
+            dict(pressure_relative_tolerance="0.1"),
         ]:
             with self.subTest(value=value):
                 with self.assertRaisesRegex(ValueError, "sweep.native_numerics"):

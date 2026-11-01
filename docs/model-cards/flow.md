@@ -29,9 +29,15 @@ Moin, 1998; Ferziger, Perić and Street, ch. 7):
   term. Where the far-upwind sample is not an interior face, that face falls
   back to s = 0 (first order), so no stencil reaches through a solid.
 
-Open boundaries (CFD-E038) and `neutral_rans` (CFD-E039) are rejected with these
-schemes until their closures are verified; donor-cell remains the default, and
-default runs are byte-identical to the earlier release. Time integration
+At an open boundary (stage P3b) the outer half of an outlet's momentum cell
+advects with the outlet face velocity and a zero-gradient value (s = 0); its
+tangential faces extrapolate the inside cell's advecting velocity. Inflow faces
+are prescribed. With `neutral_rans` the near-wall samples use the wall-function
+ghosts as before, and the k and ε equations keep their first-order upwind
+transport. These closures passed the empty-ABL check with unchanged gates and
+the development canyon with zero floor events for all four schemes before
+`neutral_rans` was allowed. Donor-cell remains the default, and default runs
+are byte-identical to the earlier release. Time integration
 (SSPRK2 with a projection per stage) and the CFL cap are unchanged. The
 [second-order momentum results](../../validation/SECOND_ORDER_MOMENTUM_RESULTS.md)
 record operator orders of 2.06 (unlimited) and 1.92–1.95 mean L1 (limited),
@@ -159,4 +165,4 @@ Verification covers Poisson/projection identities, gauges, analytic channels, Co
 
 The illustrative canyon examples are not exact CODASC geometry/inflow reproductions. Their coarse-grid numerical convergence does not validate urban dispersion. Fine-grid pressure/explicit-time throughput is an open performance gate. No buoyancy, stratification, traffic turbulence, particles, vegetation, chemistry or unsteady turbulent statistics are represented.
 
-Method references: Richards and Hoxey (1993), Richards and Norris (2011), and the [OpenFOAM atmospheric-boundary implementation documentation](https://cpp.openfoam.org/v13/atmBoundaryLayer_8H_source.html). No OpenFOAM source code is included.
+Method references: Richards and Hoxey (1993), Richards and Norris (2011), and Hargreaves and Wright, "On the use of the k–ε model in commercial CFD software to model the neutral atmospheric boundary layer", J. Wind Eng. Ind. Aerodyn. 95 (2007) 355–369. No OpenFOAM source code is included or was consulted for these methods.

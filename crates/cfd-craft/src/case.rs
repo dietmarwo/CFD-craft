@@ -563,24 +563,6 @@ impl Case {
             ),
             _ => {}
         }
-        if self.numerics.momentum_advection != MomentumAdvection::DonorCell {
-            if (0..3).any(|a| self.boundaries.at(a) == Boundary::Open) {
-                add(
-                    "CFD-E038",
-                    "error",
-                    "numerics.momentum_advection",
-                    "Second-order momentum advection has no outlet or inflow closure yet; use donor_cell with open boundaries.",
-                );
-            }
-            if self.flow.rans() {
-                add(
-                    "CFD-E039",
-                    "error",
-                    "numerics.momentum_advection",
-                    "Second-order momentum advection is not verified with neutral_rans yet; use donor_cell.",
-                );
-            }
-        }
         if self.numerics.steady_algorithm != SteadyAlgorithm::Explicit {
             let path = "numerics.steady_algorithm";
             if self.run.mode != Mode::Steady {

@@ -507,7 +507,7 @@ fn shear_flows_have_no_advective_contribution() {
 }
 
 #[test]
-fn limiter_and_open_boundary_rules_are_coded_diagnostics() {
+fn limiter_rules_are_coded_diagnostics_and_defaults_are_unserialized() {
     let codes = |c: &Case| {
         c.check()
             .diagnostics
@@ -531,14 +531,22 @@ fn limiter_and_open_boundary_rules_are_coded_diagnostics() {
     {
         *initial_velocity_m_s = [1.0, 0.0, 0.0];
     }
-    assert!(codes(&c).contains(&("CFD-E038".into(), "numerics.momentum_advection".into())));
+    // Open boundaries have an outlet closure (P3b); no rejection remains.
+    assert!(codes(&c).is_empty(), "{:?}", codes(&c));
     let path = format!(
         "{}/../../cases/verification/empty-abl.json",
         env!("CARGO_MANIFEST_DIR")
     );
     let mut rans: Case = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     rans.numerics.momentum_advection = MomentumAdvection::SecondOrderUpwind;
-    assert!(codes(&rans).contains(&("CFD-E039".into(), "numerics.momentum_advection".into())));
+    // Stage P3b passed the empty-ABL and canyon checks; RANS is allowed.
+    assert!(
+        !codes(&rans)
+            .iter()
+            .any(|(_, p)| p.starts_with("numerics.momentum")),
+        "{:?}",
+        codes(&rans)
+    );
     // Defaults are not serialized, so existing case hashes are unchanged.
     let text = serde_json::to_string(&periodic(8)).unwrap();
     assert!(!text.contains("momentum_advection") && !text.contains("momentum_limiter"));
@@ -567,5 +575,81 @@ fn a_second_order_cavity_restarts_bit_for_bit() {
         let bits = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
         assert_eq!(bits(&whole.velocity), bits(&resumed.velocity), "{name}");
         assert_eq!(bits(&whole.pressure), bits(&resumed.pressure), "{name}");
+    }
+}
+
+fn open_channel(scheme: MomentumAdvection, limiter: Option<MomentumLimiter>) -> Case {
+    let mut c: Case =
+        serde_json::from_str(include_str!("../../../cases/verification/poiseuille.json")).unwrap();
+    c.grid.cells = [10, 2, 6];
+    c.domain.size_m = [2.0, 0.2, 0.5];
+    c.boundaries.x = Boundary::Open;
+    if let Flow::Laminar {
+        initial_velocity_m_s,
+        viscosity_m2_s,
+        acceleration_m_s2,
+    } = &mut c.flow
+    {
+        *initial_velocity_m_s = [0.4, 0.0, 0.0];
+        *viscosity_m2_s = 0.01;
+        *acceleration_m_s2 = [0.0; 3];
+    }
+    c.run.mode = Mode::Steady;
+    c.run.threads = 1;
+    with_scheme(c, scheme, limiter)
+}
+
+// Stage P3b: the outlet closure carries uniform flow through without an
+// advective contribution, at the outlet's own momentum cell as well.
+#[test]
+fn uniform_flow_crosses_inlet_and_outlet_without_advective_change() {
+    for (name, scheme, limiter) in SCHEMES {
+        let c = open_channel(scheme, limiter);
+        let g = Grid::build(&c).unwrap();
+        let mut u: Vec<_> = g
+            .faces
+            .iter()
+            .map(|f| if f.axis == 0 { 0.4 } else { 0.0 })
+            .collect();
+        g.enforce_velocity(&c, &mut u);
+        let rhs = flow::flux_form_advection(
+            &c,
+            &g,
+            &u,
+            &vec![0.0; g.count()],
+            flow::Reconstruction::of(&c.numerics).unwrap(),
+        );
+        assert!(
+            g.faces
+                .iter()
+                .any(|f| f.kind == cfd_craft::grid::FaceKind::Outlet)
+        );
+        for (i, v) in rhs.iter().enumerate() {
+            assert!(
+                v.abs() <= 1e-14,
+                "{name} face {i} {:?}: {v}",
+                g.faces[i].kind
+            );
+        }
+    }
+}
+
+#[test]
+fn open_channels_reach_the_steady_gates_with_every_scheme() {
+    use cfd_craft::solver::{Control, run};
+    for (name, scheme, limiter) in SCHEMES {
+        for algorithm in [
+            SteadyAlgorithm::Explicit,
+            SteadyAlgorithm::ImplicitProjection,
+        ] {
+            let mut c = open_channel(scheme, limiter);
+            c.numerics.steady_algorithm = algorithm;
+            let r = run(&c, &Control::new(120.0), None).unwrap();
+            assert_eq!(
+                r.summary.assessment, "steady_discrete_solution",
+                "{name} {algorithm:?}: {:?} {:?}",
+                r.summary.termination, r.summary.error
+            );
+        }
     }
 }

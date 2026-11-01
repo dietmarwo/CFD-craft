@@ -11,7 +11,8 @@ momentum advection on the staggered grid with an upwind-biased reconstruction
 (`second_order_upwind`, or `limited_upwind` with `numerics.momentum_limiter` =
 `van_albada`, `van_leer` or `monotonized_central`). Donor-cell stays the default.
 The method and its sources are in the [flow model card](../docs/model-cards/flow.md).
-Open boundaries (CFD-E038) and RANS (CFD-E039) are rejected until stage P3b.
+Stage P3b, at the end of this document, adds the open-boundary closure and
+allows `neutral_rans`.
 
 ## Gates
 
@@ -100,8 +101,9 @@ every scheme, and a near-side perturbation does change it.
   1e-12.
 - **Restart:** a 12² steady cavity run for 6 steps equals 3 steps plus a
   resumed 3, bit for bit, for every scheme.
-- **Diagnostics:** CFD-E037 (limiter rules), CFD-E038 (open boundaries) and
-  CFD-E039 (RANS) carry the field path; default numerics are not serialized.
+- **Diagnostics:** CFD-E037 (limiter rules) carries the field path; default
+  numerics are not serialized. P3a also rejected open boundaries and RANS
+  (CFD-E038, CFD-E039); stage P3b retired both codes after its gates passed.
 
 ### 7. Cavity sweep
 
@@ -175,3 +177,49 @@ against 0.63 s for OpenFOAM on the hosted runner: roughly 15×, where before
 P3a native needed 96² and about 826 s (roughly 1,300×). The hosts differ, so
 the hosted stage M measurement gives the actual ratio. Steps to a steady state
 (P4, P5a) and the cost per step are the remaining levers.
+
+## Stage P3b: open boundaries and RANS
+
+### Outlet closure
+
+The outer half of an outlet's momentum cell advects with the outlet face
+velocity and a zero-gradient value (s = 0), and its tangential faces
+extrapolate the inside cell's advecting velocity; inflow faces are prescribed.
+Tests (`tests/momentum.rs`):
+
+- uniform flow through an open channel has an advective contribution of at most
+  1e-14 on every face, including the outlets, for all four schemes;
+- the open channel (10×2×6, inflow 0.4 m/s) reaches the unchanged steady gates
+  with every scheme, in the explicit mode and with `implicit_projection`.
+
+While adding this, a defect in the P5a matrix showed up: at an outlet, the
+indices of its advecting velocities fell back to cell 0 and to the outlet's own
+face for a missing cell, so the Jacobian rows of outlet faces depended on
+unrelated velocities. The delta form kept the fixed point, but the path was
+wrong. `implicit_matrix_rows_at_an_outlet_use_only_adjacent_velocities` fails
+without the fix; the rows now use the same zero-gradient closure.
+
+### RANS
+
+Predeclared conditions for allowing the schemes with `neutral_rans`: the
+empty-ABL check with unchanged gates (2% U, 5% k and ε in H..5H), and the
+development canyon (W/H = 1, 270°, 18×16×12) reaching the steady gates with zero
+floor events. Both were run with a build that only lifted the rejection:
+
+| Scheme | ABL drift U / k / ε | ABL floors | Canyon steps | Canyon solver s | Canyon floors | Canyon gates |
+|---|---|---:|---:|---:|---:|---|
+| donor_cell (control) | 0.23% / 0.94% / 2.68% | 0 | 3,800 | 42.1 | 0 | pass |
+| second_order_upwind | 0.22% / 0.92% / 2.70% | 0 | 5,100 | 70.6 | 0 | pass |
+| van_albada | 0.23% / 0.88% / 2.72% | 0 | 3,100 | 45.4 | 0 | pass |
+| van_leer | 0.23% / 0.88% / 2.69% | 0 | 3,100 | 46.8 | 0 | pass |
+| monotonized_central | 0.22% / 0.89% / 2.66% | 0 | 3,000 | 43.5 | 0 | pass |
+
+All conditions hold, so `neutral_rans` is allowed with every scheme.
+`run_suite.py --abl-numerics '{"momentum_advection": ...}'` reproduces the ABL
+check; with van Leer the whole verification suite passes (drifts 0.22%, 0.88%,
+2.69%). The k and ε equations keep their first-order upwind transport.
+
+The canyon's receptor concentrations depend on the momentum scheme: sensor0 is
+9.6e-8 kg/m³ with donor-cell, 7.4e-8 with van Leer and 1.4e-7 with the unlimited
+scheme. That is numerical sensitivity on a coarse development grid, not a
+validation statement; the canyon validation gate is unchanged.

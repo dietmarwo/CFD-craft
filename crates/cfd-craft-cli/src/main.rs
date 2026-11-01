@@ -187,7 +187,7 @@ fn describe() -> Result<()> {
             "1":"invalid input or an execution/I/O error; check reports are printed on stdout",
             "2":"completed execution with incomplete or failed numerical evidence"},
         "experimental_validation":"not_validated",
-        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum by default; opt-in second-order momentum without open boundaries or RANS","explicit diffusion and pseudo-time by default; opt-in implicit steady pseudo-time for laminar flow without constituents","no particles, vegetation, LES, annual statistics or GPU"]
+        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum by default; opt-in second-order momentum","explicit diffusion and pseudo-time by default; opt-in implicit steady pseudo-time for laminar flow without constituents","no particles, vegetation, LES, annual statistics or GPU"]
     }))
 }
 

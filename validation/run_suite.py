@@ -47,6 +47,12 @@ def main():
     ap.add_argument(
         "--pressure-preconditioner", choices=["ic0", "multigrid"], default="ic0"
     )
+    ap.add_argument(
+        "--abl-numerics",
+        type=json.loads,
+        default={},
+        help='Numerics overrides of the empty-ABL case, as JSON, e.g. \'{"momentum_advection": "second_order_upwind"}\'',
+    )
     args = ap.parse_args()
     args.output.mkdir()
     records = []
@@ -117,6 +123,8 @@ def main():
         p = json.loads((ROOT / "cases/verification/empty-abl.json").read_text())
         if args.pressure_preconditioner != "ic0":
             p["numerics"]["pressure_preconditioner"] = args.pressure_preconditioner
+        # Opt-in momentum numerics for the unchanged ABL gate (stage P3b evidence).
+        p["numerics"].update(args.abl_numerics)
         r = run_case(args.binary, p, args.output / "empty-abl")
         records.append(r)
         require(accepted(r), "ABL numerical run")

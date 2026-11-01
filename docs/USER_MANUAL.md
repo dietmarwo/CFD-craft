@@ -226,8 +226,8 @@ selecting scalar MUSCL does not make momentum second order. Opt-in
 `numerics.momentum_advection` selects a conservative second-order flux form:
 `second_order_upwind` (unlimited) or `limited_upwind` with
 `numerics.momentum_limiter` = `van_albada`, `van_leer` or `monotonized_central`.
-It supports walls, moving walls, slip, periodic axes and masks; open boundaries
-and RANS are rejected (CFD-E038, CFD-E039). See the
+It supports walls, moving walls, slip, periodic axes, masks, open boundaries
+(with a zero-gradient outlet closure) and `neutral_rans`. See the
 [flow model card](model-cards/flow.md). Diffusion and advection constrain
 the timestep. `max_time_step_s` is a ceiling, not a promise of fixed dt.
 

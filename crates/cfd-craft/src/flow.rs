@@ -228,10 +228,13 @@ pub fn flux_form_advection(
         up_d[d] = 1;
         let mut d_back_a = up_d;
         d_back_a[a] = -1;
-        let (Some(d0), Some(d1)) = (at(d, up_d), at(d, d_back_a)) else {
-            return 0.0;
+        // At an outlet's momentum cell only the inside cell's d-face exists; its
+        // velocity is extrapolated (zero gradient) to the outer half.
+        let advecting = match (at(d, up_d), at(d, d_back_a)) {
+            (Some(d0), Some(d1)) => 0.5 * (u[d0] + u[d1]),
+            (Some(d0), None) | (None, Some(d0)) => u[d0],
+            (None, None) => return 0.0,
         };
-        let advecting = 0.5 * (u[d0] + u[d1]);
         let low = interior(g, at(a, [0; 3]));
         let high = interior(g, at(a, up_d));
         let value = |own: Option<usize>, other: Option<usize>, side: isize| -> Option<f64> {
@@ -262,7 +265,8 @@ pub fn flux_form_advection(
     };
     g.faces
         .par_iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(fi, f)| {
             if !matches!(f.kind, FaceKind::Interior | FaceKind::Outlet) {
                 return 0.0;
             }
@@ -271,7 +275,14 @@ pub fn flux_form_advection(
             let mut rhs = 0.0;
             for d in 0..3 {
                 let (low, high) = if d == a {
-                    (center_flux(a, f.lo.unwrap()), center_flux(a, f.hi.unwrap()))
+                    // Outlet closure: the outer half of an outlet's momentum cell
+                    // advects with the outlet velocity and a zero-gradient value
+                    // (s = 0); an inflow face is prescribed and has no equation.
+                    let outer = u[fi] * u[fi];
+                    (
+                        f.lo.map_or(outer, |cell| center_flux(a, cell)),
+                        f.hi.map_or(outer, |cell| center_flux(a, cell)),
+                    )
                 } else {
                     let mut below = q;
                     below[d] -= 1;

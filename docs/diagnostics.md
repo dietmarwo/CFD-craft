@@ -69,8 +69,6 @@ more than the host can hold.
 | CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |
 | CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
 | CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
-| CFD-E038 | error | `numerics.momentum_advection`: a second-order momentum scheme with an open boundary, which has no verified outlet or inflow closure yet |
-| CFD-E039 | error | `numerics.momentum_advection`: a second-order momentum scheme with `neutral_rans`, not yet verified with the empty-ABL check |
 | CFD-E045 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm in transient mode |
 | CFD-E046 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with constituents, whose explicit transport limits its steps would exceed |
 | CFD-E047 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with `neutral_rans` or prescribed flow |

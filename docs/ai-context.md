@@ -12,7 +12,9 @@ Opt-in conservative second-order momentum advection (P3a,
 donor-cell needed 96². Opt-in `numerics.steady_algorithm = implicit_projection`
 (P5a, a SIMPLEC-type implicit correction with a projection per outer iteration)
 reaches the unchanged steady gates 18–40× faster than the explicit march; see
-the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). Keep the
+the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). With
+both, the hosted paired sweep has native at 0.74× OpenFOAM's solver time at the
+0.01 target ([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)). Keep the
 default donor-cell/explicit path, acceptance thresholds and failed measurements.
 
 CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.

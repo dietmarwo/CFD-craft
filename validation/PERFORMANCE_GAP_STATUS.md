@@ -1,5 +1,21 @@
 # Performance gap: current state and remaining stages
 
+## Matched accuracy after P3a and P5a (1 November 2026)
+
+With opt-in `limited_upwind`/`van_leer` momentum advection (P3a) and the
+`implicit_projection` steady algorithm (P5a), the hosted paired sweep
+([matched-accuracy results](MATCHED_ACCURACY_RESULTS.md), run 41345659321)
+accepted all 32 rows. Both backends first reach 0.01 Ghia error at 24², where
+native takes **0.74× OpenFOAM's solver time** (0.549 against 0.743 s) and 0.45×
+its workflow time, with error 0.0054 against 0.0090. From 24² up native is faster
+and more accurate on every shared grid (0.51× solver time at 48²). Before these
+stages, native needed 96² and about 826 s to reach the target.
+
+Defaults are unchanged. Open work: the implicit algorithm for RANS (P5c) and
+scalar transport (P5d), which the canyon needs, and a decision on defaults.
+Details: [second-order momentum](SECOND_ORDER_MOMENTUM_RESULTS.md) and
+[implicit steady](IMPLICIT_STEADY_RESULTS.md) results.
+
 ## Stage V accuracy baseline (1 November 2026)
 
 Stage V, the first stage of the [accuracy/steady-solver plan](../docs/ACCURACY_STEADY_PLAN.md),

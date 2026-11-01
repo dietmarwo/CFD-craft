@@ -39,7 +39,7 @@ more than the host can hold.
 | CFD-E001 | error | Unsupported `schema_version` |
 | CFD-E002 | error | Empty `name` |
 | CFD-E003 | error | A domain length outside 1e-6..1e9 m |
-| CFD-E004 | error | An axis with fewer than 2 or more than 4096 cells |
+| CFD-E004 | error | An axis with fewer than 2 (1 on a periodic axis) or more than 4096 cells |
 | CFD-E005 | error | `ground_open_top` on x or y |
 | CFD-E006 | error | Estimated peak memory above `run.memory_limit_mib`, or more than 1e8 cells |
 | CFD-E007 | error | Estimated artifacts above `output.max_total_mib` |
@@ -70,8 +70,7 @@ more than the host can hold.
 | CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
 | CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
 | CFD-E045 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm in transient mode |
-| CFD-E046 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with constituents, whose explicit transport limits its steps would exceed |
-| CFD-E047 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with `neutral_rans` or prescribed flow |
+| CFD-E047 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with prescribed flow, or `implicit_viscous` with `neutral_rans` |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
@@ -102,6 +101,7 @@ Codes from a run, a restart or `report`, reported in `summary.json` `error` or o
 | CFD-E054 | Eddy viscosity outside the declared numerical regime |
 | CFD-E055 | The time step is not finite and positive |
 | CFD-E056 | An implicit momentum-correction system is nonfinite or singular, or its CG lost positive definiteness |
+| CFD-E057 | An implicit k or ε correction system is nonfinite or singular |
 | CFD-E060 | Checkpoint identity or checksum mismatch |
 | CFD-E061 | Fields or checkpoint omitted because they would exceed the output budget; the manifest lists them under `omitted` and the run exits 2. `report` repeats the code on stderr for such an archive and exits 0 |
 | CFD-E062 | The output directory already exists |
@@ -174,8 +174,9 @@ an invalid self-reference/profile (`self.*`), or output/argument errors
 An intentional stability iteration limit is recorded separately from numerical
 acceptance. `CFD-B008 steady.<field>` identifies a failed implicit steady-algorithm
 campaign (`validation/steady_algorithms.py`): a run that misses the unchanged
-gates (`<run name>`), fields of different shape (`fields`), a failed fixed-point
-shrink gate (`fixed_point`), unknown schemes (`schemes`) or output errors. Explicit cavity grid selectors use
+gates (`<run name>`), fields of different shape or a zero canyon reference field
+(`fields`), a failed fixed-point shrink gate (`fixed_point`), unknown schemes
+(`schemes`) or output errors, for the cavity and for the `--case canyon` campaign. Explicit cavity grid selectors use
 `CFD-X001 recipe.cavity_grid`; shared sweep grids use `CFD-B004 sweep.grids`.
 
 `CFD-B004 sweep.collection.<run_directory>` rejects an archive that passed its

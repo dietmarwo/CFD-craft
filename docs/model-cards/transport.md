@@ -4,6 +4,14 @@ Solve a cell-integrated advection–diffusion balance using the projected face f
 
 The linear reference uses donor-cell upwind. The higher-order option uses monotonized-central MUSCL reconstruction with SSPRK2. Timestep restrictions account for advective and diffusive rates, and cap the combined allowance at 0.45. Observed convergence is measured; limiter behavior can reduce order for other fields.
 
+With an implicit steady flow algorithm (`numerics.steady_algorithm`, stage
+P5d), the same SSPRK2 step runs in sub-steps within each outer iteration: the
+fewest equal sub-steps of at most the explicit stable step, capped at 16 such
+steps (`solver::SCALAR_SUBSTEPS_MAX`). Every sub-step keeps the explicit step's
+stability limits, budgets and positivity, so the steady state, its mass balance
+and the receptors do not depend on the pseudo-time step; only the number of
+outer iterations to reach them does.
+
 Domain walls/slip faces and masked solids have no scalar flux. Inlets use zero local-increment concentration, including scalar backflow values. Pressure outlets have zero diffusive gradient. Background concentration is a separately interpreted physical contribution.
 
 Point sources use the containing cell. Lines are split at exact grid crossings and normalized by physical length. Volumes use Cartesian overlap and the declared volumetric rate. Source support intersecting a solid is rejected; there is no silent redistribution or clipping.

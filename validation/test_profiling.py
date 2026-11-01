@@ -125,9 +125,7 @@ class Profiling(unittest.TestCase):
         self.assertTrue(check(out)["integrity_passed"])
 
     def test_implicit_turbulence_work_is_recorded_and_validated(self):
-        self.case = json.loads(
-            (ROOT / "cases/verification/empty-abl.json").read_text()
-        )
+        self.case = json.loads((ROOT / "cases/verification/empty-abl.json").read_text())
         self.case["grid"]["cells"] = [6, 2, 8]
         self.case["run"].update(threads=1, mode="steady", max_steps=5)
         self.case["numerics"]["steady_algorithm"] = "implicit_projection"

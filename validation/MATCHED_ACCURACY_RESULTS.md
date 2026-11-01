@@ -48,6 +48,16 @@ about 826 s to reach 0.01. The changes, each opt-in:
 | P3a: `limited_upwind`/`van_leer` momentum advection | Ghia error 0.0276 → 0.0054; the target is reached at 24² instead of 96² |
 | P5a: `implicit_projection` steady algorithm | 2,460 explicit steps → 210 outer iterations; solver time 9.4 → 0.51 s |
 
+The explicit mode with the same scheme isolates the two levers. In the
+accuracy sweep of [run 41346827479](https://github.com/dietmarwo/CFD-craft/actions/runs/41346827479)
+(`external=accuracy`, `native_numerics={"momentum_advection": "limited_upwind", "momentum_limiter": "van_leer"}`,
+branch head `4973d3c`, AMD EPYC 7763, 4 CPUs, three rounds), van Leer with the
+explicit steady mode also first reaches the target at 24² (Ghia error 0.00544,
+OpenFOAM 0.00897), but its solver time there is 11.19 s against OpenFOAM's
+0.844 s, **13.25×** (workflow 7.47×). At 48² it takes 136.5 s against 6.48 s.
+So P3a moves the target to the coarse grid, and P5a removes the cost of the
+explicit pseudo-time on it.
+
 ## Other results of the run
 
 - **Momentum fixtures (van Leer):** translating-vortex orders 2.159 / 2.062 /

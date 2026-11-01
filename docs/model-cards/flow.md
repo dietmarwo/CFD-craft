@@ -74,18 +74,46 @@ correction is zero (Beam and Warming, 1978; Ferziger, Perić and Street, ch. 8).
   couplings. The inner solve is Jacobi-preconditioned BiCGStab (van der Vorst,
   1992) from δ = 0 to a relative residual of 0.1, at most 50 iterations,
   selected by a predeclared pilot against symmetric Gauss–Seidel. Pseudo-time
-  follows a deterministic CFL ramp CFL_n = 1.0·1.2ⁿ, Δτ = CFL_n / Σ_a
-  max|u_a|/h_a, capped by `max_time_step_s`; restarts need no extra state.
+  follows a deterministic CFL ramp CFL_n = min(5, 1.0·1.2ⁿ), Δτ = CFL_n / Σ_a
+  max|u_a|/h_a, capped by `max_time_step_s`; restarts need no extra state. The
+  cap of 5 was chosen on the development cases (24² and 48² cavities,
+  development canyon); before it the ramp grew to 1e6 and only
+  `max_time_step_s` bounded it. Each projection is a correction: at a fixed
+  point it requires div u = 0 whatever its inner tolerance, so a relTol-style
+  `pressure_relative_tolerance` of 0.1 changes the path, not the steady state.
+  The recommended implicit recipe is that tolerance with a non-binding
+  `max_time_step_s` (100) so the ramp sets the step
+  ([performance results](../../validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
 
-The implicit options support laminar flow in steady mode without constituents.
-Transient mode (CFD-E045), constituents (CFD-E046) and RANS or prescribed flow
-(CFD-E047) are rejected. A singular or nonfinite correction system stops the run
-with CFD-E056. `steps` counts outer iterations, `physical_time_s` accumulates
+- `implicit_projection` with `neutral_rans` (stage P5c): A uses the face
+  viscosities of the momentum right-hand side (ν + ν_t, averaged with an
+  interior neighbor), and wall-function ghosts are linearized with ν_t and the
+  cell velocities lagged at uⁿ, because the wall functions are nonlinear. The
+  variable-viscosity cross term stays explicit. After the momentum–pressure
+  update, segregated implicit k and ε steps in delta form follow (see the
+  [turbulence package](#neutral-turbulence-package)).
+- Constituents (stage P5d) advance in explicit SSPRK2 sub-steps within each
+  outer iteration of either implicit algorithm: the fewest equal sub-steps of
+  at most the explicit stable step (the explicit algorithm's step formula at the
+  new velocity), capped at 16 steps of that size. The transport scheme, budgets,
+  positivity and receptors are those of the explicit step; only the pseudo-time
+  the constituents cover per outer iteration changes, and with it the path, not
+  the steady state.
+
+The implicit options run in steady mode only (CFD-E045). Prescribed flow, and
+`implicit_viscous` with RANS, are rejected (CFD-E047). A singular or nonfinite
+correction system stops the run with CFD-E056 (momentum) or CFD-E057 (k, ε).
+`steps` counts outer iterations, `physical_time_s` accumulates
 pseudo-time, and `momentum_solver_iterations` the inner iterations. Acceptance,
 the monitor window and all thresholds are unchanged. See the
 [implicit steady results](../../validation/IMPLICIT_STEADY_RESULTS.md): on the
 Re=100 cavity, `implicit_projection` reaches the unchanged gates in 180–300
 outer iterations, 18–40× faster than the explicit mode at the same accuracy.
+With RANS and a tracer ([P5c/P5d results](../../validation/IMPLICIT_RANS_RESULTS.md))
+it keeps the explicit fixed point (round-off pair to 1.5e-10), the empty-ABL
+check and zero floor events, and accepts the 27k and 93k canyons; the
+predeclared tightening statistic fails for U on one decade, where the
+difference is the explicit run's own convergence error.
 
 Stage V adds [momentum verification](../../validation/MOMENTUM_VERIFICATION_RESULTS.md)
 without changing these equations. Eight shifted periodic Taylor–Green operator
@@ -98,7 +126,7 @@ These are analytic verification fixtures, not experimental validation.
 
 ## Pressure
 
-The matrix-free operator is minus divergence times gradient. Internal faces have one shared flux. Pressure-outlet correction is zero; fixed normal-velocity faces use a homogeneous correction derivative. A closed fluid component has a mean-zero gauge and a compatibility check.
+The matrix-free operator is minus divergence times gradient. Internal faces have one shared flux. On a periodic axis with one cell (a two-dimensional run) a face joins a cell to itself; it carries no pressure difference, and the IC(0) factor skips it. Pressure-outlet correction is zero; fixed normal-velocity faces use a homogeneous correction derivative. A closed fluid component has a mean-zero gauge and a compatibility check.
 
 By default PCG uses a cached incomplete Cholesky factor with zero fill. A tiny shift regularizes only the preconditioner, not the solved operator. Recomputed residuals use the compatible mean-zero right-hand side in closed components. The nominal recurrent tolerance is checked against an independently formed operator residual, allowing a documented round-off margin of ten times the target plus 1e-12.
 
@@ -156,6 +184,20 @@ regression test pins the bit patterns of the momentum, production and
 turbulence-step results on an open and a periodic canyon grid.
 
 Turbulence destruction terms use positive implicit denominators. Wall epsilon is an explicit algebraic constraint; tiny k/epsilon floors are counted. Any floor event prevents numerical acceptance. Excessive eddy viscosity causes a reported divergence instead of silent clipping.
+
+With `steady_algorithm = implicit_projection` (stage P5c), each outer
+iteration solves, after the momentum–pressure update,
+(I/Δτ − T_k + ε/k) δk = T_k(k) + P − ε and
+(I/Δτ − T_ε + C_ε2 ε/k) δε = T_ε(ε) + C_ε1 P ε/k − C_ε2 ε²/k.
+T is the first-order upwind transport of the explicit step (its linear part,
+including the upper-boundary diffusion term); P, the diffusivities, ε/k and the
+wall functions are lagged at the start of the iteration, and the implicit
+destruction terms are the explicit step's. Wall-function cells keep the
+algebraic ε, as identity rows δε = ε_wall − ε. Each solve is Jacobi-preconditioned
+BiCGStab from δ = 0 to a relative residual of 0.1, at most 50 iterations,
+profiled as `turbulence_solve`. Floors are counted as in the explicit step. At a
+fixed point δ = 0, so the explicit step's residuals are zero there too; the
+steady residual is measured with the explicit step size for every algorithm.
 
 The counter covers state-update floors. The wall algebraic relation itself has a minimum epsilon of 1e-14 and is not separately counted by that field; its activity must be treated as an additional regime check before physical qualification.
 

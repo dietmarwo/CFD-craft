@@ -72,6 +72,13 @@ for `implicit_projection` (BiCGStab). The envelope then carries
 `summary.momentum_solver_iterations` to equal the attempted work for a run that
 ended without an error, and at most 50 iterations per solve.
 
+With `implicit_projection` and `neutral_rans`, `turbulence_solve` (inside
+`turbulence`) records the implicit k and ε correction solves of each outer
+iteration: one call per outer iteration, `work_units` the inner BiCGStab
+iterations of both solves, `operator_applications` two per iteration. The
+checker requires that relation, at most 2 × 50 iterations per call, and no
+`turbulence_solve` calls for other algorithms or laminar flow.
+
 Anisotropic levels add block updates, solves and level visits. The checker
 requires two block updates per block-level visit and total smoothing updates
 `4 * residual_cell_updates - 2 * block_level_cell_visits`. Point-only records

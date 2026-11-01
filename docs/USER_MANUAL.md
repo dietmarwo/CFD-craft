@@ -238,12 +238,19 @@ the timestep. `max_time_step_s` is a ceiling, not a promise of fixed dt.
 pass; `end_time_s` does not bound a steady run (`max_steps` and the wall-time
 limit do), and its `physical_time_s` is pseudo-time. By default it does not
 select an implicit SIMPLE-type method. Opt-in `numerics.steady_algorithm`
-selects `implicit_viscous` (SSPRK2 with implicit viscosity) or
+selects `implicit_viscous` (SSPRK2 with implicit viscosity, laminar) or
 `implicit_projection` (one implicit correction and one projection per outer
-iteration, a SIMPLEC-type coupling with a CFL ramp), for laminar steady runs
-without constituents; acceptance is unchanged. `implicit_projection` with
-`limited_upwind`/`van_leer` reached the cavity's gates about 18–40× faster than
-the explicit mode in the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). `transient` completes a
+iteration, a SIMPLEC-type coupling with a CFL ramp, also with `neutral_rans`
+through implicit k and ε steps) for steady runs; constituents advance in
+explicit sub-steps within each outer iteration. Acceptance is unchanged.
+`implicit_projection` with `limited_upwind`/`van_leer` reached the cavity's
+gates about 18–40× faster than the explicit mode in the
+[implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md), and the
+canyon with its tracer 21–52× faster with the recipe
+`"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`, which changes
+the path to the steady state, not the state
+([P5c/P5d](../validation/IMPLICIT_RANS_RESULTS.md),
+[performance](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)). `transient` completes a
 physical interval and has its own acceptance meaning. Pressure iteration work,
 actual face-flux continuity and boundary balance are separate recorded checks.
 

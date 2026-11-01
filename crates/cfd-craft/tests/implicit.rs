@@ -429,3 +429,67 @@ fn implicit_projection_cavities_restart_bit_for_bit_and_ramp_deterministically()
         assert!((dt - (cfl / rate).min(0.1)).abs() <= 1e-14, "{steps}: {dt}");
     }
 }
+
+fn open_channel() -> Case {
+    let mut c = load("poiseuille.json");
+    c.grid.cells = [10, 2, 6];
+    c.domain.size_m = [2.0, 0.2, 0.5];
+    c.boundaries.x = Boundary::Open;
+    if let Flow::Laminar {
+        initial_velocity_m_s,
+        viscosity_m2_s,
+        acceleration_m_s2,
+    } = &mut c.flow
+    {
+        *initial_velocity_m_s = [0.4, 0.0, 0.0];
+        *viscosity_m2_s = 0.01;
+        *acceleration_m_s2 = [0.0; 3];
+    }
+    c.run.mode = Mode::Steady;
+    c.run.threads = 1;
+    c
+}
+
+// The outlet momentum cell lies half outside the domain: its outer advecting
+// velocity is the outlet face's own (zero-gradient), never a velocity sampled
+// elsewhere in the grid.
+#[test]
+fn implicit_matrix_rows_at_an_outlet_use_only_adjacent_velocities() {
+    let c = open_channel();
+    let g = Grid::build(&c).unwrap();
+    let s = Stencil::build(&c, &g);
+    let mut u: Vec<_> = (0..g.faces.len())
+        .map(|i| 0.4 + 0.05 * (0.9 * i as f64).sin())
+        .collect();
+    g.enforce_velocity(&c, &mut u);
+    let outlets: Vec<_> = (0..g.faces.len())
+        .filter(|i| g.faces[*i].kind == FaceKind::Outlet)
+        .collect();
+    assert!(!outlets.is_empty());
+    let reference = s.implicit_matrix(&u, 0.01, 0.1);
+    // Perturb every face that is not adjacent to an outlet's momentum cell.
+    let near = |j: usize| {
+        let f = &g.faces[j];
+        outlets.iter().any(|&o| {
+            let q = &g.faces[o];
+            (0..3).all(|k| (f.center[k] - q.center[k]).abs() <= g.dx[k] * 1.01)
+        })
+    };
+    let mut far = u.clone();
+    for (j, v) in far.iter_mut().enumerate() {
+        if !near(j) && g.faces[j].kind == FaceKind::Interior {
+            *v += 3.0;
+        }
+    }
+    let changed = s.implicit_matrix(&far, 0.01, 0.1);
+    for &o in &outlets {
+        assert_eq!(reference.diagonal[o], changed.diagonal[o], "outlet {o}");
+        assert_eq!(reference.off[o], changed.off[o], "outlet {o}");
+    }
+    // The outer control-volume face advects with the outlet velocity itself.
+    for &o in &outlets {
+        let f = &g.faces[o];
+        let side = usize::from(f.hi.is_none());
+        assert_eq!(s.advecting[o][f.axis][side], [o, o]);
+    }
+}

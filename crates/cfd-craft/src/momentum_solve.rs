@@ -95,18 +95,28 @@ impl Stencil {
             for d in 0..3 {
                 advecting[fi][d] = if d == a {
                     // Control-volume faces at the centers of the two adjacent cells.
-                    let (lo, hi) = (f.lo.unwrap_or(0), f.hi.unwrap_or(0));
-                    [[g.cell_faces[lo][a][0], fi], [fi, g.cell_faces[hi][a][1]]]
+                    // An outlet's outer half lies outside the domain: it advects
+                    // with the outlet velocity itself (zero gradient).
+                    [
+                        f.lo.map_or([fi, fi], |lo| [g.cell_faces[lo][a][0], fi]),
+                        f.hi.map_or([fi, fi], |hi| [fi, g.cell_faces[hi][a][1]]),
+                    ]
                 } else {
                     // Edges below and above in d: the d-faces of the two cells
-                    // that share this a-face.
+                    // that share this a-face. At an outlet only the inside cell
+                    // exists; its d-face velocity is extrapolated.
                     let at = |offset_d: isize, offset_a: isize| {
                         let mut r = q;
                         r[d] += offset_d;
                         r[a] += offset_a;
-                        g.face_at(c, d, r).unwrap_or(fi)
+                        g.face_at(c, d, r)
                     };
-                    [[at(0, 0), at(0, -1)], [at(1, 0), at(1, -1)]]
+                    let pair = |x: Option<usize>, y: Option<usize>| match (x, y) {
+                        (Some(x), Some(y)) => [x, y],
+                        (Some(x), None) | (None, Some(x)) => [x, x],
+                        (None, None) => unreachable!("an a-face has a cell on one side"),
+                    };
+                    [pair(at(0, 0), at(0, -1)), pair(at(1, 0), at(1, -1))]
                 };
             }
         }

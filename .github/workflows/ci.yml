@@ -267,7 +267,7 @@ jobs:
           mkdir -p runs/point-baseline/crates/cfd-craft/src/multigrid
           touch runs/point-baseline/crates/cfd-craft/src/multigrid/line.rs
           cargo build --release --locked --manifest-path runs/point-baseline/Cargo.toml --example pressure_probe
-      - run: lscpu
+      - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
       - run: |
           set +e
           python validation/benchmark_anisotropy.py --baseline-probe runs/point-baseline/target/release/examples/pressure_probe --output runs/anisotropy/kernels

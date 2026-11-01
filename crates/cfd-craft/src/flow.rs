@@ -215,8 +215,22 @@ pub fn flux_form_advection(
     nut: &[f64],
     reconstruction: Reconstruction,
 ) -> Vec<f64> {
-    let cell_u = g.cell_velocity(u);
-    let cell_u = &cell_u;
+    flux_form_advection_with(c, g, u, nut, &g.cell_velocity(u), reconstruction)
+}
+
+// Each control-volume face flux is evaluated once and shared by the two momentum
+// cells that meet there: center fluxes per fluid cell and axis, edge fluxes per
+// a-face and direction d ≠ a (the edge above the face in d). The arithmetic of
+// every flux is unchanged, so the result is bit-identical to evaluating each
+// flux from both sides.
+fn flux_form_advection_with(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+    reconstruction: Reconstruction,
+) -> Vec<f64> {
     // Flux through the control-volume face at the center of cell `cell`, between
     // the a-faces L (below) and H (above) of that cell.
     let center_flux = |a: usize, cell: usize| -> f64 {
@@ -278,6 +292,30 @@ pub fn flux_form_advection(
         };
         advecting * (phi_up + 0.5 * s)
     };
+    let centers: Vec<[f64; 3]> = (0..g.count())
+        .into_par_iter()
+        .map(|cell| {
+            if g.fluid[cell] {
+                std::array::from_fn(|a| center_flux(a, cell))
+            } else {
+                [0.0; 3]
+            }
+        })
+        .collect();
+    let edges: Vec<[f64; 3]> = g
+        .faces
+        .par_iter()
+        .map(|f| {
+            let q = f.coord.map(|v| v as isize);
+            std::array::from_fn(|d| {
+                if d == f.axis {
+                    0.0
+                } else {
+                    edge_flux(f.axis, d, q)
+                }
+            })
+        })
+        .collect();
     g.faces
         .par_iter()
         .enumerate()
@@ -295,13 +333,19 @@ pub fn flux_form_advection(
                     // (s = 0); an inflow face is prescribed and has no equation.
                     let outer = u[fi] * u[fi];
                     (
-                        f.lo.map_or(outer, |cell| center_flux(a, cell)),
-                        f.hi.map_or(outer, |cell| center_flux(a, cell)),
+                        f.lo.map_or(outer, |cell| centers[cell][a]),
+                        f.hi.map_or(outer, |cell| centers[cell][a]),
                     )
                 } else {
                     let mut below = q;
                     below[d] -= 1;
-                    (edge_flux(a, d, below), edge_flux(a, d, q))
+                    // The edge below is the edge above the a-face below, when that
+                    // face exists (face_at wraps periodic axes the same way).
+                    let low = match g.face_at(c, a, below) {
+                        Some(j) => edges[j][d],
+                        None => edge_flux(a, d, below),
+                    };
+                    (low, edges[fi][d])
                 };
                 rhs -= (high - low) / g.dx[d];
             }
@@ -312,8 +356,8 @@ pub fn flux_form_advection(
 
 pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
     let reconstruction = Reconstruction::of(&c.numerics);
-    let advection = reconstruction.map(|r| flux_form_advection(c, g, u, nut, r));
     let cell_u = g.cell_velocity(u);
+    let advection = reconstruction.map(|r| flux_form_advection_with(c, g, u, nut, &cell_u, r));
     // Remaining variable-viscosity symmetric-stress term:
     // div(mu grad(u)^T)_a = sum_d (d_d mu)(d_a u_d), for divergence-free flow.
     let mut cross = vec![[0.0; 3]; g.count()];

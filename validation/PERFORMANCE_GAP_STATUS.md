@@ -1,5 +1,24 @@
 # Performance gap: current state and remaining stages
 
+## After P5c, P5d and ten performance iterations (1 November 2026)
+
+The hosted paired sweep with the final implicit recipe
+([run 41361132558](https://github.com/dietmarwo/CFD-craft/actions/runs/41361132558),
+[performance iterations](PERFORMANCE_ITERATIONS_RESULTS.md)) accepted every row.
+At the 0.01 Ghia target (24² for both) native takes **0.111× OpenFOAM's solver
+time** (0.0698 against 0.628 s) and 0.119× its workflow time, with error
+0.0054 against 0.0090; on every shared grid from 16² to 48² native solves in
+0.08–0.11× OpenFOAM's time. The steady RANS canyon with its tracer now runs
+with `implicit_projection` (P5c, P5d; [results](IMPLICIT_RANS_RESULTS.md)): the
+27k canyon in 57.6 s on one 2.1 GHz thread, 52× faster than the explicit mode,
+and the 93k canyon in 615 s. There is no OpenFOAM canyon recipe to compare it
+with.
+
+Open: defaults remain donor-cell and explicit until an announced decision; the
+predeclared P5c tightening statistic failed for U on one decade (recorded);
+the canyon is not grid-converged at 93k; masked multigrid (P2b) would cut the
+canyon's remaining IC(0) pressure work.
+
 ## Matched accuracy after P3a and P5a (1 November 2026)
 
 With opt-in `limited_upwind`/`van_leer` momentum advection (P3a) and the

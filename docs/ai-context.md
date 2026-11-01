@@ -13,8 +13,9 @@ donor-cell needed 96². Opt-in `numerics.steady_algorithm = implicit_projection`
 (P5a, a SIMPLEC-type implicit correction with a projection per outer iteration)
 reaches the unchanged steady gates 18–40× faster than the explicit march; see
 the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). With
-both, the hosted paired sweep has native at 0.74× OpenFOAM's solver time at the
-0.01 target ([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)).
+both, the hosted paired sweep had native at 0.74× OpenFOAM's solver time at the
+0.01 target, and 0.111× with the implicit recipe below and one span cell
+([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)).
 `implicit_projection` also runs `neutral_rans` and constituents (P5c, P5d); for
 implicit runs use `"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`
 and, for a two-dimensional problem, one cell on its periodic axis

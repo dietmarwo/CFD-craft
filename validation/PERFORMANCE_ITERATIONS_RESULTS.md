@@ -69,7 +69,7 @@ tolerance 0.1, `max_time_step_s` 100 and, for the cavity, one span cell.
 | Development canyon, flow | 3.69 s (500 it.) | 3.55 s | **1.55 s** (400 it.) | 2.4× | — |
 | Development canyon, tracer | 10.7 s (1,300 it.) | 9.8 s | **1.99 s** (400 it.) | 5.4× | receptors to 2e-7 |
 | 27k canyon, tracer | 180 s³ (1,400 it.) | — | **57.6 s** (1,000 it.) | 3.1× | receptors to 1.2e-6 of explicit |
-| 93k canyon, tracer | 1772 s³ (2,500 it.) | — | see below | | |
+| 93k canyon, tracer | 1772 s³ (2,500 it.) | — | **615 s** (2,500 it.) | 2.9× | receptors to 1.6e-7 of the case-settings run |
 
 ² The CFL cap changes the 48² path (300 instead of 270 iterations).
 ³ Two runs shared the two cores.
@@ -79,11 +79,41 @@ development canyon with its tracer takes 42 s explicit and 2.0 s with the final
 recipe (21×); the 27k canyon 2,974 s and 57.6 s (52×), and the explicit mode
 needs twice the case's step budget.
 
-The local cavity numbers give an estimate of the effect on stage M: the hosted
-24² native/OpenFOAM solver ratio was 0.74× with the stage M recipe, and the
-final recipe is 6.8× cheaper on this host. The hosted reproduction below
-replaces the estimate.
+On this host the final recipe makes the 24² cavity 6.8× cheaper than the
+stage M recipe, which had a hosted native/OpenFOAM solver ratio of 0.74×; the
+hosted reproduction below measures 0.111×.
 
 ## Hosted reproduction
 
-Pending: the stage M sweep with the final recipe.
+[Run 41361132558](https://github.com/dietmarwo/CFD-craft/actions/runs/41361132558)
+(`external=momentum`) on branch head `639b331`: GitHub runner, AMD EPYC 9V74,
+4 CPUs, one solver thread per backend, the unchanged stage M protocol (shared
+grids 16, 24, 32, 48; one warmup and three alternating timed rounds; the
+OpenFOAM recipe, the audits and the screens unchanged). Native inputs:
+`momentum_scheme=van_leer`, `native_span=1`,
+`native_numerics={"momentum_advection": "limited_upwind", "momentum_limiter": "van_leer", "steady_algorithm": "implicit_projection", "pressure_relative_tolerance": 0.1, "max_time_step_s": 100.0}`,
+multigrid pressure. All rows were accepted, and the evidence archive verified
+all 51 sealed archives after the zip round trip.
+
+| Grid | Native solver s | OpenFOAM solver s | Native/OpenFOAM | Native Ghia error | OpenFOAM Ghia error |
+|---|---:|---:|---:|---:|---:|
+| 16² | 0.0244 | 0.264 | 0.092× | 0.0243 | 0.0188 |
+| 24² | 0.0698 | 0.628 | **0.111×** | **0.00543** | **0.00897** |
+| 32² | 0.142 | 1.399 | 0.101× | 0.00366 | 0.00870 |
+| 48² | 0.439 | 5.415 | 0.081× | 0.00501 | 0.00708 |
+
+Workflow medians (with meshing, sampling and audits): 0.091/0.842,
+0.142/1.200, 0.345/2.013 and 0.551/6.095 s. **At the 0.01 target (24² for
+both) native takes 0.111× OpenFOAM's solver time and 0.119× its workflow
+time**, against 0.74× and 0.45× in the stage M run with the earlier recipe and
+code (another runner model; each ratio is a same-runner pairing). The native
+96² reference with the same numerics was accepted after 570 outer iterations
+and 3.39 s (48.5 s before), Ghia error 0.00505, self-convergence orders 2.46
+(L1), 2.42 (L2) and 2.21 (max). The default controls (cavity, transient
+Poiseuille, masked canyon) are byte-identical to `main` (`6d33850`) with
+identical work, and the van Leer momentum fixtures repeat the stage V values.
+
+Scope as in stage M: a laminar two-dimensional cavity; both backends now
+compute one span cell; the stopping rules differ (native: the unchanged
+`assess` gates; OpenFOAM: `residualControl` 1e-7). The canyon has no OpenFOAM
+counterpart in this repository.

@@ -58,6 +58,18 @@ OpenFOAM 0.00897), but its solver time there is 11.19 s against OpenFOAM's
 So P3a moves the target to the coarse grid, and P5a removes the cost of the
 explicit pseudo-time on it.
 
+## After the performance iterations
+
+[Run 41361132558](https://github.com/dietmarwo/CFD-craft/actions/runs/41361132558)
+repeats the protocol with the final implicit recipe (pressure tolerance 0.1,
+non-binding `max_time_step_s`, one span cell; see the
+[performance iterations](PERFORMANCE_ITERATIONS_RESULTS.md)) on an AMD EPYC
+9V74 runner. All rows were accepted. At 24² native takes **0.0698 s against
+OpenFOAM's 0.628 s (0.111×)**, workflow 0.119×, with Ghia error 0.00543
+against 0.00897; 0.092×, 0.101× and 0.081× at 16², 32² and 48². The 96²
+reference took 570 outer iterations and 3.39 s. Default controls stayed
+byte-identical to `main`.
+
 ## Other results of the run
 
 - **Momentum fixtures (van Leer):** translating-vortex orders 2.159 / 2.062 /

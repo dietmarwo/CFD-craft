@@ -66,6 +66,7 @@ in steady mode only, so the check ran in steady mode for both (new option
 |---|---:|---:|---|---:|
 | explicit | 2700 | 27.2 | 0.262% / 0.810% / 3.427% | 0 |
 | `implicit_projection` | 400 | 5.0 | 0.263% / 0.806% / 3.437% | 0 |
+| `implicit_projection`, recipe, final code (`run_suite.py --abl-steady`) | 300 | 1.4 | 0.263% / 0.806% / 3.437% | 0 |
 
 ## Tracer and grids (P5c, P5d)
 
@@ -86,6 +87,8 @@ Performance canyons (`cases/performance/canyon-27k.json`, 36×32×24, and
 | 27k | implicit recipe | 1,000 | 70.7 | yes | 0 | 1.1e-13 |
 | 93k | implicit, case settings | 2,500 | 1772* | yes | 0 | 9.0e-14 |
 | 93k | implicit recipe | 2,500 | 684 | yes | 0 | 3.1e-13 |
+| 27k | implicit recipe, final code (`d7a9a31`) | 1,000 | 57.6 | yes | 0 | 1.1e-13 |
+| 93k | implicit recipe, final code | 2,500 | 615 | yes | 0 | 3.1e-13 |
 
 \* two runs shared the two cores. Implicit recipe: `implicit_projection`,
 `pressure_relative_tolerance` 0.1 and `max_time_step_s` 100, with the CFL cap

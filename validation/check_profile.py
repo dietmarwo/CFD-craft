@@ -368,6 +368,22 @@ def check(root):
             "work.momentum_solver_iterations",
             "retained inner work differs from attempted work",
         )
+    # Implicit k and epsilon solves (P5c): two BiCGStab solves per call.
+    turbulence = phases.get("turbulence_solve", {})
+    turbulence_inner = turbulence.get("work_units", 0)
+    rans = regular(archive / "case.json")["flow"]["kind"] == "neutral_rans"
+    require(
+        (algorithm == "implicit_projection" and rans) or not turbulence.get("calls", 0),
+        "work.turbulence_solve",
+        "only implicit_projection with neutral_rans solves implicit k and epsilon",
+    )
+    require(
+        turbulence.get("operator_applications", 0) == 2 * turbulence_inner
+        and turbulence_inner
+        <= 2 * TURBULENCE_ITERATION_CAP * turbulence.get("calls", 0),
+        "work.turbulence_solve",
+        "inner work differs from its operator applications or exceeds the cap",
+    )
     pressure = linear.get("work_units", 0)
     require(
         linear.get("operator_applications", 0)
@@ -414,6 +430,8 @@ def check(root):
 MOMENTUM_ITERATION_CAP = dict(implicit_viscous=50, implicit_projection=50)
 # CG applies its operator once per iteration, BiCGStab twice.
 MOMENTUM_APPLICATIONS_PER_ITERATION = dict(implicit_viscous=1, implicit_projection=2)
+# Predeclared cap per k or epsilon solve (crates/cfd-craft/src/turbulence_solve.rs).
+TURBULENCE_ITERATION_CAP = 50
 
 
 def main():

@@ -22,7 +22,7 @@ pub fn eddy_viscosity(g: &Grid, k: &[f64], eps: &[f64]) -> Vec<f64> {
         })
         .collect()
 }
-fn adjacent_mean(f: &crate::grid::Face, v: &[f64]) -> f64 {
+pub(crate) fn adjacent_mean(f: &crate::grid::Face, v: &[f64]) -> f64 {
     match (f.lo, f.hi) {
         (Some(i), Some(j)) => 0.5 * (v[i] + v[j]),
         (Some(i), None) | (None, Some(i)) => v[i],
@@ -40,8 +40,23 @@ pub(crate) fn wall_ghost(
     nut: &[f64],
     cell_u: &[[f64; 3]],
 ) -> f64 {
+    ghost_value(c, g, fi, d, side, u[fi], nut, cell_u)
+}
+/// The ghost value of face `fi` beyond direction `d` and `side`, for the face
+/// value `value`. It is affine in `value` with `nut` and `cell_u` held fixed,
+/// which is how the implicit steady iterations read its coefficient.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ghost_value(
+    c: &Case,
+    g: &Grid,
+    fi: usize,
+    d: usize,
+    side: isize,
+    value: f64,
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+) -> f64 {
     let f = &g.faces[fi];
-    let value = u[fi];
     let at_domain = if side < 0 {
         f.center[d] < g.dx[d]
     } else {
@@ -443,14 +458,27 @@ pub fn production(
     }
     (p, eps_wall)
 }
-pub fn turbulence_step(
+/// The k and epsilon transport parts of the turbulence equations, and the
+/// terms they need: production, wall epsilon and the diffusivities.
+pub(crate) struct TurbulenceTerms {
+    pub(crate) production: Vec<f64>,
+    pub(crate) wall_epsilon: Vec<Option<f64>>,
+    pub(crate) dk: Vec<f64>,
+    pub(crate) de: Vec<f64>,
+    pub(crate) k_transport: Vec<f64>,
+    pub(crate) e_transport: Vec<f64>,
+    /// Coefficient of k (or epsilon) in the upper-boundary diffusion term of
+    /// each cell, so the transport parts' linear operators can include it.
+    pub(crate) k_top: Vec<f64>,
+    pub(crate) e_top: Vec<f64>,
+}
+pub(crate) fn turbulence_terms(
     c: &Case,
     g: &Grid,
     u: &[f64],
-    k: &mut [f64],
-    eps: &mut [f64],
-    dt: f64,
-) -> usize {
+    k: &[f64],
+    eps: &[f64],
+) -> TurbulenceTerms {
     let nut = eddy_viscosity(g, k, eps);
     let (p, walls) = production(c, g, u, &nut, k);
     let zeros = vec![0.0; g.count()];
@@ -465,6 +493,8 @@ pub fn turbulence_step(
     let mut er = transport::rhs(g, eps, u, &de, &zeros, Advection::LinearUpwind, |f| {
         c.flow.turbulence(f.center[2]).1
     });
+    let mut k_top = vec![0.0; g.count()];
+    let mut e_top = vec![0.0; g.count()];
     // The equilibrium ABL has nonzero epsilon diffusion at the upper boundary.
     // Zero-gradient epsilon there destroys horizontal homogeneity.
     for f in &g.faces {
@@ -483,8 +513,38 @@ pub fn turbulence_step(
                 / f.distance
                 * f.area
                 / g.volume;
+            k_top[i] -= 0.5 * (dk[i] + c.flow.viscosity() + nb) / f.distance * f.area / g.volume;
+            e_top[i] -= 0.5 * (de[i] + c.flow.viscosity() + nb / SIGMA_EPSILON) / f.distance
+                * f.area
+                / g.volume;
         }
     }
+    TurbulenceTerms {
+        production: p,
+        wall_epsilon: walls,
+        dk,
+        de,
+        k_transport: kr.values,
+        e_transport: er.values,
+        k_top,
+        e_top,
+    }
+}
+pub fn turbulence_step(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    k: &mut [f64],
+    eps: &mut [f64],
+    dt: f64,
+) -> usize {
+    let TurbulenceTerms {
+        production: p,
+        wall_epsilon: walls,
+        k_transport,
+        e_transport,
+        ..
+    } = turbulence_terms(c, g, u, k, eps);
     let mut floors = 0;
     for i in 0..g.count() {
         if !g.fluid[i] {
@@ -492,8 +552,8 @@ pub fn turbulence_step(
         }
         let oldk = k[i].max(1e-14);
         let olde = eps[i].max(1e-14);
-        let nk = (k[i] + dt * (kr.values[i] + p[i])) / (1.0 + dt * olde / oldk);
-        let ne = (eps[i] + dt * (er.values[i] + C1 * p[i] * olde / oldk))
+        let nk = (k[i] + dt * (k_transport[i] + p[i])) / (1.0 + dt * olde / oldk);
+        let ne = (eps[i] + dt * (e_transport[i] + C1 * p[i] * olde / oldk))
             / (1.0 + dt * C2 * olde / oldk);
         if !nk.is_finite() || !ne.is_finite() {
             k[i] = f64::NAN;

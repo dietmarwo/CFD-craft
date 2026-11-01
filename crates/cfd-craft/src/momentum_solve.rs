@@ -41,6 +41,22 @@ pub struct Stencil {
     pub advecting: Vec<[[[usize; 2]; 2]; 3]>,
 }
 
+/// B of ghost = A + B·value, read from `flow::ghost_value` with `nut` and
+/// `cell_u` held fixed.
+fn ghost_coefficient(
+    c: &Case,
+    g: &Grid,
+    fi: usize,
+    d: usize,
+    side: isize,
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+) -> f64 {
+    let at0 = flow::ghost_value(c, g, fi, d, side, 0.0, nut, cell_u);
+    let at1 = flow::ghost_value(c, g, fi, d, side, 1.0, nut, cell_u);
+    at1 - at0
+}
+
 impl Stencil {
     pub fn build(c: &Case, g: &Grid) -> Self {
         let unknown: Vec<_> = g
@@ -50,7 +66,6 @@ impl Stencil {
             .collect();
         let zeros = vec![0.0; g.count()];
         let cell_u = vec![[0.0; 3]; g.count()];
-        let mut probe = vec![0.0; g.faces.len()];
         let mut neighbors = vec![[[Neighbor::Fixed; 2]; 3]; g.faces.len()];
         for (fi, f) in g.faces.iter().enumerate() {
             if !unknown[fi] {
@@ -61,14 +76,8 @@ impl Stencil {
                     let mut q = f.coord.map(|v| v as isize);
                     q[d] += side;
                     let face = g.face_at(c, f.axis, q);
-                    let mut ghost = || {
-                        probe[fi] = 0.0;
-                        let at0 = flow::wall_ghost(c, g, fi, d, side, &probe, &zeros, &cell_u);
-                        probe[fi] = 1.0;
-                        let at1 = flow::wall_ghost(c, g, fi, d, side, &probe, &zeros, &cell_u);
-                        probe[fi] = 0.0;
-                        Neighbor::Ghost(at1 - at0)
-                    };
+                    let ghost =
+                        || Neighbor::Ghost(ghost_coefficient(c, g, fi, d, side, &zeros, &cell_u));
                     neighbors[fi][d][k] = match face {
                         Some(j)
                             if matches!(g.faces[j].kind, FaceKind::Wall | FaceKind::Blocked)
@@ -288,6 +297,48 @@ impl Stencil {
     /// iteration (P5a). The second-order part of the advection enters only
     /// through the explicit residual (deferred correction).
     pub fn implicit_matrix(&self, u: &[f64], viscosity: f64, dt: f64) -> Matrix {
+        let weights = self.spacing.map(|h| viscosity / (h * h));
+        self.assemble(u, dt, |_, d| [weights[d]; 2], |_, _, _, b| b)
+    }
+
+    /// The RANS form of `implicit_matrix` (P5c): the viscous part uses the face
+    /// viscosities of `flow::momentum_rhs` (ν + ν_t, averaged with an interior
+    /// neighbor), and wall-function ghosts are linearized with ν_t and the cell
+    /// velocities lagged at u. The variable-viscosity cross term stays explicit.
+    pub fn implicit_matrix_rans(
+        &self,
+        c: &Case,
+        g: &Grid,
+        u: &[f64],
+        nut: &[f64],
+        dt: f64,
+    ) -> Matrix {
+        let cell_u = g.cell_velocity(u);
+        let nu = c.flow.viscosity();
+        self.assemble(
+            u,
+            dt,
+            |fi, d| {
+                let h2 = self.spacing[d] * self.spacing[d];
+                let mu = nu + flow::adjacent_mean(&g.faces[fi], nut);
+                self.neighbors[fi][d].map(|n| match n {
+                    Neighbor::Unknown(j) if g.faces[j].kind == FaceKind::Interior => {
+                        0.5 * (mu + nu + flow::adjacent_mean(&g.faces[j], nut)) / h2
+                    }
+                    _ => mu / h2,
+                })
+            },
+            |fi, d, side, _| ghost_coefficient(c, g, fi, d, [-1, 1][side], nut, &cell_u),
+        )
+    }
+
+    fn assemble(
+        &self,
+        u: &[f64],
+        dt: f64,
+        weights: impl Fn(usize, usize) -> [f64; 2],
+        ghost: impl Fn(usize, usize, usize, f64) -> f64,
+    ) -> Matrix {
         let mut diagonal = vec![0.0; u.len()];
         let mut off = vec![[[0.0; 2]; 3]; u.len()];
         for fi in 0..u.len() {
@@ -297,8 +348,8 @@ impl Stencil {
             let mut diag = 1.0 / dt;
             for d in 0..3 {
                 let h = self.spacing[d];
-                let w = viscosity / (h * h);
-                diag += 2.0 * w;
+                let w = weights(fi, d);
+                diag += w[0] + w[1];
                 for side in 0..2 {
                     let [f0, f1] = self.advecting[fi][d][side];
                     let advecting = 0.5 * (u[f0] + u[f1]);
@@ -309,10 +360,10 @@ impl Stencil {
                         (-advecting.min(0.0) / h, -advecting.max(0.0) / h)
                     };
                     diag += own;
-                    let coefficient = other - w;
+                    let coefficient = other - w[side];
                     match self.neighbors[fi][d][side] {
                         Neighbor::Unknown(_) => off[fi][d][side] = coefficient,
-                        Neighbor::Ghost(b) => diag += b * coefficient,
+                        Neighbor::Ghost(b) => diag += ghost(fi, d, side, b) * coefficient,
                         Neighbor::Fixed => {}
                     }
                 }
@@ -372,14 +423,37 @@ fn bicgstab(
     control: &Control,
     measured: &mut crate::profiling::Span,
 ) -> Result<(Vec<f64>, usize)> {
-    let n = b.len();
-    let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let inverse: Vec<_> = matrix
         .diagonal
         .iter()
         .zip(&stencil.unknown)
         .map(|(d, u)| if *u { 1.0 / d } else { 0.0 })
         .collect();
+    bicgstab_with(
+        |x, y| matrix.apply(stencil, x, y),
+        &inverse,
+        b,
+        BICGSTAB_RELATIVE_TOLERANCE,
+        BICGSTAB_MAX_ITERATIONS,
+        control,
+        measured,
+    )
+}
+
+/// Right-Jacobi-preconditioned BiCGStab from x = 0 for a matrix-free operator.
+/// Rows whose `inverse` entry is zero must have zero right-hand side and an
+/// operator row that is zero on such a vector; they stay at zero.
+pub(crate) fn bicgstab_with(
+    apply: impl Fn(&[f64], &mut [f64]),
+    inverse: &[f64],
+    b: &[f64],
+    tolerance: f64,
+    max_iterations: usize,
+    control: &Control,
+    measured: &mut crate::profiling::Span,
+) -> Result<(Vec<f64>, usize)> {
+    let n = b.len();
+    let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let mut x = vec![0.0; n];
     let mut r = b.to_vec();
     let norm = dot(&r, &r).sqrt();
@@ -392,7 +466,7 @@ fn bicgstab(
     let mut p = vec![0.0; n];
     let (mut ph, mut sh, mut s, mut t) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
     let mut iterations = 0;
-    while iterations < BICGSTAB_MAX_ITERATIONS {
+    while iterations < max_iterations {
         if iterations.is_multiple_of(8) {
             control.check()?;
         }
@@ -407,13 +481,13 @@ fn bicgstab(
             p[i] = r[i] + beta * (p[i] - omega * v[i]);
             ph[i] = p[i] * inverse[i];
         }
-        matrix.apply(stencil, &ph, &mut v);
+        apply(&ph, &mut v);
         alpha = rho / dot(&r0, &v);
         for i in 0..n {
             s[i] = r[i] - alpha * v[i];
             sh[i] = s[i] * inverse[i];
         }
-        matrix.apply(stencil, &sh, &mut t);
+        apply(&sh, &mut t);
         measured.operator_applications += 2;
         let tt = dot(&t, &t);
         omega = if tt > 0.0 { dot(&t, &s) / tt } else { 0.0 };
@@ -421,7 +495,7 @@ fn bicgstab(
             x[i] += alpha * ph[i] + omega * sh[i];
             r[i] = s[i] - omega * t[i];
         }
-        if dot(&r, &r).sqrt() <= BICGSTAB_RELATIVE_TOLERANCE * norm || omega == 0.0 {
+        if dot(&r, &r).sqrt() <= tolerance * norm || omega == 0.0 {
             break;
         }
     }

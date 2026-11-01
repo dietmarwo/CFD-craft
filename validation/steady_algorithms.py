@@ -15,6 +15,19 @@ Predeclared in docs/ACCURACY_STEADY_PLAN.md (stages P4 and P5a):
 
 The fields compared are the archived face velocities. Timings are observations
 of this host, not gates.
+
+With ``--case canyon`` (stage P5c, with P5d's tracer) the same gates run on the
+development canyon (cases/canyon/wh1-wind270.json) with ``neutral_rans``:
+
+- **Same fixed point.** Without constituents, explicit and candidate runs at the
+  case tolerances and tightened 10× and 100×; the maximum differences of the
+  face velocities, k and ε, each relative to the explicit field's maximum,
+  must each shrink at least 5× per decade. The round-off pair uses residual
+  and monitor tolerances of 1e-9: the turbulence-residual probe of `assess`
+  has a round-off floor near 2e-10 on this case, so 1e-11 is unreachable.
+- **Tracer.** With the case's tracer, both modes must be accepted (mass budget,
+  negative mass, steady equation and mass balance gates); the receptor
+  differences are reported.
 """
 
 import argparse
@@ -62,6 +75,102 @@ def cavity(n, algorithm, scheme, factor=1, tolerances=None, threads=1):
         c["numerics"]["steady_monitor_tolerance"] = tolerances["monitor"]
     c["name"] = f"cavity-{n}-{scheme}-{algorithm}-x{factor}"
     return c
+
+
+CANYON_FIELDS = ["velocity", "k", "epsilon"]
+CANYON_ROUNDOFF_TOLERANCES = dict(residual=1e-9, monitor=1e-9)
+
+
+def canyon(algorithm, factor=1, tolerances=None, tracer=False):
+    c = json.loads((ROOT / "cases/canyon/wh1-wind270.json").read_text())
+    if not tracer:
+        for key in ["constituents", "sources", "receptors", "initial_conditions"]:
+            c[key] = []
+    c["run"].update(threads=1, max_steps=200000, wall_time_limit_s=3600.0)
+    if algorithm != "explicit":
+        c["numerics"]["steady_algorithm"] = algorithm
+    if tolerances is None:
+        c["numerics"]["steady_residual_tolerance"] /= factor
+        c["numerics"]["steady_monitor_tolerance"] /= factor
+    else:
+        c["numerics"]["steady_residual_tolerance"] = tolerances["residual"]
+        c["numerics"]["steady_monitor_tolerance"] = tolerances["monitor"]
+    c["name"] = f"canyon-{'tracer-' if tracer else ''}{algorithm}-x{factor}"
+    return c
+
+
+def field_differences(a, b):
+    """Maximum difference per field, relative to the maximum of `a`'s field."""
+    out = {}
+    for key in CANYON_FIELDS:
+        scale = max((abs(x) for x in a[key]), default=0.0)
+        require(scale > 0.0, "fields", f"{key} is zero")
+        out[key] = difference(a[key], b[key]) / scale
+    return out
+
+
+def canyon_fixed_point(binary, output, algorithm, report):
+    def fields(case):
+        row, _ = solve(binary, case, output, report)
+        return row, json.loads((output / case["name"] / "fields.json").read_text())
+
+    rows = []
+    for factor in TIGHTENING:
+        explicit, a = fields(canyon("explicit", factor))
+        candidate, b = fields(canyon(algorithm, factor))
+        rows.append(
+            dict(
+                tightening=factor,
+                explicit=explicit,
+                candidate=candidate,
+                max_relative_difference=field_differences(a, b),
+            )
+        )
+    gates = {
+        key: shrink_gate([r["max_relative_difference"][key] for r in rows])
+        for key in CANYON_FIELDS
+    }
+    explicit, a = fields(canyon("explicit", "roundoff", CANYON_ROUNDOFF_TOLERANCES))
+    candidate, b = fields(canyon(algorithm, "roundoff", CANYON_ROUNDOFF_TOLERANCES))
+    # Reported, not gated: each run's distance to the round-off explicit solution.
+    for row in rows:
+        for mode in ["explicit", "candidate"]:
+            name = row[mode]["name"]
+            x = json.loads((output / name / "fields.json").read_text())
+            row[mode]["max_relative_difference_to_roundoff_explicit"] = (
+                field_differences(a, x)
+            )
+    tracer = {}
+    for mode in ["explicit", algorithm]:
+        case = canyon(mode, tracer=True)
+        run = run_case(binary, case, output / case["name"])
+        report["runs"].append(run)
+        require(accepted(run), case["name"], "run not accepted with unchanged gates")
+        s = run["summary"]
+        tracer[mode] = dict(
+            steps=s["steps"],
+            solver_s=s["elapsed_s"],
+            relative_budget_defect=s["constituents"][0]["relative_budget_defect"],
+            receptors_kg_m3=s["constituents"][0]["receptors_kg_m3"],
+        )
+    receptors = tracer["explicit"]["receptors_kg_m3"]
+    tracer["max_relative_receptor_difference"] = max(
+        abs(tracer[algorithm]["receptors_kg_m3"][k] - v) / abs(v)
+        for k, v in receptors.items()
+    )
+    return dict(
+        case="cases/canyon/wh1-wind270.json",
+        rows=rows,
+        shrink_per_decade={k: v[0] for k, v in gates.items()},
+        passed=all(v[1] for v in gates.values()),
+        roundoff_pair=dict(
+            tolerances=CANYON_ROUNDOFF_TOLERANCES,
+            explicit=explicit,
+            candidate=candidate,
+            max_relative_difference=field_differences(a, b),
+        ),
+        tracer=tracer,
+    )
 
 
 def solve(binary, case, output, report):
@@ -165,6 +274,39 @@ def acceptance(binary, output, algorithm, report):
     return rows
 
 
+def canyon_campaign(binary, output, algorithm):
+    output = Path(output)
+    output.mkdir()
+    report = dict(
+        schema_version="cfd-craft.steady-algorithms/0.1",
+        algorithm=algorithm,
+        case="canyon",
+        passed=False,
+        runs=[],
+        plan=dict(
+            fields=CANYON_FIELDS,
+            tightening=TIGHTENING,
+            shrink_per_decade=SHRINK_PER_DECADE,
+            roundoff_tolerances=CANYON_ROUNDOFF_TOLERANCES,
+        ),
+    )
+    write_report(output, report)
+    try:
+        report["fixed_point"] = canyon_fixed_point(binary, output, algorithm, report)
+        require(
+            report["fixed_point"]["passed"], "fixed_point", "fixed-point gate failed"
+        )
+        report["passed"] = True
+    except (ValueError, OSError, KeyError, TypeError, ZeroDivisionError) as exc:
+        report["error"] = (
+            str(exc)
+            if str(exc).startswith("CFD-")
+            else f"CFD-B008 steady.campaign: {exc}"
+        )
+    write_report(output, report)
+    return report
+
+
 def campaign(binary, output, algorithm, schemes):
     output = Path(output)
     output.mkdir()
@@ -214,15 +356,19 @@ def main():
     ap.add_argument("--binary", type=Path, default=ROOT / "target/release/cfd-craft")
     ap.add_argument("--algorithm", default="implicit_viscous")
     ap.add_argument("--schemes", nargs="+", default=["donor_cell", "van_leer"])
+    ap.add_argument("--case", choices=["cavity", "canyon"], default="cavity")
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
     require(
         all(s in SCHEMES for s in args.schemes), "schemes", f"one of {sorted(SCHEMES)}"
     )
     try:
-        report = campaign(
-            args.binary.resolve(), args.output, args.algorithm, args.schemes
-        )
+        if args.case == "canyon":
+            report = canyon_campaign(args.binary.resolve(), args.output, args.algorithm)
+        else:
+            report = campaign(
+                args.binary.resolve(), args.output, args.algorithm, args.schemes
+            )
     except (ValueError, OSError) as exc:
         print(f"CFD-B008 steady.output: {exc}")
         return 1

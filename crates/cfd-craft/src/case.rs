@@ -573,20 +573,15 @@ impl Case {
                     "Implicit pseudo-time changes the time accuracy; use it only with run.mode = steady.",
                 );
             }
-            if !self.constituents.is_empty() {
-                add(
-                    "CFD-E046",
-                    "error",
-                    path,
-                    "Implicit pseudo-time steps exceed the explicit scalar-transport limits; remove constituents or use explicit.",
-                );
-            }
-            if self.flow.rans() || self.flow.prescribed() {
+            if self.flow.prescribed()
+                || (self.flow.rans()
+                    && self.numerics.steady_algorithm == SteadyAlgorithm::ImplicitViscous)
+            {
                 add(
                     "CFD-E047",
                     "error",
                     path,
-                    "Implicit pseudo-time supports laminar flow only; use explicit for neutral_rans or prescribed flow.",
+                    "Prescribed flow needs no steady algorithm, and implicit_viscous supports laminar flow only; use explicit, or implicit_projection for neutral_rans.",
                 );
             }
         }

@@ -45,6 +45,27 @@ class Steady(unittest.TestCase):
         self.assertTrue(s.shrink_gate([1e-5, 2e-6])[1])
         self.assertFalse(s.shrink_gate([1e-5, 0.0, 0.0])[1])
 
+    def test_canyon_cases_drop_the_tracer_for_the_flow_fixed_point(self):
+        flow = s.canyon("implicit_projection", 10)
+        self.assertEqual(flow["constituents"], [])
+        self.assertEqual(flow["receptors"], [])
+        self.assertEqual(flow["numerics"]["steady_algorithm"], "implicit_projection")
+        self.assertAlmostEqual(flow["numerics"]["steady_residual_tolerance"], 1e-6)
+        tracer = s.canyon("explicit", tracer=True)
+        self.assertNotIn("steady_algorithm", tracer["numerics"])
+        self.assertEqual(len(tracer["constituents"]), 1)
+        self.assertNotEqual(flow["name"], tracer["name"])
+        roundoff = s.canyon("explicit", "roundoff", s.CANYON_ROUNDOFF_TOLERANCES)
+        self.assertEqual(roundoff["numerics"]["steady_residual_tolerance"], 1e-9)
+
+    def test_field_differences_are_relative_to_the_reference_maximum(self):
+        a = dict(velocity=[2.0, -4.0], k=[1.0, 0.5], epsilon=[0.1, 0.2])
+        b = dict(velocity=[2.0, -3.0], k=[1.0, 0.25], epsilon=[0.1, 0.2])
+        d = s.field_differences(a, b)
+        self.assertEqual(d, dict(velocity=0.25, k=0.25, epsilon=0.0))
+        with self.assertRaisesRegex(ValueError, "CFD-B008 steady.fields"):
+            s.field_differences(dict(a, k=[0.0, 0.0]), b)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,7 @@ pub mod pressure;
 pub mod profiling;
 pub mod solver;
 pub mod transport;
+pub mod turbulence_solve;
 pub mod verification;
 
 pub type Result<T> = std::result::Result<T, String>;

@@ -165,8 +165,8 @@ fn implicit_pseudo_time_rules_are_coded_diagnostics() {
     let mut tracer = load("periodic-tracer.json");
     tracer.run.mode = Mode::Steady;
     tracer.numerics.steady_algorithm = SteadyAlgorithm::ImplicitViscous;
-    assert!(codes(&tracer).contains(&"CFD-E046".to_string()));
-    assert!(codes(&tracer).contains(&"CFD-E047".to_string()));
+    // Constituents are allowed since P5d; prescribed flow is still rejected.
+    assert_eq!(codes(&tracer), ["CFD-E047"]);
     let mut rans = load("empty-abl.json");
     rans.run.mode = Mode::Steady;
     rans.numerics.steady_algorithm = SteadyAlgorithm::ImplicitViscous;

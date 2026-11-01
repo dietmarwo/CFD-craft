@@ -233,7 +233,14 @@ the timestep. `max_time_step_s` is a ceiling, not a promise of fixed dt.
 
 `run.mode=steady` still uses these time steps and stops when the steady gates
 pass; `end_time_s` does not bound a steady run (`max_steps` and the wall-time
-limit do), and its `physical_time_s` is pseudo-time. It does not select an implicit SIMPLE method. `transient` completes a
+limit do), and its `physical_time_s` is pseudo-time. By default it does not
+select an implicit SIMPLE-type method. Opt-in `numerics.steady_algorithm`
+selects `implicit_viscous` (SSPRK2 with implicit viscosity) or
+`implicit_projection` (one implicit correction and one projection per outer
+iteration, a SIMPLEC-type coupling with a CFL ramp), for laminar steady runs
+without constituents; acceptance is unchanged. `implicit_projection` with
+`limited_upwind`/`van_leer` reached the cavity's gates about 18–40× faster than
+the explicit mode in the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). `transient` completes a
 physical interval and has its own acceptance meaning. Pressure iteration work,
 actual face-flux continuity and boundary balance are separate recorded checks.
 

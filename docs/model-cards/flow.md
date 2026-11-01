@@ -41,6 +41,46 @@ against 0.028 for donor-cell.
 
 An incremental projection is applied to each SSPRK2 velocity stage. Tests recover second-order decay for periodic viscous shear. General unsteady open-boundary pressure order is not established by that fixture. The intended urban use is a checked steady solution.
 
+### Steady pseudo-time algorithms
+
+In steady mode, `numerics.steady_algorithm` selects how pseudo-time advances.
+All options are written in delta form: they solve for a correction δ driven by
+the full steady residual R(u, p) = `momentum_rhs`(u) − G p, which is exactly
+what `assess` recomputes. Inexact inner solves, approximate Jacobians and the
+pseudo-time step change only the path; at a fixed point δ = 0 and the pressure
+correction is zero (Beam and Warming, 1978; Ferziger, Perić and Street, ch. 8).
+
+- `explicit` (default): SSPRK2 with a projection per stage, Δτ limited by
+  advection and diffusion together. Unchanged from the earlier release.
+- `implicit_viscous` (stage P4): the same SSPRK2 stages, each solving
+  (I − Δτ·ν·L) δ = Δτ·R with the existing viscous stencil (wall ghosts are
+  affine, so δ obeys the homogeneous ghost relation). Δτ follows the advective
+  limit only. Jacobi-preconditioned CG from δ = 0, relative tolerance 1e-3,
+  at most 50 iterations per solve.
+- `implicit_projection` (stage P5a): one outer iteration solves
+  A δ = R with A = I/Δτ + first-order upwind advection with advecting velocities
+  frozen at uⁿ (Picard) − ν·L. The second-order part of the advection enters
+  only through R (deferred correction: Khosla and Rubin, 1974; Hayase, Humphrey
+  and Greif, 1992). Then u* = uⁿ + δ is projected at scale Δτ and the pressure
+  correction is added in full. With a uniform Δτ, a_P − Σ a_nb = 1/Δτ away from
+  walls, the consistent SIMPLEC coefficient (Van Doormaal and Raithby, 1984), so
+  this is a SIMPLEC-type coupling. A is diagonally dominant with nonpositive
+  couplings. The inner solve is Jacobi-preconditioned BiCGStab (van der Vorst,
+  1992) from δ = 0 to a relative residual of 0.1, at most 50 iterations,
+  selected by a predeclared pilot against symmetric Gauss–Seidel. Pseudo-time
+  follows a deterministic CFL ramp CFL_n = 1.0·1.2ⁿ, Δτ = CFL_n / Σ_a
+  max|u_a|/h_a, capped by `max_time_step_s`; restarts need no extra state.
+
+The implicit options support laminar flow in steady mode without constituents.
+Transient mode (CFD-E045), constituents (CFD-E046) and RANS or prescribed flow
+(CFD-E047) are rejected. A singular or nonfinite correction system stops the run
+with CFD-E056. `steps` counts outer iterations, `physical_time_s` accumulates
+pseudo-time, and `momentum_solver_iterations` the inner iterations. Acceptance,
+the monitor window and all thresholds are unchanged. See the
+[implicit steady results](../../validation/IMPLICIT_STEADY_RESULTS.md): on the
+Re=100 cavity, `implicit_projection` reaches the unchanged gates in 180–300
+outer iterations, 18–40× faster than the explicit mode at the same accuracy.
+
 Stage V adds [momentum verification](../../validation/MOMENTUM_VERIFICATION_RESULTS.md)
 without changing these equations. Eight shifted periodic Taylor–Green operator
 tests and a translating-vortex refinement measure donor-cell's first-order

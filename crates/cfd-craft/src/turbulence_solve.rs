@@ -17,12 +17,11 @@
 #![allow(clippy::needless_range_loop)]
 use crate::{
     Result,
-    case::{Advection, Case},
+    case::Case,
     flow::{self, C1, C2},
     grid::{FaceKind, Grid},
     profiling::Phase,
     solver::Control,
-    transport,
 };
 
 /// Predeclared inner tolerance and cap of each k and ε solve, the same as
@@ -32,62 +31,104 @@ pub const TURBULENCE_MAX_ITERATIONS: usize = 50;
 /// Floor of k and ε, as in `flow::turbulence_step`.
 const FLOOR: f64 = 1e-14;
 
-/// The linear part of the first-order upwind transport of one turbulence
-/// quantity: fixed boundary values and sources are zero, so it acts on a
-/// correction.
-struct Transport<'a> {
-    g: &'a Grid,
-    u: &'a [f64],
-    diffusivity: &'a [f64],
-    top: &'a [f64],
-    zeros: Vec<f64>,
+/// One transporting face of `transport::rhs`, with the values that stay fixed
+/// during a solve.
+struct TransportFace {
+    lo: Option<usize>,
+    hi: Option<usize>,
+    velocity: f64,
+    /// Face diffusivity, as `transport::rhs` averages it; unused at outlets.
+    diffusivity: f64,
+    outlet: bool,
+    distance: f64,
+    area: f64,
 }
 
-impl Transport<'_> {
+/// The linear part of the first-order upwind transport of one turbulence
+/// quantity: fixed boundary values and sources are zero, so it acts on a
+/// correction. `apply` repeats the arithmetic of `transport::rhs` with
+/// `Advection::LinearUpwind`, zero sources and zero inlet values, face by face
+/// in the same order, so it returns the same bits without allocating.
+struct Transport<'a> {
+    g: &'a Grid,
+    top: &'a [f64],
+    faces: Vec<TransportFace>,
+}
+
+impl<'a> Transport<'a> {
+    fn new(g: &'a Grid, u: &[f64], d: &[f64], top: &'a [f64]) -> Self {
+        let faces = g
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| {
+                matches!(
+                    f.kind,
+                    FaceKind::Interior | FaceKind::Inlet | FaceKind::Outlet
+                )
+            })
+            .map(|(fi, f)| TransportFace {
+                lo: f.lo,
+                hi: f.hi,
+                velocity: u[fi],
+                diffusivity: match (f.lo, f.hi) {
+                    (Some(i), Some(j)) => 0.5 * (d[i] + d[j]),
+                    (Some(i), None) | (None, Some(i)) => d[i],
+                    _ => 0.0,
+                },
+                outlet: f.kind == FaceKind::Outlet,
+                distance: f.distance,
+                area: f.area,
+            })
+            .collect();
+        Self { g, top, faces }
+    }
+
     fn apply(&self, x: &[f64], y: &mut [f64]) {
-        let values = transport::rhs(
-            self.g,
-            x,
-            self.u,
-            self.diffusivity,
-            &self.zeros,
-            Advection::LinearUpwind,
-            |_| 0.0,
-        )
-        .values;
+        y.fill(0.0);
+        let volume = self.g.volume;
+        for f in &self.faces {
+            let cl = f.lo.map(|i| x[i]).unwrap_or(0.0);
+            let cr = f.hi.map(|i| x[i]).unwrap_or(0.0);
+            // `+ 0.0` as in `transport::rhs`, which adds the (zero) MUSCL slope.
+            let donor = if f.velocity >= 0.0 {
+                f.lo.map(|_| cl + 0.0).unwrap_or(cl)
+            } else {
+                f.hi.map(|_| cr - 0.0).unwrap_or(cr)
+            };
+            let diff = if f.outlet {
+                0.0
+            } else {
+                f.diffusivity * (cl - cr) / f.distance
+            };
+            let flux = (f.velocity * donor + diff) * f.area;
+            if let Some(i) = f.lo {
+                y[i] -= flux / volume;
+            }
+            if let Some(i) = f.hi {
+                y[i] += flux / volume;
+            }
+        }
         for i in 0..y.len() {
-            y[i] = values[i] + self.top[i] * x[i];
+            y[i] += self.top[i] * x[i];
         }
     }
 
     /// Diagonal of `apply`, face by face as `transport::rhs` forms its fluxes.
     fn diagonal(&self) -> Vec<f64> {
-        let g = self.g;
         let mut diagonal = self.top.to_vec();
-        for (fi, f) in g.faces.iter().enumerate() {
-            if !matches!(
-                f.kind,
-                FaceKind::Interior | FaceKind::Inlet | FaceKind::Outlet
-            ) {
-                continue;
-            }
-            let d = &self.diffusivity;
-            let diffusivity = match (f.lo, f.hi) {
-                (Some(i), Some(j)) => 0.5 * (d[i] + d[j]),
-                (Some(i), None) | (None, Some(i)) => d[i],
-                _ => 0.0,
-            };
-            let diffusion = if f.kind == FaceKind::Outlet {
+        for f in &self.faces {
+            let diffusion = if f.outlet {
                 0.0
             } else {
-                diffusivity / f.distance
+                f.diffusivity / f.distance
             };
-            let u = self.u[fi];
+            let u = f.velocity;
             if let Some(i) = f.lo {
-                diagonal[i] -= (u.max(0.0) + diffusion) * f.area / g.volume;
+                diagonal[i] -= (u.max(0.0) + diffusion) * f.area / self.g.volume;
             }
             if let Some(i) = f.hi {
-                diagonal[i] -= ((-u).max(0.0) + diffusion) * f.area / g.volume;
+                diagonal[i] -= ((-u).max(0.0) + diffusion) * f.area / self.g.volume;
             }
         }
         diagonal
@@ -183,13 +224,7 @@ pub fn implicit_step(
     let k_rhs: Vec<_> = (0..n)
         .map(|i| terms.k_transport[i] + terms.production[i] - old_e[i] * k[i] / old_k[i])
         .collect();
-    let k_operator = Transport {
-        g,
-        u,
-        diffusivity: &terms.dk,
-        top: &terms.k_top,
-        zeros: vec![0.0; n],
-    };
+    let k_operator = Transport::new(g, u, &terms.dk, &terms.k_top);
     let (dk, iterations) = solve(
         g,
         &k_operator,
@@ -228,13 +263,7 @@ pub fn implicit_step(
             }
         })
         .collect();
-    let e_operator = Transport {
-        g,
-        u,
-        diffusivity: &terms.de,
-        top: &terms.e_top,
-        zeros: vec![0.0; n],
-    };
+    let e_operator = Transport::new(g, u, &terms.de, &terms.e_top);
     let (de, iterations) = solve(
         g,
         &e_operator,

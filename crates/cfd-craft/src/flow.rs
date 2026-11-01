@@ -378,6 +378,7 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
             }
         }
     }
+    let neighbor_faces = g.neighbor_faces(c);
     g.faces
         .par_iter()
         .enumerate()
@@ -392,11 +393,7 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
             });
             let mut rhs = advection.as_ref().map_or(0.0, |adv| adv[fi]);
             for d in 0..3 {
-                let mut q = f.coord.map(|v| v as isize);
-                q[d] -= 1;
-                let lo_face = g.face_at(c, f.axis, q);
-                q[d] += 2;
-                let hi_face = g.face_at(c, f.axis, q);
+                let [lo_face, hi_face] = neighbor_faces[fi][d];
                 let lo = sample(c, g, fi, d, -1, lo_face, u, nut, &cell_u);
                 let hi = sample(c, g, fi, d, 1, hi_face, u, nut, &cell_u);
                 // Donor-cell momentum, direct second-order viscous stencil on the staggered grid.

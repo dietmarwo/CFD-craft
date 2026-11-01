@@ -41,6 +41,8 @@ pub struct Grid {
     pub(crate) pressure_multigrid: std::sync::Arc<crate::multigrid::Cache>,
     /// Built on first use by the implicit pseudo-time algorithms.
     pub(crate) momentum_stencil: std::sync::OnceLock<crate::momentum_solve::Stencil>,
+    /// Same-axis neighbor faces of every face, [direction][side], from `face_at`.
+    pub(crate) neighbor_faces: std::sync::OnceLock<Vec<[[Option<usize>; 2]; 3]>>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryEvidence {
@@ -100,6 +102,7 @@ impl Grid {
             pressure_preconditioner: c.numerics.pressure_preconditioner,
             pressure_multigrid: Default::default(),
             momentum_stencil: std::sync::OnceLock::new(),
+            neighbor_faces: std::sync::OnceLock::new(),
         };
         let mut box_cells = vec![0usize; c.geometry.len()];
         for i in 0..count {
@@ -330,6 +333,24 @@ impl Grid {
             mask_sha256: hash_bytes(&self.fluid.iter().map(|v| u8::from(*v)).collect::<Vec<_>>()),
             box_cells: self.box_cells.clone(),
         }
+    }
+    /// The same-axis neighbors of every face in direction d and side (lower,
+    /// upper), as `face_at` finds them; built once per grid.
+    pub(crate) fn neighbor_faces(&self, c: &Case) -> &[[[Option<usize>; 2]; 3]] {
+        self.neighbor_faces.get_or_init(|| {
+            self.faces
+                .iter()
+                .map(|f| {
+                    std::array::from_fn(|d| {
+                        std::array::from_fn(|side| {
+                            let mut q = f.coord.map(|v| v as isize);
+                            q[d] += if side == 0 { -1 } else { 1 };
+                            self.face_at(c, f.axis, q)
+                        })
+                    })
+                })
+                .collect()
+        })
     }
     pub fn face_at(&self, c: &Case, a: usize, mut q: [isize; 3]) -> Option<usize> {
         for (d, qd) in q.iter_mut().enumerate() {

@@ -243,9 +243,35 @@ pub fn rhs(
     advection: Advection,
     inlet: impl Fn(&crate::grid::Face) -> f64,
 ) -> Rhs {
-    let mut v = source.to_vec();
+    let mut values = Vec::new();
+    let (source, inflow, outflow) = rhs_into(g, c, u, d, source, advection, inlet, &mut values);
+    Rhs {
+        values,
+        source,
+        inflow,
+        outflow,
+    }
+}
+
+/// `rhs` into a reused buffer; returns the source, inflow and outflow rates.
+/// The flux of each face is divided by the cell volume once and applied to
+/// both cells, which is the same value `rhs` computed for each.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rhs_into(
+    g: &Grid,
+    c: &[f64],
+    u: &[f64],
+    d: &[f64],
+    source: &[f64],
+    advection: Advection,
+    inlet: impl Fn(&crate::grid::Face) -> f64,
+    v: &mut Vec<f64>,
+) -> (f64, f64, f64) {
+    v.clear();
+    v.extend_from_slice(source);
     let mut inflow = 0.0;
     let mut outflow = 0.0;
+    let muscl = advection == Advection::Muscl;
     for (fi, f) in g.faces.iter().enumerate() {
         if !matches!(
             f.kind,
@@ -257,7 +283,7 @@ pub fn rhs(
         let cr = f.hi.map(|i| c[i]).unwrap_or_else(|| inlet(f));
         let donor = if u[fi] >= 0.0 {
             f.lo.map(|i| {
-                cl + if advection == Advection::Muscl {
+                cl + if muscl {
                     0.5 * slope(g, c, i, f.axis)
                 } else {
                     0.0
@@ -266,7 +292,7 @@ pub fn rhs(
             .unwrap_or(cl)
         } else {
             f.hi.map(|i| {
-                cr - if advection == Advection::Muscl {
+                cr - if muscl {
                     0.5 * slope(g, c, i, f.axis)
                 } else {
                     0.0
@@ -285,11 +311,12 @@ pub fn rhs(
             diffusivity * (cl - cr) / f.distance
         };
         let flux = (u[fi] * donor + diff) * f.area;
+        let per_volume = flux / g.volume;
         if let Some(i) = f.lo {
-            v[i] -= flux / g.volume;
+            v[i] -= per_volume;
         }
         if let Some(i) = f.hi {
-            v[i] += flux / g.volume;
+            v[i] += per_volume;
         }
         if f.lo.is_none() || f.hi.is_none() {
             let outward = if f.lo.is_some() { flux } else { -flux };
@@ -297,10 +324,5 @@ pub fn rhs(
             inflow += (-outward).max(0.0);
         }
     }
-    Rhs {
-        values: v,
-        source: source.iter().sum::<f64>() * g.volume,
-        inflow,
-        outflow,
-    }
+    (source.iter().sum::<f64>() * g.volume, inflow, outflow)
 }

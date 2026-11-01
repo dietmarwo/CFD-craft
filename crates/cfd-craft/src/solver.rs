@@ -429,19 +429,30 @@ pub fn scalar_substeps(dt: f64, stable: f64) -> (usize, f64) {
     }
 }
 
-/// One SSPRK2 step of scalar transport, with its budget increments.
+/// Reused buffers of the SSPRK2 scalar step.
+#[derive(Default)]
+struct ScalarBuffers {
+    r1: Vec<f64>,
+    stage: Vec<f64>,
+    r2: Vec<f64>,
+}
+
+/// One SSPRK2 step of scalar transport, with its budget increments, written
+/// into `concentration` in place.
 #[allow(clippy::too_many_arguments)]
 fn advance_scalar(
     c: &Case,
     g: &Grid,
-    concentration: &[f64],
+    concentration: &mut Vec<f64>,
     velocity: &[f64],
     d: &[f64],
     source: &[f64],
     dt: f64,
     budget: &mut Budget,
-) -> Vec<f64> {
-    let r1 = transport::rhs(
+    buffers: &mut ScalarBuffers,
+) {
+    let ScalarBuffers { r1, stage, r2 } = buffers;
+    let (source1, inflow1, outflow1) = transport::rhs_into(
         g,
         concentration,
         velocity,
@@ -449,23 +460,26 @@ fn advance_scalar(
         source,
         c.numerics.transport,
         |_| 0.0,
+        r1,
     );
-    let v: Vec<_> = concentration
-        .iter()
-        .zip(&r1.values)
-        .map(|(a, b)| a + dt * b)
-        .collect();
-    let r2 = transport::rhs(g, &v, velocity, d, source, c.numerics.transport, |_| 0.0);
-    let next = concentration
-        .iter()
-        .zip(v)
-        .zip(r2.values)
-        .map(|((a, b), r)| 0.5 * (a + b + dt * r))
-        .collect();
-    budget.emitted_kg += 0.5 * dt * (r1.source + r2.source);
-    budget.inflow_kg += 0.5 * dt * (r1.inflow + r2.inflow);
-    budget.outflow_kg += 0.5 * dt * (r1.outflow + r2.outflow);
-    next
+    stage.clear();
+    stage.extend(concentration.iter().zip(r1.iter()).map(|(a, b)| a + dt * b));
+    let (source2, inflow2, outflow2) = transport::rhs_into(
+        g,
+        stage,
+        velocity,
+        d,
+        source,
+        c.numerics.transport,
+        |_| 0.0,
+        r2,
+    );
+    for ((a, b), r) in concentration.iter_mut().zip(stage.iter()).zip(r2.iter()) {
+        *a = 0.5 * (*a + b + dt * r);
+    }
+    budget.emitted_kg += 0.5 * dt * (source1 + source2);
+    budget.inflow_kg += 0.5 * dt * (inflow1 + inflow2);
+    budget.outflow_kg += 0.5 * dt * (outflow1 + outflow2);
 }
 
 pub fn step(
@@ -555,16 +569,18 @@ pub fn step(
             let _phase = control.span(Phase::ScalarTransport);
             let d = diffusivity(c, &nut, j);
             let mut concentration = s.concentrations[j].clone();
+            let mut buffers = ScalarBuffers::default();
             for _ in 0..substeps {
-                concentration = advance_scalar(
+                advance_scalar(
                     c,
                     g,
-                    &concentration,
+                    &mut concentration,
                     &next.velocity,
                     &d,
                     source,
                     sub_dt,
                     &mut next.budgets[j],
+                    &mut buffers,
                 );
             }
             next.concentrations.push(concentration);

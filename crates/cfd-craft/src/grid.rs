@@ -43,6 +43,8 @@ pub struct Grid {
     pub(crate) momentum_stencil: std::sync::OnceLock<crate::momentum_solve::Stencil>,
     /// Same-axis neighbor faces of every face, [direction][side], from `face_at`.
     pub(crate) neighbor_faces: std::sync::OnceLock<Vec<[[Option<usize>; 2]; 3]>>,
+    /// For an a-face at q and d ≠ a, the d-faces at q + e_d and q + e_d − e_a.
+    pub(crate) edge_faces: std::sync::OnceLock<Vec<[[Option<usize>; 2]; 3]>>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryEvidence {
@@ -103,6 +105,7 @@ impl Grid {
             pressure_multigrid: Default::default(),
             momentum_stencil: std::sync::OnceLock::new(),
             neighbor_faces: std::sync::OnceLock::new(),
+            edge_faces: std::sync::OnceLock::new(),
         };
         let mut box_cells = vec![0usize; c.geometry.len()];
         for i in 0..count {
@@ -347,6 +350,28 @@ impl Grid {
                             q[d] += if side == 0 { -1 } else { 1 };
                             self.face_at(c, f.axis, q)
                         })
+                    })
+                })
+                .collect()
+        })
+    }
+    /// For every a-face at q and direction d ≠ a, the two d-faces whose mean
+    /// advects through the momentum control-volume edge above it: the d-faces
+    /// at q + e_d and q + e_d − e_a, as `face_at` finds them; built once.
+    pub(crate) fn edge_faces(&self, c: &Case) -> &[[[Option<usize>; 2]; 3]] {
+        self.edge_faces.get_or_init(|| {
+            self.faces
+                .iter()
+                .map(|f| {
+                    std::array::from_fn(|d| {
+                        if d == f.axis {
+                            return [None; 2];
+                        }
+                        let mut q = f.coord.map(|v| v as isize);
+                        q[d] += 1;
+                        let upper = self.face_at(c, d, q);
+                        q[f.axis] -= 1;
+                        [upper, self.face_at(c, d, q)]
                     })
                 })
                 .collect()

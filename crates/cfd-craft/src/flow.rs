@@ -248,24 +248,22 @@ fn flux_form_advection_with(
         advecting * (u[up] + 0.5 * s)
     };
     // Flux through the control-volume face between the a-face at q (L, below in d)
-    // and the a-face at q + e_d (H). Either may be missing or a wall face.
-    let edge_flux = |a: usize, d: usize, q: [isize; 3]| -> f64 {
-        let at = |axis: usize, offset: [isize; 3]| {
-            g.face_at(c, axis, std::array::from_fn(|k| q[k] + offset[k]))
-        };
-        let mut up_d = [0; 3];
-        up_d[d] = 1;
-        let mut d_back_a = up_d;
-        d_back_a[a] = -1;
+    // and the a-face at q + e_d (H). Either may be missing or a wall face. The
+    // faces it needs, as `face_at` finds them: the d-faces at q + e_d and
+    // q + e_d − e_a, and the a-faces at q, q + e_d, q − e_d and q + 2e_d.
+    let edge_core = |d: usize,
+                     d_faces: [Option<usize>; 2],
+                     [at_q, above, below, above2]: [Option<usize>; 4]|
+     -> f64 {
         // At an outlet's momentum cell only the inside cell's d-face exists; its
         // velocity is extrapolated (zero gradient) to the outer half.
-        let advecting = match (at(d, up_d), at(d, d_back_a)) {
-            (Some(d0), Some(d1)) => 0.5 * (u[d0] + u[d1]),
-            (Some(d0), None) | (None, Some(d0)) => u[d0],
-            (None, None) => return 0.0,
+        let advecting = match d_faces {
+            [Some(d0), Some(d1)] => 0.5 * (u[d0] + u[d1]),
+            [Some(d0), None] | [None, Some(d0)] => u[d0],
+            [None, None] => return 0.0,
         };
-        let low = interior(g, at(a, [0; 3]));
-        let high = interior(g, at(a, up_d));
+        let low = interior(g, at_q);
+        let high = interior(g, above);
         let value = |own: Option<usize>, other: Option<usize>, side: isize| -> Option<f64> {
             match (own, other) {
                 (Some(j), _) => Some(u[j]),
@@ -277,14 +275,10 @@ fn flux_form_advection_with(
         let (Some(phi_low), Some(phi_high)) = (value(low, high, -1), value(high, low, 1)) else {
             return 0.0;
         };
-        let mut down_d = [0; 3];
-        down_d[d] = -1;
-        let mut up2_d = [0; 3];
-        up2_d[d] = 2;
         let (phi_up, phi_down, far) = if advecting >= 0.0 {
-            (phi_low, phi_high, low.and(interior(g, at(a, down_d))))
+            (phi_low, phi_high, low.and(interior(g, below)))
         } else {
-            (phi_high, phi_low, high.and(interior(g, at(a, up2_d))))
+            (phi_high, phi_low, high.and(interior(g, above2)))
         };
         let s = match far {
             Some(far) => reconstruction.slope(phi_up - u[far], phi_down - phi_up),
@@ -292,6 +286,29 @@ fn flux_form_advection_with(
         };
         advecting * (phi_up + 0.5 * s)
     };
+    let edge_flux = |a: usize, d: usize, q: [isize; 3]| -> f64 {
+        let at = |axis: usize, offset: [isize; 3]| {
+            g.face_at(c, axis, std::array::from_fn(|k| q[k] + offset[k]))
+        };
+        let shift = |k: isize, back_a: isize| {
+            let mut o = [0; 3];
+            o[d] = k;
+            o[a] += back_a;
+            o
+        };
+        edge_core(
+            d,
+            [at(d, shift(1, 0)), at(d, shift(1, -1))],
+            [
+                at(a, [0; 3]),
+                at(a, shift(1, 0)),
+                at(a, shift(-1, 0)),
+                at(a, shift(2, 0)),
+            ],
+        )
+    };
+    let neighbor_faces = g.neighbor_faces(c);
+    let edge_faces = g.edge_faces(c);
     let centers: Vec<[f64; 3]> = (0..g.count())
         .into_par_iter()
         .map(|cell| {
@@ -302,16 +319,20 @@ fn flux_form_advection_with(
             }
         })
         .collect();
+    // The edge above each a-face in d, from the cached face tables (the same
+    // faces `edge_flux` would look up).
     let edges: Vec<[f64; 3]> = g
         .faces
         .par_iter()
-        .map(|f| {
-            let q = f.coord.map(|v| v as isize);
+        .enumerate()
+        .map(|(fi, f)| {
             std::array::from_fn(|d| {
                 if d == f.axis {
                     0.0
                 } else {
-                    edge_flux(f.axis, d, q)
+                    let [below, above] = neighbor_faces[fi][d];
+                    let above2 = above.and_then(|j| neighbor_faces[j][d][1]);
+                    edge_core(d, edge_faces[fi][d], [Some(fi), above, below, above2])
                 }
             })
         })
@@ -341,7 +362,7 @@ fn flux_form_advection_with(
                     below[d] -= 1;
                     // The edge below is the edge above the a-face below, when that
                     // face exists (face_at wraps periodic axes the same way).
-                    let low = match g.face_at(c, a, below) {
+                    let low = match neighbor_faces[fi][d][0] {
                         Some(j) => edges[j][d],
                         None => edge_flux(a, d, below),
                     };
@@ -354,6 +375,8 @@ fn flux_form_advection_with(
         .collect()
 }
 
+/// The steady momentum right-hand side on every face (zero on faces without an
+/// equation). `nut` enters only with `neutral_rans`; laminar flow has none.
 pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
     let reconstruction = Reconstruction::of(&c.numerics);
     let cell_u = g.cell_velocity(u);
@@ -379,6 +402,8 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
         }
     }
     let neighbor_faces = g.neighbor_faces(c);
+    let nu = c.flow.viscosity();
+    let rans = c.flow.rans();
     g.faces
         .par_iter()
         .enumerate()
@@ -406,14 +431,17 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                         };
                 }
                 // Variable-viscosity flux includes the derivative of the eddy viscosity.
-                let mu = c.flow.viscosity() + adjacent_mean(f, nut);
+                // Laminar: nut is zero, so every face viscosity is exactly nu.
+                let mu = nu + if rans { adjacent_mean(f, nut) } else { 0.0 };
                 let mut mu_lo = mu;
                 let mut mu_hi = mu;
-                for (neighbor, dst) in [(lo_face, &mut mu_lo), (hi_face, &mut mu_hi)] {
-                    if let Some(j) = neighbor
-                        && g.faces[j].kind == FaceKind::Interior
-                    {
-                        *dst = 0.5 * (mu + c.flow.viscosity() + adjacent_mean(&g.faces[j], nut));
+                if rans {
+                    for (neighbor, dst) in [(lo_face, &mut mu_lo), (hi_face, &mut mu_hi)] {
+                        if let Some(j) = neighbor
+                            && g.faces[j].kind == FaceKind::Interior
+                        {
+                            *dst = 0.5 * (mu + nu + adjacent_mean(&g.faces[j], nut));
+                        }
                     }
                 }
                 rhs += (mu_hi * (hi - u[fi]) - mu_lo * (u[fi] - lo)) / (g.dx[d] * g.dx[d]);

@@ -56,6 +56,22 @@ pub(crate) fn ghost_value(
     nut: &[f64],
     cell_u: &[[f64; 3]],
 ) -> f64 {
+    ghost_values(c, g, fi, d, side, [value], nut, cell_u)[0]
+}
+/// `ghost_value` for several face values at once: the boundary branch, the wall
+/// speed and the logarithms are evaluated once, and each value then goes
+/// through the same arithmetic as a single call.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ghost_values<const N: usize>(
+    c: &Case,
+    g: &Grid,
+    fi: usize,
+    d: usize,
+    side: isize,
+    values: [f64; N],
+    nut: &[f64],
+    cell_u: &[[f64; 3]],
+) -> [f64; N] {
     let f = &g.faces[fi];
     let at_domain = if side < 0 {
         f.center[d] < g.dx[d]
@@ -64,14 +80,15 @@ pub(crate) fn ghost_value(
     };
     let bc = c.boundaries.at(d);
     if at_domain && matches!(bc, Boundary::Slip) {
-        return value;
+        return values;
     }
     if at_domain && bc == Boundary::Open {
         let speed = c.flow.vector(f.center[2])[d] * side as f64;
         return if speed < -1e-12 {
-            2.0 * c.flow.vector(f.center[2])[f.axis] - value
+            let inflow = c.flow.vector(f.center[2])[f.axis];
+            values.map(|value| 2.0 * inflow - value)
         } else {
-            value
+            values
         };
     }
     if c.flow.rans() {
@@ -79,7 +96,8 @@ pub(crate) fn ghost_value(
             let v = c.flow.vector(c.domain.size_m[2]);
             let speed = (v[0] * v[0] + v[1] * v[1]).sqrt();
             let stress = c.flow.ustar().powi(2) * v[f.axis] / speed.max(1e-30);
-            return value + stress * g.dx[d] / (c.flow.viscosity() + adjacent_mean(f, nut));
+            let mu = c.flow.viscosity() + adjacent_mean(f, nut);
+            return values.map(|value| value + stress * g.dx[d] / mu);
         }
         let i = f.lo.or(f.hi).unwrap();
         let velocity = cell_u[i];
@@ -96,8 +114,11 @@ pub(crate) fn ghost_value(
                 roughness_m.min(0.001 * g.dx[d])
             };
             let us = 0.4 * speed / ((z + z0) / z0).ln();
-            let stress = us * us * value / speed.max(1e-30);
-            return value - stress * g.dx[d] / (c.flow.viscosity() + adjacent_mean(f, nut));
+            let mu = c.flow.viscosity() + adjacent_mean(f, nut);
+            return values.map(|value| {
+                let stress = us * us * value / speed.max(1e-30);
+                value - stress * g.dx[d] / mu
+            });
         }
     }
     let target = if at_domain {
@@ -109,7 +130,7 @@ pub(crate) fn ghost_value(
     } else {
         0.0
     };
-    2.0 * target - value
+    values.map(|value| 2.0 * target - value)
 }
 #[allow(clippy::too_many_arguments)]
 fn sample(
@@ -404,6 +425,11 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
     let neighbor_faces = g.neighbor_faces(c);
     let nu = c.flow.viscosity();
     let rans = c.flow.rans();
+    let mean: Vec<f64> = if rans {
+        g.faces.iter().map(|f| adjacent_mean(f, nut)).collect()
+    } else {
+        Vec::new()
+    };
     g.faces
         .par_iter()
         .enumerate()
@@ -432,7 +458,7 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 }
                 // Variable-viscosity flux includes the derivative of the eddy viscosity.
                 // Laminar: nut is zero, so every face viscosity is exactly nu.
-                let mu = nu + if rans { adjacent_mean(f, nut) } else { 0.0 };
+                let mu = nu + if rans { mean[fi] } else { 0.0 };
                 let mut mu_lo = mu;
                 let mut mu_hi = mu;
                 if rans {
@@ -440,7 +466,7 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                         if let Some(j) = neighbor
                             && g.faces[j].kind == FaceKind::Interior
                         {
-                            *dst = 0.5 * (mu + nu + adjacent_mean(&g.faces[j], nut));
+                            *dst = 0.5 * (mu + nu + mean[j]);
                         }
                     }
                 }

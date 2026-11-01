@@ -52,8 +52,7 @@ fn ghost_coefficient(
     nut: &[f64],
     cell_u: &[[f64; 3]],
 ) -> f64 {
-    let at0 = flow::ghost_value(c, g, fi, d, side, 0.0, nut, cell_u);
-    let at1 = flow::ghost_value(c, g, fi, d, side, 1.0, nut, cell_u);
+    let [at0, at1] = flow::ghost_values(c, g, fi, d, side, [0.0, 1.0], nut, cell_u);
     at1 - at0
 }
 
@@ -315,15 +314,16 @@ impl Stencil {
     ) -> Matrix {
         let cell_u = g.cell_velocity(u);
         let nu = c.flow.viscosity();
+        let mean: Vec<_> = g.faces.iter().map(|f| flow::adjacent_mean(f, nut)).collect();
         self.assemble(
             u,
             dt,
             |fi, d| {
                 let h2 = self.spacing[d] * self.spacing[d];
-                let mu = nu + flow::adjacent_mean(&g.faces[fi], nut);
+                let mu = nu + mean[fi];
                 self.neighbors[fi][d].map(|n| match n {
                     Neighbor::Unknown(j) if g.faces[j].kind == FaceKind::Interior => {
-                        0.5 * (mu + nu + flow::adjacent_mean(&g.faces[j], nut)) / h2
+                        0.5 * (mu + nu + mean[j]) / h2
                     }
                     _ => mu / h2,
                 })

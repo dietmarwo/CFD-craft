@@ -228,6 +228,95 @@ fn slope(g: &Grid, c: &[f64], i: usize, a: usize) -> f64 {
         minmod(2.0 * (c[i] - lo), 2.0 * (hi - c[i])),
     )
 }
+/// One transporting face of `rhs` with the velocity and diffusivity fixed.
+struct FixedFace {
+    lo: Option<usize>,
+    hi: Option<usize>,
+    velocity: f64,
+    diffusivity: f64,
+    outlet: bool,
+    distance: f64,
+    area: f64,
+}
+
+/// `rhs` with `Advection::LinearUpwind`, zero inlet values and a fixed velocity
+/// and diffusivity, for repeated evaluation (the scalar sub-steps of the
+/// implicit steady algorithm). The faces are gathered once; `eval` repeats
+/// `rhs_into`'s arithmetic face by face in the same order, so it returns the
+/// same bits.
+pub(crate) struct FixedRhs<'a> {
+    g: &'a Grid,
+    faces: Vec<FixedFace>,
+}
+
+impl<'a> FixedRhs<'a> {
+    pub(crate) fn new(g: &'a Grid, u: &[f64], d: &[f64]) -> Self {
+        let faces = g
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| {
+                matches!(
+                    f.kind,
+                    FaceKind::Interior | FaceKind::Inlet | FaceKind::Outlet
+                )
+            })
+            .map(|(fi, f)| FixedFace {
+                lo: f.lo,
+                hi: f.hi,
+                velocity: u[fi],
+                diffusivity: match (f.lo, f.hi) {
+                    (Some(i), Some(j)) => 0.5 * (d[i] + d[j]),
+                    (Some(i), None) | (None, Some(i)) => d[i],
+                    _ => 0.0,
+                },
+                outlet: f.kind == FaceKind::Outlet,
+                distance: f.distance,
+                area: f.area,
+            })
+            .collect();
+        Self { g, faces }
+    }
+
+    /// The rates and `v`, as `rhs_into(g, c, u, d, source, LinearUpwind, |_| 0.0, v)`.
+    pub(crate) fn eval(&self, c: &[f64], source: &[f64], v: &mut Vec<f64>) -> (f64, f64, f64) {
+        v.clear();
+        v.extend_from_slice(source);
+        let mut inflow = 0.0;
+        let mut outflow = 0.0;
+        let volume = self.g.volume;
+        for f in &self.faces {
+            let cl = f.lo.map(|i| c[i]).unwrap_or(0.0);
+            let cr = f.hi.map(|i| c[i]).unwrap_or(0.0);
+            // `+ 0.0` and `- 0.0` as in `rhs_into`, which adds the zero slope.
+            let donor = if f.velocity >= 0.0 {
+                f.lo.map(|_| cl + 0.0).unwrap_or(cl)
+            } else {
+                f.hi.map(|_| cr - 0.0).unwrap_or(cr)
+            };
+            let diff = if f.outlet {
+                0.0
+            } else {
+                f.diffusivity * (cl - cr) / f.distance
+            };
+            let flux = (f.velocity * donor + diff) * f.area;
+            let per_volume = flux / volume;
+            if let Some(i) = f.lo {
+                v[i] -= per_volume;
+            }
+            if let Some(i) = f.hi {
+                v[i] += per_volume;
+            }
+            if f.lo.is_none() || f.hi.is_none() {
+                let outward = if f.lo.is_some() { flux } else { -flux };
+                outflow += outward.max(0.0);
+                inflow += (-outward).max(0.0);
+            }
+        }
+        (source.iter().sum::<f64>() * volume, inflow, outflow)
+    }
+}
+
 pub struct Rhs {
     pub values: Vec<f64>,
     pub source: f64,
@@ -325,4 +414,59 @@ pub(crate) fn rhs_into(
         }
     }
     (source.iter().sum::<f64>() * g.volume, inflow, outflow)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::case::{Block, Boundary, Case};
+
+    // The gathered-face evaluation must return the bits of `rhs` with linear
+    // upwind and zero inlet values, on open, periodic, masked and RANS grids.
+    #[test]
+    fn fixed_rhs_returns_the_bits_of_rhs() {
+        let canyon: Case =
+            serde_json::from_str(include_str!("../../../cases/canyon/wh1-wind270.json")).unwrap();
+        let mut periodic: Case = serde_json::from_str(include_str!(
+            "../../../cases/verification/periodic-tracer.json"
+        ))
+        .unwrap();
+        periodic.grid.cells = [6, 1, 5];
+        let mut masked = canyon.clone();
+        masked.boundaries.y = Boundary::Periodic;
+        masked.geometry.push(Block {
+            id: "extra".into(),
+            min_m: [12.0, 0.0, 0.0],
+            max_m: [13.0, 16.0, 2.0],
+        });
+        for c in [canyon, periodic, masked] {
+            let g = Grid::build(&c).unwrap();
+            let n = g.count();
+            let u: Vec<_> = (0..g.faces.len())
+                .map(|i| (0.37 * i as f64).sin() * 2.0)
+                .collect();
+            let d: Vec<_> = (0..n)
+                .map(|i| 0.01 + 0.005 * (0.11 * i as f64).cos())
+                .collect();
+            let x: Vec<_> = (0..n)
+                .map(|i| {
+                    if g.fluid[i] {
+                        (0.23 * i as f64).cos().abs()
+                    } else {
+                        0.0
+                    }
+                })
+                .collect();
+            let source: Vec<_> = (0..n).map(|i| 1e-3 * (i % 7) as f64).collect();
+            let expected = rhs(&g, &x, &u, &d, &source, Advection::LinearUpwind, |_| 0.0);
+            let mut values = vec![1.0; 3];
+            let (s, inflow, outflow) = FixedRhs::new(&g, &u, &d).eval(&x, &source, &mut values);
+            let bits = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+            assert_eq!(bits(&values), bits(&expected.values), "{}", c.name);
+            assert_eq!(
+                [s, inflow, outflow].map(f64::to_bits),
+                [expected.source, expected.inflow, expected.outflow].map(f64::to_bits)
+            );
+        }
+    }
 }

@@ -314,7 +314,11 @@ impl Stencil {
     ) -> Matrix {
         let cell_u = g.cell_velocity(u);
         let nu = c.flow.viscosity();
-        let mean: Vec<_> = g.faces.iter().map(|f| flow::adjacent_mean(f, nut)).collect();
+        let mean: Vec<_> = g
+            .faces
+            .iter()
+            .map(|f| flow::adjacent_mean(f, nut))
+            .collect();
         self.assemble(
             u,
             dt,

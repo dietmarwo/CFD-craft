@@ -443,37 +443,35 @@ struct ScalarBuffers {
 fn advance_scalar(
     c: &Case,
     g: &Grid,
-    concentration: &mut Vec<f64>,
+    concentration: &mut [f64],
     velocity: &[f64],
     d: &[f64],
     source: &[f64],
     dt: f64,
     budget: &mut Budget,
     buffers: &mut ScalarBuffers,
+    fixed: Option<&transport::FixedRhs>,
 ) {
     let ScalarBuffers { r1, stage, r2 } = buffers;
-    let (source1, inflow1, outflow1) = transport::rhs_into(
-        g,
-        concentration,
-        velocity,
-        d,
-        source,
-        c.numerics.transport,
-        |_| 0.0,
-        r1,
-    );
+    // Linear upwind with a fixed flow: evaluate from the gathered faces.
+    let fixed = fixed.filter(|_| c.numerics.transport == crate::case::Advection::LinearUpwind);
+    let rhs = |x: &[f64], out: &mut Vec<f64>| match fixed {
+        Some(op) => op.eval(x, source, out),
+        None => transport::rhs_into(
+            g,
+            x,
+            velocity,
+            d,
+            source,
+            c.numerics.transport,
+            |_| 0.0,
+            out,
+        ),
+    };
+    let (source1, inflow1, outflow1) = rhs(concentration, r1);
     stage.clear();
     stage.extend(concentration.iter().zip(r1.iter()).map(|(a, b)| a + dt * b));
-    let (source2, inflow2, outflow2) = transport::rhs_into(
-        g,
-        stage,
-        velocity,
-        d,
-        source,
-        c.numerics.transport,
-        |_| 0.0,
-        r2,
-    );
+    let (source2, inflow2, outflow2) = rhs(stage, r2);
     for ((a, b), r) in concentration.iter_mut().zip(stage.iter()).zip(r2.iter()) {
         *a = 0.5 * (*a + b + dt * r);
     }
@@ -570,6 +568,10 @@ pub fn step(
             let d = diffusivity(c, &nut, j);
             let mut concentration = s.concentrations[j].clone();
             let mut buffers = ScalarBuffers::default();
+            // Several sub-steps share one flow: gather its faces once.
+            let fixed = (substeps > 1
+                && c.numerics.transport == crate::case::Advection::LinearUpwind)
+                .then(|| transport::FixedRhs::new(g, &next.velocity, &d));
             for _ in 0..substeps {
                 advance_scalar(
                     c,
@@ -581,6 +583,7 @@ pub fn step(
                     sub_dt,
                     &mut next.budgets[j],
                     &mut buffers,
+                    fixed.as_ref(),
                 );
             }
             next.concentrations.push(concentration);

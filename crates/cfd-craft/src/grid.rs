@@ -39,6 +39,8 @@ pub struct Grid {
     pub pressure_factor: std::sync::OnceLock<crate::pressure::Factor>,
     pub pressure_preconditioner: PressurePreconditioner,
     pub(crate) pressure_multigrid: std::sync::Arc<crate::multigrid::Cache>,
+    /// Built on first use by the implicit pseudo-time algorithms.
+    pub(crate) momentum_stencil: std::sync::OnceLock<crate::momentum_solve::Stencil>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GeometryEvidence {
@@ -97,6 +99,7 @@ impl Grid {
             pressure_factor: std::sync::OnceLock::new(),
             pressure_preconditioner: c.numerics.pressure_preconditioner,
             pressure_multigrid: Default::default(),
+            momentum_stencil: std::sync::OnceLock::new(),
         };
         let mut box_cells = vec![0usize; c.geometry.len()];
         for i in 0..count {

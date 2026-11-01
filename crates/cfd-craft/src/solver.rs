@@ -105,7 +105,14 @@ pub struct State {
     pub budgets: Vec<Budget>,
     pub floor_events: usize,
     pub pressure_iterations: usize,
+    /// Inner iterations of implicit momentum-correction solves; omitted when
+    /// zero, so explicit checkpoints keep their bytes.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub momentum_solver_iterations: usize,
     pub monitor_history: Vec<Vec<f64>>,
+}
+fn is_zero(v: &usize) -> bool {
+    *v == 0
 }
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -152,6 +159,9 @@ pub struct Summary {
     pub physical_time_s: f64,
     pub elapsed_s: f64,
     pub pressure_iterations: usize,
+    /// Inner iterations of implicit momentum-correction solves, when selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub momentum_solver_iterations: Option<usize>,
     pub turbulent_floor_events: usize,
     pub fluid_cells: usize,
     pub solid_cells: usize,
@@ -208,6 +218,7 @@ pub fn initial_state(c: &Case, g: &Grid) -> State {
         budgets,
         floor_events: 0,
         pressure_iterations: 0,
+        momentum_solver_iterations: 0,
         monitor_history: vec![],
     }
 }
@@ -287,9 +298,22 @@ pub fn timestep(c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
         .map(|x| x.diffusivity_m2_s + maxnut / sc)
         .fold(c.flow.viscosity() + maxnut, f64::max);
     let diffusion = 2.0 * dmax * g.dx.iter().map(|h| 1.0 / (h * h)).sum::<f64>();
-    c.numerics
-        .max_time_step_s
-        .min(c.numerics.advective_cfl_max.min(0.45) / (adv + diffusion).max(1e-30))
+    match c.numerics.steady_algorithm {
+        SteadyAlgorithm::Explicit => c
+            .numerics
+            .max_time_step_s
+            .min(c.numerics.advective_cfl_max.min(0.45) / (adv + diffusion).max(1e-30)),
+        // Implicit viscosity removes the diffusive limit; advection stays explicit.
+        SteadyAlgorithm::ImplicitViscous => c
+            .numerics
+            .max_time_step_s
+            .min(c.numerics.advective_cfl_max.min(0.45) / adv.max(1e-30)),
+        // A deterministic CFL ramp from the outer-iteration count; restarts need no state.
+        SteadyAlgorithm::ImplicitProjection => c
+            .numerics
+            .max_time_step_s
+            .min(crate::momentum_solve::ramp_cfl(s.steps) / adv.max(1e-30)),
+    }
 }
 fn flow_euler(
     c: &Case,
@@ -299,19 +323,31 @@ fn flow_euler(
     nut: &[f64],
     dt: f64,
     control: &Control,
-) -> Result<(Vec<f64>, Vec<f64>, usize)> {
+) -> Result<(Vec<f64>, Vec<f64>, usize, usize)> {
     let rhs = {
         let _phase = control.span(Phase::MomentumRhs);
         flow::momentum_rhs(c, g, u, nut)
     };
     let velocity_update = control.span(Phase::VelocityUpdate);
     let grad = g.gradient(p);
-    let mut v: Vec<_> = u
-        .iter()
-        .zip(rhs)
-        .zip(grad)
-        .map(|((u, r), p)| u + dt * (r - p))
-        .collect();
+    let mut inner = 0;
+    let mut v: Vec<_> = if c.numerics.steady_algorithm == SteadyAlgorithm::ImplicitViscous {
+        // Delta form: (I - dt L_nu) delta = dt R with the full steady residual R.
+        let b: Vec<_> = rhs.iter().zip(&grad).map(|(r, p)| dt * (r - p)).collect();
+        let stencil = g
+            .momentum_stencil
+            .get_or_init(|| crate::momentum_solve::Stencil::build(c, g));
+        let (delta, info) =
+            crate::momentum_solve::solve_viscous(stencil, c.flow.viscosity(), dt, &b, control)?;
+        inner = info.iterations;
+        u.iter().zip(delta).map(|(u, d)| u + d).collect()
+    } else {
+        u.iter()
+            .zip(rhs)
+            .zip(grad)
+            .map(|((u, r), p)| u + dt * (r - p))
+            .collect()
+    };
     g.enforce_velocity(c, &mut v);
     let mut pp = p.to_vec();
     drop(velocity_update);
@@ -325,7 +361,48 @@ fn flow_euler(
         control,
     )?;
     g.enforce_velocity(c, &mut v);
-    Ok((v, pp, info.iterations))
+    Ok((v, pp, info.iterations, inner))
+}
+/// One outer iteration of the implicit steady algorithm (P5a), in delta form:
+/// A δ = R(u, p), u* = u + δ, then a projection at the pseudo-time step. At a
+/// fixed point δ = 0 and the projection's correction is zero, so R = 0 and the
+/// velocity is solenoidal, which is what `assess` checks.
+fn implicit_iteration(
+    c: &Case,
+    g: &Grid,
+    u: &[f64],
+    p: &[f64],
+    nut: &[f64],
+    dt: f64,
+    control: &Control,
+) -> Result<(Vec<f64>, Vec<f64>, usize, usize)> {
+    let rhs = {
+        let _phase = control.span(Phase::MomentumRhs);
+        flow::momentum_rhs(c, g, u, nut)
+    };
+    let velocity_update = control.span(Phase::VelocityUpdate);
+    let residual: Vec<_> = rhs.iter().zip(g.gradient(p)).map(|(r, p)| r - p).collect();
+    let stencil = g
+        .momentum_stencil
+        .get_or_init(|| crate::momentum_solve::Stencil::build(c, g));
+    let matrix = stencil.implicit_matrix(u, c.flow.viscosity(), dt);
+    drop(velocity_update);
+    let (delta, info) =
+        crate::momentum_solve::solve_implicit(stencil, &matrix, &residual, control)?;
+    let mut v: Vec<_> = u.iter().zip(delta).map(|(u, d)| u + d).collect();
+    g.enforce_velocity(c, &mut v);
+    let mut pp = p.to_vec();
+    let projection = pressure::project(
+        g,
+        &mut v,
+        &mut pp,
+        dt,
+        c.numerics.pressure_relative_tolerance,
+        c.numerics.pressure_max_iterations,
+        control,
+    )?;
+    g.enforce_velocity(c, &mut v);
+    Ok((v, pp, projection.iterations, info.iterations))
 }
 pub fn step(
     c: &Case,
@@ -358,11 +435,19 @@ pub fn step(
         budgets: s.budgets.clone(),
         floor_events: s.floor_events,
         pressure_iterations: s.pressure_iterations,
+        momentum_solver_iterations: s.momentum_solver_iterations,
         monitor_history: Vec::new(),
     };
-    if !c.flow.prescribed() {
-        let (v, p, n1) = flow_euler(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
-        let (v2, p2, n2) = flow_euler(c, g, &v, &p, &nut, dt, control)?;
+    if c.numerics.steady_algorithm == SteadyAlgorithm::ImplicitProjection {
+        let (v, p, n, m) = implicit_iteration(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
+        next.velocity = v;
+        next.pressure = p;
+        next.pressure_iterations += n;
+        next.momentum_solver_iterations += m;
+    } else if !c.flow.prescribed() {
+        let (v, p, n1, m1) = flow_euler(c, g, &s.velocity, &s.pressure, &nut, dt, control)?;
+        let (v2, p2, n2, m2) = flow_euler(c, g, &v, &p, &nut, dt, control)?;
+        next.momentum_solver_iterations += m1 + m2;
         next.velocity = s
             .velocity
             .iter()
@@ -828,6 +913,8 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         physical_time_s: state.time_s,
         elapsed_s: control.elapsed(),
         pressure_iterations: state.pressure_iterations,
+        momentum_solver_iterations: (c.numerics.steady_algorithm != SteadyAlgorithm::Explicit)
+            .then_some(state.momentum_solver_iterations),
         turbulent_floor_events: state.floor_events,
         fluid_cells: geo.fluid_cells,
         solid_cells: geo.solid_cells,

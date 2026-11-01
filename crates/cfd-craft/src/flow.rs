@@ -30,7 +30,7 @@ fn adjacent_mean(f: &crate::grid::Face, v: &[f64]) -> f64 {
     }
 }
 #[allow(clippy::too_many_arguments)]
-fn wall_ghost(
+pub(crate) fn wall_ghost(
     c: &Case,
     g: &Grid,
     fi: usize,

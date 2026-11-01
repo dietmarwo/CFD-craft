@@ -317,6 +317,26 @@ impl MomentumAdvection {
         *self == Self::DonorCell
     }
 }
+/// Steady pseudo-time algorithm. `explicit` is the SSPRK2 march of the earlier
+/// release. The implicit options solve for a correction driven by the full
+/// steady residual (delta form), so they share its fixed point.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SteadyAlgorithm {
+    #[default]
+    Explicit,
+    /// SSPRK2 stages with an implicit viscous term: (I − Δτ L_ν) δ = Δτ R.
+    ImplicitViscous,
+    /// One implicit correction per outer iteration, A δ = R with a Picard
+    /// first-order upwind and viscous Jacobian and a CFL ramp, followed by a
+    /// projection at the pseudo-time step (a SIMPLEC-type coupling).
+    ImplicitProjection,
+}
+impl SteadyAlgorithm {
+    fn is_default(&self) -> bool {
+        *self == Self::Explicit
+    }
+}
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MomentumLimiter {
@@ -341,6 +361,9 @@ pub struct Numerics {
     /// Required with `limited_upwind`, rejected otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub momentum_limiter: Option<MomentumLimiter>,
+    /// Omitted/default explicit pseudo-time preserves existing hashes.
+    #[serde(default, skip_serializing_if = "SteadyAlgorithm::is_default")]
+    pub steady_algorithm: SteadyAlgorithm,
     pub steady_residual_tolerance: f64,
     pub steady_monitor_tolerance: f64,
     pub monitor_window: usize,
@@ -555,6 +578,33 @@ impl Case {
                     "error",
                     "numerics.momentum_advection",
                     "Second-order momentum advection is not verified with neutral_rans yet; use donor_cell.",
+                );
+            }
+        }
+        if self.numerics.steady_algorithm != SteadyAlgorithm::Explicit {
+            let path = "numerics.steady_algorithm";
+            if self.run.mode != Mode::Steady {
+                add(
+                    "CFD-E045",
+                    "error",
+                    path,
+                    "Implicit pseudo-time changes the time accuracy; use it only with run.mode = steady.",
+                );
+            }
+            if !self.constituents.is_empty() {
+                add(
+                    "CFD-E046",
+                    "error",
+                    path,
+                    "Implicit pseudo-time steps exceed the explicit scalar-transport limits; remove constituents or use explicit.",
+                );
+            }
+            if self.flow.rans() || self.flow.prescribed() {
+                add(
+                    "CFD-E047",
+                    "error",
+                    path,
+                    "Implicit pseudo-time supports laminar flow only; use explicit for neutral_rans or prescribed flow.",
                 );
             }
         }

@@ -177,6 +177,7 @@ fn describe() -> Result<()> {
         "pressure_preconditioners":["ic0","multigrid"],"default_pressure_preconditioner":"ic0",
         "momentum_advection":["donor_cell","second_order_upwind","limited_upwind"],"default_momentum_advection":"donor_cell",
         "momentum_limiters":["van_albada","van_leer","monotonized_central"],
+        "steady_algorithms":["explicit","implicit_viscous","implicit_projection"],"default_steady_algorithm":"explicit",
         "case_schema":schemars::schema_for!(Case),"result_schema":schemars::schema_for!(Summary),
         "phase_profile_schema":schemars::schema_for!(Profile),
         "profiling":"profile CASE --output NEW_DIR: native archive in run/, versioned profile.json alongside it",
@@ -186,7 +187,7 @@ fn describe() -> Result<()> {
             "1":"invalid input or an execution/I/O error; check reports are printed on stdout",
             "2":"completed execution with incomplete or failed numerical evidence"},
         "experimental_validation":"not_validated",
-        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum by default; opt-in second-order momentum without open boundaries or RANS","explicit diffusion","no particles, vegetation, LES, annual statistics or GPU"]
+        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum by default; opt-in second-order momentum without open boundaries or RANS","explicit diffusion and pseudo-time by default; opt-in implicit steady pseudo-time for laminar flow without constituents","no particles, vegetation, LES, annual statistics or GPU"]
     }))
 }
 
@@ -380,6 +381,8 @@ fn profile_case(
     let control = Control::new(c.run.wall_time_limit_s).with_profiling();
     let initial_steps = state.as_ref().map_or(0, |s| s.steps);
     let initial_pressure_iterations = state.as_ref().map_or(0, |s| s.pressure_iterations);
+    let initial_momentum_solver_iterations =
+        state.as_ref().map_or(0, |s| s.momentum_solver_iterations);
     let mut success = false;
     let mut summary = None;
     let mut state_sha = None;
@@ -409,7 +412,7 @@ fn profile_case(
         }
         Err(e) => error = Some(e),
     }
-    let profile = serde_json::json!({
+    let mut profile = serde_json::json!({
         "schema_version":"cfd-craft.native-profile/0.1",
         "passed":success,"error":error,"omitted":omitted,
         "input_sha256":input_sha,"case_sha256":hash_bytes(&serde_json::to_vec(c).map_err(|e|e.to_string())?),
@@ -422,6 +425,10 @@ fn profile_case(
         "meaning":"attempted phase work; summary counters describe retained state; inclusive phases overlap; sum exclusive time only",
         "timer_scope":"after preflight/checkpoint import; includes thread-pool setup, solver and archive write; excludes profile.json serialization and independent audit"
     });
+    // Only implicit pseudo-time does inner momentum work; explicit envelopes keep their fields.
+    if c.numerics.steady_algorithm != cfd_craft::case::SteadyAlgorithm::Explicit {
+        profile["initial_momentum_solver_iterations"] = initial_momentum_solver_iterations.into();
+    }
     output::atomic_write(
         &out.join("profile.json"),
         &serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?,

@@ -26,6 +26,8 @@ pub enum Phase {
     Timestep,
     Step,
     MomentumRhs,
+    /// Inexact implicit momentum-correction solves; work units are inner iterations.
+    MomentumSolve,
     VelocityUpdate,
     PressureProjection,
     PressureSolve,

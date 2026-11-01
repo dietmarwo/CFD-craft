@@ -57,6 +57,89 @@ class Momentum(unittest.TestCase):
         drift = m.momentum_change([1, 2, 3], [1.01, 2, 3], [1, 1, 1])
         self.assertGreater(drift[0]["normalized_change"], 0.009)
 
+    def notices(self, report):
+        import external_notices
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp, "report.json")
+            path.write_text(json.dumps(report))
+            output = io.StringIO()
+            with (
+                patch("sys.argv", ["external_notices", str(path), "momentum"]),
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(external_notices.main(), 0)
+        return output.getvalue()
+
+    def test_fixture_report_reaches_the_checks_view(self):
+        text = self.notices(
+            dict(
+                schema_version="cfd-craft.momentum-accuracy/0.1",
+                passed=True,
+                runs=[],
+                vortices=[
+                    dict(
+                        grid=64,
+                        max_dt_s=0.0005,
+                        accepted=True,
+                        steps=100,
+                        error=dict(l1=0.00122074),
+                        momentum=[dict(normalized_change=0.00049480891)],
+                    )
+                ],
+                spatial_orders=dict(l1=0.9739, l2=0.97475, linf=0.95906),
+                temporal=dict(
+                    difference_order=2.00022,
+                    fine_difference_over_spatial_error=4.95e-06,
+                ),
+                stability=dict(
+                    steps=1000, final_min=0.4235, final_max=0.5765, new_extrema=0.0
+                ),
+            )
+        )
+        self.assertIn("::notice title=momentum::passed True", text)
+        for expected in ["0.9739 / 0.97475 / 0.95906", "0.00122074", "2.0002"]:
+            self.assertIn(expected, text)
+        self.assertNotIn("title=cavity", text)
+
+    def test_reference_report_reaches_the_checks_view(self):
+        text = self.notices(
+            dict(
+                schema_version="cfd-craft.momentum-baseline/0.1",
+                passed=False,
+                error="CFD-B007 momentum.defaults.fields.json: canonical artifacts differ",
+                reference=dict(
+                    grid=96,
+                    accepted=True,
+                    steps=21390,
+                    solver_s=1074.45,
+                    reference_error=0.00920541,
+                ),
+                self_convergence=dict(
+                    available=True,
+                    orders=dict(l1=1.28),
+                    rows=[dict(grid=16, accepted=True, l1=0.01, l2=0.02, linf=0.03)],
+                ),
+                default_controls=[
+                    dict(
+                        case="cavity",
+                        passed=True,
+                        steps=2010,
+                        pressure_iterations=204850,
+                        assessment="steady_discrete_solution",
+                    )
+                ],
+            )
+        )
+        for expected in [
+            "native 96² reference: accepted True; steps 21390",
+            "Ghia error 0.00920541",
+            "canonical artifacts differ",
+            "default cavity: byte-identical True; steps 2010",
+        ]:
+            self.assertIn(expected, text)
+        self.assertNotIn("title=cavity", text)
+
     def test_byte_controls_reject_changed_artifacts_and_work(self):
         with tempfile.TemporaryDirectory() as temp:
             a, c = Path(temp, "a"), Path(temp, "b")

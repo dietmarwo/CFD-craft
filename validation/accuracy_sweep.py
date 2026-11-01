@@ -123,8 +123,10 @@ def run_method(method, grid, destination, binary, foam_root, limits):
         require(
             grid in cmp.backend.CAVITY_GRIDS, "openfoam.grid", "unsupported recipe grid"
         )
+        # Legacy levels keep their prepared manifest; other grids are explicit.
+        level, explicit = (grid // 24, None) if grid in (24, 48, 72) else (1, grid)
         cmp.backend.prepare(
-            "cavity", 1, limits["foam_iterations"], prepared, cavity_grid=grid
+            "cavity", level, limits["foam_iterations"], prepared, cavity_grid=explicit
         )
         command = [
             sys.executable,

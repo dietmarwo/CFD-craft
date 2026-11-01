@@ -308,7 +308,9 @@ jobs:
   momentum-verification:
     if: github.event_name == 'workflow_dispatch' && inputs.external == 'momentum'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # Two builds, the OpenFOAM install, the paired sweep, a 96² reference
+    # budgeted at 1800 s and the default controls.
+    timeout-minutes: 120
     env:
       OMP_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
@@ -328,19 +330,35 @@ jobs:
           cargo build --release --locked --manifest-path runs/momentum-main/Cargo.toml
       - run: python integrations/install_openfoam13.py --output runs/openfoam13
       - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
-      - run: python validation/momentum_accuracy.py --output runs/momentum/fixtures
       - run: |
           set +e
-          python validation/compare_backends.py --grid-sweep --grids 16 24 32 48 --sweep-rounds 3 --native-wall-s 600 --native-max-steps 20000 --native-pressure-preconditioner multigrid --foam-iterations 3000 --timeout-s 180 --accuracy-target 0.01 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/momentum/sweep
+          python validation/momentum_accuracy.py --output runs/momentum/fixtures > runs/momentum/fixtures.log 2>&1
           code=$?
+          test ! -f runs/momentum/fixtures/report.json || python validation/external_notices.py runs/momentum/fixtures/report.json "momentum fixtures"
+          test -f runs/momentum/fixtures/report.json || echo "::error title=momentum fixtures::exit $code: $(tail -n 1 runs/momentum/fixtures.log)"
+          test "$code" -eq 0
+      - run: |
+          set +e
+          python validation/compare_backends.py --grid-sweep --grids 16 24 32 48 --sweep-rounds 3 --native-wall-s 600 --native-max-steps 20000 --native-pressure-preconditioner multigrid --foam-iterations 3000 --timeout-s 180 --accuracy-target 0.01 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/momentum/sweep > runs/momentum/sweep.log 2>&1
+          code=$?
+          test ! -f runs/momentum/sweep/report.json || python validation/external_notices.py runs/momentum/sweep/report.json "paired cavity sweep"
+          test -f runs/momentum/sweep/report.json || echo "::error title=paired cavity sweep::exit $code: $(tail -n 1 runs/momentum/sweep.log)"
           test "$code" -eq 0 -o "$code" -eq 2
       - run: |
           set +e
-          python validation/momentum_baseline.py --sweep runs/momentum/sweep --baseline-binary runs/momentum-main/target/release/cfd-craft --output runs/momentum/reference-and-controls
+          python validation/momentum_baseline.py --sweep runs/momentum/sweep --baseline-binary runs/momentum-main/target/release/cfd-craft --output runs/momentum/reference-and-controls > runs/momentum/reference.log 2>&1
           code=$?
+          test ! -f runs/momentum/reference-and-controls/report.json || python validation/external_notices.py runs/momentum/reference-and-controls/report.json "momentum reference and controls"
+          test -f runs/momentum/reference-and-controls/report.json || echo "::error title=momentum reference and controls::exit $code: $(tail -n 1 runs/momentum/reference.log)"
           test "$code" -eq 0 -o "$code" -eq 2
       - if: always()
-        run: python validation/archive_evidence.py runs/momentum runs/momentum-evidence.zip --binary target/release/cfd-craft > runs/momentum-archive.json
+        run: |
+          test -d runs/momentum || exit 0
+          set +e
+          python validation/archive_evidence.py runs/momentum runs/momentum-evidence.zip --binary target/release/cfd-craft > runs/momentum-archive.json
+          code=$?
+          python validation/external_notices.py runs/momentum-archive.json "momentum evidence archive"
+          test "$code" -eq 0
       - uses: actions/upload-artifact@v7
         if: always()
         with:

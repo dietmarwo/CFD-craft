@@ -114,6 +114,28 @@ class Sweep(unittest.TestCase):
         self.assertIn("sweep.collection.", failed[0]["error"])
         self.assertFalse(r["cost_at_target"]["native-steady"]["target_reached"])
 
+    def test_rejected_rows_are_named_in_the_checks_view(self):
+        import external_notices
+
+        report = dict(
+            completed=True,
+            workflow_valid=False,
+            passed=False,
+            groups=[],
+            rows=[
+                dict(run_directory="openfoam-24-r1", error=None),
+                dict(
+                    run_directory="native-48-r2",
+                    error="CFD-B004 sweep.collection.native-48-r2: late snapshot",
+                ),
+            ],
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            external_notices.accuracy_sweep(report, "sweep")
+        self.assertIn("rejected native-48-r2: CFD-B004", output.getvalue())
+        self.assertNotIn("openfoam-24-r1", output.getvalue())
+
     def test_collection_checks_the_manifest_identity_again(self):
         row = dict(method="native-steady", archive_manifest_sha256="old")
         destination = self.root / "changed"
@@ -132,6 +154,32 @@ class Sweep(unittest.TestCase):
                 set(s.METHODS),
             )
         self.assertNotIn(12, [row["grid"] for row in r["rows"]])
+
+    def test_openfoam_legacy_grids_keep_their_level_manifest(self):
+        class Prepared(Exception):
+            pass
+
+        def prepare(kind, level, iterations, output, cavity_grid=None):
+            seen.append((level, cavity_grid))
+            raise Prepared
+
+        limits = dict(foam_iterations=3000, foam_wall_s=180)
+        for grid, expected in [(24, (1, None)), (48, (2, None)), (16, (1, 16))]:
+            seen = []
+            with (
+                self.subTest(grid=grid),
+                patch.object(s.cmp.backend, "prepare", prepare),
+                self.assertRaises(Prepared),
+            ):
+                s.run_method(
+                    "openfoam-steady",
+                    grid,
+                    self.root / f"foam-{grid}",
+                    self.binary,
+                    self.foam,
+                    limits,
+                )
+            self.assertEqual(seen, [expected])
 
     def test_invalid_explicit_grids_fail_before_claiming_output(self):
         for grids in [[], [True], [16, 16], [17], "16", [16.0]]:

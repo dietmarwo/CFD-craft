@@ -1,7 +1,7 @@
 # Stage V: momentum verification and donor-cell baseline
 
 Measured 1 November 2026 against main `f358be6` (merged PR #14).
-This iteration changes verification and measurement. Production Rust numerics,
+Stage V changes verification and measurement only. Production Rust numerics,
 default serialization, physical models and acceptance thresholds are unchanged.
 See the [protocol](../docs/iterations/20-momentum-verification-plan.md),
 [full accuracy/steady plan](../docs/ACCURACY_STEADY_PLAN.md) and
@@ -52,13 +52,13 @@ transient interval.
 AMD EPYC 9V74, 8-CPU cgroup, one solver thread; Rust 1.88.0, Python 3.12.14,
 pinned OpenFOAM Foundation 13 package from the existing adapter. One warmup
 plus three alternating timed pairs per grid. Native multigrid, 600 s/20000
-steps; OpenFOAM 180 s/3000 iterations. The final run used a fresh private
-temporary path after the producer builds and 96² reference had finished;
-lightweight filesystem-event logging and scoped process snapshots were recorded.
-All **32 rows pass final collection**, and the transferred immutable ZIP verifies
-**51/51 sealed archives**, including analytic fixtures, default controls and
-the accepted 96² reference. Default controls retain IC(0). These local medians
-are not a speedup comparison with earlier hosted/compiler versions.
+steps; OpenFOAM 180 s/3000 iterations. The recorded run used a fresh temporary
+directory, started after all builds and the 96² reference had finished, and
+recorded filesystem events and process snapshots. All **32 rows pass final
+collection**, and its evidence archive verifies **51/51 sealed archives** after
+a zip round trip, including the analytic fixtures, default controls and the
+accepted 96² reference. Default controls retain IC(0). These medians are not a
+speedup comparison with earlier hosts or compiler versions.
 
 | Grid | Native Ghia error | OpenFOAM Ghia error | Native steps / OpenFOAM iterations | Native solver s | OpenFOAM solver s | Native/OpenFOAM |
 |---|---:|---:|---:|---:|---:|---:|
@@ -97,7 +97,9 @@ below are unchanged and pass.
 
 Thus native **can reach the 0.01 objective at 96²**, with approximately
 **1076.02 s (17.9 minutes) of accumulated solver work** in this diagnostic chain.
-OpenFOAM's qualifying 24² median is 0.726 s. This exposes a very large
+OpenFOAM's qualifying 24² median is 0.726 s. On the GitHub runner a cold 96²
+solve, with no restart, was accepted after 825.9 s (see
+[Hosted reproduction](#hosted-reproduction)). This exposes a very large
 accuracy-per-cost deficit, but a failed cold archive plus one continuation is
 not a repeated matched-accuracy benchmark. The 96² reference is excluded from
 the paired cost-at-target calculation; its 1.574-second continuation timer
@@ -116,10 +118,8 @@ match unmodified main byte for byte in fields, checkpoints, probes, geometry
 and consumed case, with identical steps and pressure work (2010/204850,
 2/0, and 3/365 respectively). The canyon work limit is not called convergence.
 Rust 1.88.0 and 1.99.1 each pass all 77 release workspace tests, fmt and strict
-all-target clippy. All 17 Python suites pass in normal and optimized mode;
-the final new-suite rerun has five tests per mode. Ruff 0.16.9 passes formatting
-and lint. Initial local Rust-1.88 link failures disappeared after cleaning the
-package's build artifacts; no source or compiler flags were changed to pass.
+all-target clippy. All 17 Python suites pass in normal and optimized mode
+(411 tests per mode). Ruff passes formatting and lint.
 
 Two partial sweeps were invalidated by changed frozen inputs and retained.
 A complete sweep failed an OpenFOAM warmup progress check. A complete repeat
@@ -131,36 +131,62 @@ A new post-campaign collection guard rechecks the manifest and native/external
 archive after all child runs, retains `accepted_at_measurement`, and invalidates
 late changes before calculating qualifying costs. Two regression tests cover
 changed manifests and late archive rejection; the final accuracy-sweep suite
-passes 18 tests per Python mode, and the comparator 15 per mode. The subsequent
+and comparator suites cover them in both Python modes. The subsequent
 sequential reproduction still failed (two rows at collection, further changes
 at packaging), and remains failed. The older
 [cloud archive investigation](../docs/iterations/06-archive-investigation.md)
 already describes this anomaly; its underlying cause remains unknown.
 
-The final campaign used the identical numerical/timing protocol under a fresh
-private temporary path. It passed collection and ZIP round-trip tests there;
-only the immutable ZIP was transferred back and rechecked (51/51 sealed
-archives, exact ZIP bytes and CRCs). Filesystem events, scoped process snapshots,
-the reproduction driver and immutable nested failed-attempt evidence are kept.
-This containment is not a repair of old archives or a diagnosis. No verifier
-or scientific tolerance was relaxed. Cold-reference and different-work byte
-comparison failures remain recorded above.
+The recorded campaign used the identical numerical and timing protocol in a
+fresh temporary directory. It passed collection and the zip round trip there,
+and its archive was rechecked after copying (51/51 sealed archives, identical
+bytes and CRCs). Filesystem events, process snapshots, the reproduction driver
+and the failed attempts are kept with the evidence. This containment is not a
+repair of old archives or a diagnosis. No verifier or scientific tolerance was
+relaxed. The cold-reference and different-work byte comparison failures remain
+recorded above.
 
 ## Hosted reproduction
 
 Ordinary Rust CI includes the operator and insulation tests; numerical CI runs
-`validation/momentum_accuracy.py`. Dispatch `CFD checks` with
-**external=momentum** for the full paired sweep, separately budgeted 96²
-reference and main/candidate byte controls. The job builds both executables
-before measurement and preserves complete directory entries in its evidence
-zip. This job was **wired but not run on GitHub in this task**. Local evidence
-and hosted reproduction are distinct.
+`validation/momentum_accuracy.py`. The manual **external=momentum** job runs the
+whole protocol on a GitHub runner: fixtures, the paired sweep, the 96²
+reference and the default byte controls against `main` `f358be6`. It ran on
+the code of commit `9fdc961` (AMD EPYC 9V74, 4 CPUs, ubuntu-24.04;
+[run 41302658721](https://github.com/dietmarwo/CFD-craft/actions/runs/41302658721)),
+whose solver and fixture code is the code measured above. Every step passed.
 
-## Remaining iterations
+- **Fixtures:** identical to the recorded values: vortex orders 0.97390 /
+  0.97475 / 0.95906, time-difference order 2.0002 at 4.95e-6 of the spatial
+  error, the same momentum drift and no new extrema in the transverse step.
+- **Paired sweep:** all 32 rows accepted, the workflow valid, and no row
+  rejected at final collection. Ghia errors equal the recorded ones; native
+  still misses 0.01 on every paired grid, so the ratio at target stays null.
 
-Stage V is implemented and locally exercised, including retained deviations
-and the accepted checkpoint-based finite reference. It delivers no numerical
-speedup. Each following stage may require more than one PR.
+| Grid | Native solver s | OpenFOAM solver s | Native/OpenFOAM | Native workflow s | OpenFOAM workflow s |
+|---|---:|---:|---:|---:|---:|
+| 16² | 0.924 | 0.264 | 3.50× | 0.993 | 0.841 |
+| 24² | 4.391 | 0.629 | 6.98× | 4.454 | 1.250 |
+| 32² | 12.937 | 1.450 | 8.92× | 13.030 | 2.061 |
+| 48² | 59.551 | 5.417 | 10.99× | 59.657 | 6.146 |
+
+- **96² reference:** a **cold** solve accepted at **21390 steps** after
+  **825.9 s** of solver time, Ghia error **0.00920562**, with no restart. This
+  is the clean counterpart of the recorded checkpoint continuation (21420
+  steps, 0.00920541). It is still a single diagnostic, not a repeated
+  cost-at-target sample: about 1,300 times OpenFOAM's 0.629 s at 24².
+- **Self-convergence:** descriptive L1/L2/L∞ slopes 1.2845 / 1.2765 / 1.3558
+  against the cold reference, equal to the recorded ones to four digits.
+- **Default controls:** steady cavity24, transient Poiseuille and the
+  three-step masked canyon are byte-identical to `main` with identical work
+  (2010/204850, 2/0, 3/365).
+- **Evidence archive:** 51/51 sealed archives verified after the zip round
+  trip; no archive records a time directory without files.
+
+## Remaining stages
+
+Stage V provides verification fixtures and a baseline; it delivers no
+numerical speedup. Each following stage may require more than one PR.
 
 | Stage | Remaining implementation and exit evidence |
 |---|---|

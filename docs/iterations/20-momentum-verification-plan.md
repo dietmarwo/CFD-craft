@@ -1,7 +1,7 @@
 # Stage V: momentum verification and donor-cell baseline
 
 Protocol declared 1 November 2026, before the campaign. Base: `f358be6`
-(PR #14); this is the first iteration of the accuracy/steady-solver plan.
+(PR #14); this is the first stage of the accuracy/steady-solver plan.
 No production Rust stencil, case schema, default, tolerance or acceptance
 rule changes in this stage. Implement from analytic equations and the project
 plan; do not consult OpenFOAM implementation source.
@@ -96,6 +96,6 @@ check and regression tests now invalidate rows after a late manifest/archive
 change. A sequential reproduction also encountered the already documented
 cloud anomaly (see 06-archive-investigation.md), so it remains failed. Before
 the final attempt, declare the identical numerical/timing protocol under a
-fresh private temporary path; pack and round-trip-check it there before copying
-only its immutable ZIP back. Record filesystem events and scoped processes.
-This path containment is not a diagnosis or a repair of any old archive.
+fresh temporary directory; pack and round-trip-check the evidence archive there
+before copying only the archive. Record filesystem events and scoped processes.
+This containment is not a diagnosis or a repair of any old archive.

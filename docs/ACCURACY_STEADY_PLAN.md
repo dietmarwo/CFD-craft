@@ -5,7 +5,7 @@ pressure multigrid).
 
 ## Implementation status
 
-Iteration 20 implements Stage V only. Read the [frozen verification protocol](iterations/20-momentum-verification-plan.md) and [measured baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md) for its actual evidence, retained failures and hosted-reproduction status. The production momentum discretization and steady algorithm are unchanged. P3a and all later numerical stages remain to be implemented.
+Stage V is implemented. Read the [frozen verification protocol](iterations/20-momentum-verification-plan.md) and [measured baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md) for its actual evidence, retained failures and hosted-reproduction status. The production momentum discretization and steady algorithm are unchanged. P3a and all later numerical stages remain to be implemented.
 
 ## Goal
 
@@ -597,8 +597,8 @@ Code areas:
    implementers at source code.
 2. **Inner tolerances.** P4 and P5 need loose inner tolerances and caps as
    algorithm parameters. Final acceptance is unchanged, and the delta form
-   keeps the fixed point exact. The project rules treat tolerance policy as
-   your decision, so please approve this in principle; the values are
+   keeps the fixed point exact. The project rules treat tolerance policy as an
+   owner decision, so this needs approval in principle; the values are
    predeclared in each stage plan.
 3. **Unbounded scheme.** The OpenFOAM cavity reference uses unlimited
    second-order upwind. Allowing `second_order_upwind` as a selectable,

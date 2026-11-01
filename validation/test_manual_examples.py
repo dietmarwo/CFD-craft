@@ -157,5 +157,40 @@ class MissingRuntime(unittest.TestCase):
                 self.assertIn(f"{name}: exit {row['returncode']}", text)
 
 
+def heading_anchors(path):
+    """GitHub-style anchors of a Markdown file's headings (without duplicates)."""
+    anchors = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"#+ (.*)", line)
+        if match:
+            text = re.sub(r"[^\w\- ]", "", match.group(1).strip().lower())
+            anchors.add(text.replace(" ", "-"))
+    return anchors
+
+
+class DocumentationLinks(unittest.TestCase):
+    def test_relative_links_and_anchors_resolve(self):
+        broken = []
+        files = sorted(
+            p
+            for p in ROOT.rglob("*.md")
+            if not {"runs", "target", ".git"} & set(p.relative_to(ROOT).parts)
+        )
+        self.assertGreater(len(files), 20)
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            for target, anchor in re.findall(r"\]\(([^)#\s]*)(#[^)\s]*)?\)", text):
+                if target.startswith(("http:", "https:", "mailto:")):
+                    continue
+                linked = (path.parent / target).resolve() if target else path
+                name = f"{path.relative_to(ROOT)}: {target}{anchor}"
+                if not linked.exists():
+                    broken.append(name)
+                elif anchor and linked.suffix == ".md":
+                    if anchor[1:] not in heading_anchors(linked):
+                        broken.append(name)
+        self.assertEqual(broken, [])
+
+
 if __name__ == "__main__":
     unittest.main()

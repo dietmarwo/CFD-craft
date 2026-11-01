@@ -160,6 +160,59 @@ does not reach the 0.01 accuracy objective; it is not a matched-accuracy
 OpenFOAM comparison. It compares the candidate with IC(0), while the isolated
 pressure suite additionally compares the merged point algorithm.
 
+## Hosted reproduction
+
+The manual `external=anisotropy` job ran both campaigns on a GitHub runner
+(AMD EPYC 7763, 4 CPUs, ubuntu-24.04;
+[run 41268224744](https://github.com/dietmarwo/CFD-craft/actions/runs/41268224744))
+at commit `8ebee01`, whose solver code is the code measured above. The job
+builds the merged point core from main `2ddf17d` with the same two
+measurement overlays. All kernel and flow records passed, and all 16 flow
+archives verified after a zip round trip.
+
+Every shape repeated the recorded iteration counts for all three methods, and
+the coupled runs repeated the recorded steps, PCG work and Ghia error. Reused
+kernel times (medians, ms) and speedups of the candidate:
+
+| Shape | IC(0) | Point | Candidate | Point/candidate | IC(0)/candidate |
+|---|---:|---:|---:|---:|---:|
+| isotropic | 1.914 | 1.221 | 1.203 | 1.01× | 1.59× |
+| near-isotropic | 16.301 | 8.239 | 8.271 | 1.00× | 1.97× |
+| threshold25 | 25.200 | 26.998 | 27.166 | 0.99× | 0.93× |
+| thin100 | 21.606 | 49.934 | 6.397 | 7.81× | 3.38× |
+| thin400 | 20.313 | 91.608 | 6.425 | 14.26× | 3.16× |
+| cube100 | 494.481 | 847.348 | 117.416 | 7.22× | 4.21× |
+| slab100 | 53.578 | 113.898 | 15.276 | 7.46× | 3.51× |
+| plate64 | 119.990 | 222.678 | 47.255 | 4.71× | 2.54× |
+| plate256 | 392.266 | 935.114 | 113.898 | 8.21× | 3.44× |
+| thin1600 | 144.321 | 682.025 | 113.470 | 6.01× | 1.27× |
+| thin6400 | 153.792 | 1332.020 | 112.213 | 11.87× | 1.37× |
+| review-stretched | 153.559 | 5373.320 | 108.438 | 49.55× | 1.42× |
+| odd | 6.777 | 40.360 | 5.921 | 6.82× | 1.14× |
+| periodic | 10.568 | 91.285 | 2.898 | 31.50× | 3.65× |
+| outlet | 6.764 | 35.949 | 5.121 | 7.02× | 1.32× |
+| stiff-two-cell | 5.414 | 13.113 | 1.980 | 6.62× | 2.73× |
+| long-domain | 26.192 | 28.792 | 12.549 | 2.29× | 2.09× |
+| short-stiff-axis | 199.073 | 251.838 | 30.483 | 8.26× | 6.53× |
+
+On this runner the candidate's cached solves beat IC(0) on all 15
+block-selected shapes (1.14–6.53×), including thin1600, where IC(0) was faster
+on the recording host. Against merged point MG the range is 2.29–49.55×.
+
+| Mode | Steps both | IC(0)/MG PCG work | Solver IC(0)/MG s | Solver speedup | Workflow IC(0)/MG s | Workflow speedup | Ghia error |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| steady | 4950 | 477,555 / 59,315 | 26.861 / 19.107 | 1.41× | 26.941 / 19.218 | 1.40× | 0.04298755 |
+| transient | 297 | 28,846 / 3,479 | 1.600 / 1.128 | 1.42× | 1.706 / 1.206 | 1.42× | not steady |
+
+The opt-in multigrid cavity accuracy sweep (`external=accuracy` with
+`native_pressure=multigrid`, AMD EPYC 9V74, 4 CPUs;
+[run 41267955525](https://github.com/dietmarwo/CFD-craft/actions/runs/41267955525))
+accepted all 20 records with unchanged Ghia errors. Native/OpenFOAM solver
+time was 6.85× at 24² and 10.99× at 48² (workflow 3.60× and 9.79×), close to
+the [same-host comparison](PERFORMANCE_GAP_STATUS.md#how-close-native-is-now).
+Native still misses the 0.01 target through 48², so no equal-accuracy ratio
+exists.
+
 ## Identity, reproduction and limits
 
 Shared-probe source fingerprints (different scope from the CLI build SHA):
@@ -172,10 +225,10 @@ host limits, every child, returned pressure vectors, hierarchy dimensions,
 block bandwidth/storage, work, RSS, repeated profiles and complete native flow
 archives. The [guide](../docs/PRESSURE_MULTIGRID.md#reproduce-comparisons) gives
 local and opt-in CI commands. The tables above come from the recording host;
-the [hosted reproduction](#hosted-reproduction) below ran on a GitHub runner.
+the [hosted reproduction](#hosted-reproduction) above ran on a GitHub runner.
 
 Verification passes 75 Rust release tests on minimum 1.88.0 and stable 1.99.1,
-with all-target Clippy warnings denied, plus 395 distinct Python tests per
+with all-target Clippy warnings denied, plus 396 distinct Python tests per
 normal/optimized mode across 16 suites. The 23 runtime-dependent tests were
 rerun with the pinned real backend, with no skips. The existing scalar/flow
 verification, Poiseuille, empty-ABL, manual examples and masked SciPy reference

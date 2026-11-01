@@ -1,4 +1,4 @@
-# Performance gap: current state and remaining iterations
+# Performance gap: current state and remaining stages
 
 ## Current pressure stage
 
@@ -77,7 +77,7 @@ identities, all rows and profiles. Foundation package
 These are work packages; each may take several changes. P0 instrumentation,
 P1 isotropic multigrid and P2a are complete; P2a is not all of P2.
 
-| Next iteration | Scope | Evidence required before calling it complete |
+| Next stage | Scope | Evidence required before calling it complete |
 |---|---|---|
 | P2b: masked multigrid | Component-preserving aggregation/interpolation; one nullspace/gauge per sealed component; anchored components; thin passages and disconnected pockets. Extend the current rejection only with verified support | Independent masked `-DG`/Galerkin/reference solves; full preconditioner symmetry/positive-energy tests; no merging across solid barriers; changed coefficients/topology/cancellation/restart controls. Accepted 27k/93k canyon comparisons, field equivalence and an actual coupled benefit; preserve budget failures |
 | P2c: setup and hierarchy cost | Profile cold hierarchy construction and coarse operator growth. Reduce assembly/scratch/transfer overhead where measured, retaining the fixed SPD cycle | Cold/reused work and memory, operator/grid complexity, exact field/reference controls. Require an end-to-end gain for representative repeated and one-off workloads; iteration counts alone are insufficient |
@@ -87,7 +87,7 @@ P1 isotropic multigrid and P2a are complete; P2a is not all of P2.
 | P6: canyon and optimization payoff | Replay representative canyon and optimizer campaigns using experiment-craft/optimization-jobs, frozen budgets, cached converged flows and held-out scenarios where appropriate | Accepted 27k/93k refinement, model-card and empty-ABL gates, reproducible worker/job identities and failed jobs, budget-matched best-so-far outcomes and fine-grid replay. Experimental-data acquisition/model qualification remains a separate prerequisite for physical claims |
 
 P3 can start in parallel with P2b because the current accuracy deficit is already
-visible on unmasked cavities. The recommended next pressure iteration is P2b;
+visible on unmasked cavities. The recommended next pressure stage is P2b;
 the highest-priority prerequisite for an honest OpenFOAM **cost at equal
 accuracy** comparison is P3. Do not postpone the accuracy work until every
 pressure optimization is exhausted.

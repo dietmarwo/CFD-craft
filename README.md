@@ -64,9 +64,10 @@ native steady mode and closer to the reference
 ([backend comparison](validation/BACKEND_COMPARISON.md)). Opt-in multigrid
 reduces accepted native 48² cavity solver time by 2.44× in the
 [original pressure comparison](validation/PRESSURE_MULTIGRID_RESULTS.md).
-The next iteration adds [anisotropic pressure results](validation/ANISOTROPIC_PRESSURE_RESULTS.md).
+Line and plane smoothing for stretched grids is measured in the
+[anisotropic pressure results](validation/ANISOTROPIC_PRESSURE_RESULTS.md).
 The [current performance-gap status](validation/PERFORMANCE_GAP_STATUS.md)
-reports fresh native/OpenFOAM timings, accuracy and the remaining iterations.
+reports fresh native/OpenFOAM timings, accuracy and the remaining stages.
 The opt-in [`profile` command and accuracy sweep](docs/PROFILING.md) attribute
 actual solver phases, retain incomplete grid-sweep rows and report cost at a
 declared error only when the target is reached. See the

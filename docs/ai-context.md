@@ -1,5 +1,15 @@
 # Agent entry point
 
+For native accuracy and steady-solver work, start with the
+[Stage V protocol](iterations/20-momentum-verification-plan.md) and
+[measured donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md).
+Use `compare_backends.py --grid-sweep --grids 16 24 32 48` to test both backends
+on the same list. Stage V changes verification only. Opt-in conservative
+second-order momentum (P3a) comes next, before implicit diffusion (P4) and an
+implicit steady algorithm (P5a). Keep the default donor-cell/explicit path,
+acceptance thresholds and failed measurements. A missed 0.01 Ghia objective
+still has no finite matched-accuracy runtime ratio.
+
 CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.
 
 The [user manual](USER_MANUAL.md) explains architecture, units, numerical and

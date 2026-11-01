@@ -209,7 +209,7 @@ The opt-in multigrid cavity accuracy sweep (`external=accuracy` with
 [run 41267955525](https://github.com/dietmarwo/CFD-craft/actions/runs/41267955525))
 accepted all 20 records with unchanged Ghia errors. Native/OpenFOAM solver
 time was 6.85× at 24² and 10.99× at 48² (workflow 3.60× and 9.79×), close to
-the [same-host comparison](PERFORMANCE_GAP_STATUS.md#how-close-native-is-now).
+the [same-host comparison](PERFORMANCE_GAP_STATUS.md#same-host-comparison-31-october-2026).
 Native still misses the 0.01 target through 48², so no equal-accuracy ratio
 exists.
 

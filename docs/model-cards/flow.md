@@ -12,6 +12,15 @@ The momentum predictor uses first-order donor-cell advection of each staggered v
 
 An incremental projection is applied to each SSPRK2 velocity stage. Tests recover second-order decay for periodic viscous shear. General unsteady open-boundary pressure order is not established by that fixture. The intended urban use is a checked steady solution.
 
+Stage V adds [momentum verification](../../validation/MOMENTUM_VERIFICATION_RESULTS.md)
+without changing these equations. Eight shifted periodic Taylor–Green operator
+tests and a translating-vortex refinement measure donor-cell's first-order
+advection, with separate time refinement. The periodic vortex also records
+mean-momentum drift: the current advective form is not a conservative shared
+momentum-flux scheme. The 1000-step transverse-step fixture measures extrema at
+the existing CFL cap; its intentional work limit is not numerical acceptance.
+These are analytic verification fixtures, not experimental validation.
+
 ## Pressure
 
 The matrix-free operator is minus divergence times gradient. Internal faces have one shared flux. Pressure-outlet correction is zero; fixed normal-velocity faces use a homogeneous correction derivative. A closed fluid component has a mean-zero gauge and a compatibility check.

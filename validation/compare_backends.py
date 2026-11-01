@@ -292,6 +292,12 @@ def main():
         help="Retain accepted and incomplete cost/error rows across grids",
     )
     ap.add_argument("--levels", type=int, nargs="+", default=[1, 2])
+    ap.add_argument(
+        "--grids",
+        type=int,
+        nargs="+",
+        help="Same explicit cavity grid list for both backends; replaces --levels",
+    )
     ap.add_argument("--sweep-rounds", type=int, default=3)
     ap.add_argument("--accuracy-target", type=float, default=0.01)
     ap.add_argument("--native-wall-s", type=float, default=180)
@@ -310,6 +316,7 @@ def main():
                 args.foam_root,
                 args.output,
                 levels=args.levels,
+                grids=args.grids,
                 rounds=args.sweep_rounds,
                 target=args.accuracy_target,
                 native_wall_s=args.native_wall_s,

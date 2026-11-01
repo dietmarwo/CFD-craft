@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "validation"))
 from backstep_data import load, sha256
-from openfoam_cases import build, control_dict
+from openfoam_cases import CAVITY_GRIDS as CAVITY_GRIDS, build, control_dict
 
 NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 
@@ -98,6 +98,7 @@ def prepare(
     data=None,
     mesh_family="legacy",
     solver_profile="legacy",
+    cavity_grid=None,
 ):
     require(
         kind != "backstep" or data is not None,
@@ -107,7 +108,7 @@ def prepare(
     )
     dataset = load(data) if kind == "backstep" else None
     files, metadata = build(
-        kind, level, iterations, dataset, mesh_family, solver_profile
+        kind, level, iterations, dataset, mesh_family, solver_profile, cavity_grid
     )
     files["system/controlDict"] = control_dict(
         iterations, snapshot_interval(iterations)
@@ -128,6 +129,8 @@ def prepare(
         "generator_sha256": sha256(ROOT / "integrations/openfoam_cases.py"),
         "inputs": inventory(output),
     }
+    if cavity_grid is not None:
+        manifest["cavity_grid"] = cavity_grid
     write_json(output / "case.json", manifest)
     return manifest
 
@@ -1155,6 +1158,9 @@ def main():
     p = sub.add_parser("prepare")
     p.add_argument("--case", choices=["cavity", "backstep"], required=True)
     p.add_argument("--level", type=int, default=1)
+    p.add_argument(
+        "--cavity-grid", type=int, help="Explicit cavity cells per flow axis"
+    )
     p.add_argument("--iterations", type=int, default=3000)
     p.add_argument("--data", type=Path)
     p.add_argument(
@@ -1203,6 +1209,7 @@ def main():
                 args.data,
                 args.mesh_family,
                 args.solver_profile,
+                args.cavity_grid,
             )
         elif args.command == "prepare-restart":
             from openfoam_restart import prepare as prepare_restart

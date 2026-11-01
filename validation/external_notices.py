@@ -431,6 +431,11 @@ def accuracy_sweep(report, title):
         )
     for method, found in (report.get("cost_at_target") or {}).items():
         lines.append(f"{method}: {found['status']}")
+    lines += [
+        f"rejected {row.get('run_directory')}: {row['error']}"
+        for row in report.get("rows") or []
+        if row.get("error")
+    ]
     lines.append(
         "native/OpenFOAM at target: "
         + json.dumps(report.get("native_over_openfoam_at_target"))
@@ -532,6 +537,80 @@ def anisotropic_flow(report, title):
     return 0
 
 
+def momentum_accuracy(report, title):
+    """Translating vortex orders, momentum drift, time error and the step baseline."""
+    lines = [f"passed {report.get('passed')}"]
+    if report.get("error"):
+        lines.append(f"error {report['error']}")
+    orders = report.get("spatial_orders") or {}
+    if orders:
+        lines.append(
+            "translating vortex orders L1/L2/Linf "
+            + " / ".join(number(orders.get(k), 5) for k in ("l1", "l2", "linf"))
+        )
+    for row in report.get("vortices") or []:
+        drift = max(
+            (m["normalized_change"] for m in row.get("momentum") or []), default=None
+        )
+        lines.append(
+            f"grid {row.get('grid')}, dt {number(row.get('max_dt_s'))} s: accepted "
+            f"{row.get('accepted')}; steps {row.get('steps')}; L1 error "
+            f"{number((row.get('error') or {}).get('l1'))}; largest momentum drift "
+            f"{number(drift)}"
+        )
+    temporal = report.get("temporal") or {}
+    if temporal:
+        lines.append(
+            f"time-difference order {number(temporal.get('difference_order'), 5)}; "
+            "finest time difference / spatial error "
+            f"{number(temporal.get('fine_difference_over_spatial_error'), 3)}"
+        )
+    step = report.get("stability") or {}
+    if step:
+        lines.append(
+            f"transverse step after {step.get('steps')} steps: range "
+            f"{number(step.get('final_min'))}..{number(step.get('final_max'))}; "
+            f"new extrema {number(step.get('new_extrema'))}"
+        )
+    notice(title, "\n".join(lines))
+    return 0
+
+
+def momentum_baseline(report, title):
+    """The finite native reference, self-convergence and default byte controls."""
+    lines = [f"passed {report.get('passed')}"]
+    if report.get("error"):
+        lines.append(f"error {report['error']}")
+    ref = report.get("reference")
+    if ref:
+        lines.append(
+            f"native {ref.get('grid')}² reference: accepted {ref.get('accepted')}; "
+            f"steps {ref.get('steps')}; solver {number(ref.get('solver_s'))} s; "
+            f"Ghia error {number(ref.get('reference_error'))}"
+            + (f"; error {ref['error']}" if ref.get("error") else "")
+        )
+    convergence = report.get("self_convergence") or {}
+    if convergence:
+        lines.append(
+            f"self-convergence available {convergence.get('available')}; slopes "
+            + json.dumps(convergence.get("orders"))
+            + (f"; {convergence['reason']}" if convergence.get("reason") else "")
+        )
+        for row in convergence.get("rows") or []:
+            lines.append(
+                f"{row.get('grid')}²: accepted {row.get('accepted')}; L1/L2/Linf "
+                + " / ".join(number(row.get(k)) for k in ("l1", "l2", "linf"))
+            )
+    for row in report.get("default_controls") or []:
+        lines.append(
+            f"default {row.get('case')}: byte-identical {row.get('passed')}; steps "
+            f"{row.get('steps')}; pressure iterations {row.get('pressure_iterations')}; "
+            f"{row.get('assessment')}"
+        )
+    notice(title, "\n".join(lines))
+    return 0
+
+
 def evidence_archive(report, title):
     lines = [
         f"round trip identical {report.get('round_trip_identical')}; "
@@ -567,6 +646,10 @@ def main():
         return accuracy_sweep(report, title)
     if schema.startswith("cfd-craft.evidence-archive"):
         return evidence_archive(report, title)
+    if schema.startswith("cfd-craft.momentum-accuracy"):
+        return momentum_accuracy(report, title)
+    if schema.startswith("cfd-craft.momentum-baseline"):
+        return momentum_baseline(report, title)
     if schema.startswith("cfd-craft.pressure-performance"):
         return pressure_performance(report, title)
     if schema.startswith("cfd-craft.anisotropy-performance"):

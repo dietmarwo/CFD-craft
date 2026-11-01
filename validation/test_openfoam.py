@@ -97,6 +97,26 @@ class Boundaries(unittest.TestCase):
         with self.assertRaises(ValueError):
             openfoam_cases.build("cavity", 100, 100)
 
+    def test_explicit_cavity_grid_preserves_the_legacy_recipe(self):
+        for level in [1, 2, 3]:
+            legacy = openfoam_cases.build("cavity", level, 3000)
+            explicit = openfoam_cases.build("cavity", 1, 3000, cavity_grid=24 * level)
+            self.assertEqual(legacy, explicit)
+        for n in [16, 32, 96]:
+            files, metadata = openfoam_cases.build("cavity", 1, 3000, cavity_grid=n)
+            self.assertEqual(metadata["cells"], n * n)
+            self.assertIn(f"({n} {n} 1)", files["system/blockMeshDict"])
+            path = self.root / f"grid-{n}"
+            record = backend.prepare("cavity", 1, 3000, path, cavity_grid=n)
+            self.assertEqual(record["cavity_grid"], n)
+            self.assertEqual(backend.check_prepared(path), record)
+        for n in [True, 16.0, 17, 0]:
+            with self.subTest(grid=n):
+                with self.assertRaisesRegex(ValueError, "recipe.cavity_grid"):
+                    openfoam_cases.build("cavity", 1, 3000, cavity_grid=n)
+        with self.assertRaisesRegex(ValueError, "recipe.cavity_grid"):
+            openfoam_cases.build("backstep", 1, 3000, cavity_grid=16)
+
     def test_occupied_directory_is_preserved(self):
         path = self.prepared()
         marker = path / "0/U"

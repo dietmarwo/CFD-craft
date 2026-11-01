@@ -104,8 +104,17 @@ timeFormat general; timePrecision 12; runTimeModifiable false;
     )
 
 
+CAVITY_GRIDS = (16, 24, 32, 48, 72, 96)
+
+
 def build(
-    kind, level, iterations, dataset=None, mesh_family="legacy", solver_profile="legacy"
+    kind,
+    level,
+    iterations,
+    dataset=None,
+    mesh_family="legacy",
+    solver_profile="legacy",
+    cavity_grid=None,
 ):
     if (
         kind not in {"cavity", "backstep"}
@@ -121,9 +130,15 @@ def build(
         raise ValueError("CFD-X001 recipe.solver_profile: unsupported profile")
     if kind != "backstep" and (mesh_family != "legacy" or solver_profile != "legacy"):
         raise ValueError("CFD-X001 recipe: nonlegacy options apply to backstep only")
+    if cavity_grid is not None and (
+        kind != "cavity"
+        or type(cavity_grid) is not int
+        or cavity_grid not in CAVITY_GRIDS
+    ):
+        raise ValueError("CFD-X001 recipe.cavity_grid: select a supported cavity grid")
     files = {}
     if kind == "cavity":
-        n = 24 * level
+        n = 24 * level if cavity_grid is None else cavity_grid
         vertices = [
             (x, y, z) for z in [0.0, 0.1] for y in [0.0, 1.0] for x in [0.0, 1.0]
         ]

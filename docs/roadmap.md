@@ -106,6 +106,16 @@ The steady canyon cost grows roughly with the sixth power of the refinement rati
 
 ## Next steps, in order
 
+The native accuracy track now starts with the
+[Stage V verification protocol](iterations/20-momentum-verification-plan.md)
+and its [donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md).
+It leaves the production numerics unchanged. The order for closing the cavity
+gap is P3a (conservative second-order laminar momentum), P4 (implicit viscous
+correction), P5a (implicit steady projection), conditional P5b (consistent local
+pseudo-time), then P3b/P5c (open boundaries/RANS) and P5d (scalar transport).
+Repeat matched-accuracy measurement after each numerical stage; keep masked
+multigrid P2b and setup costs P2c as separate pressure work.
+
 The [mesh-initialization plan](iterations/05-mesh-initialization-plan.md)
 provides an explicit accepted-coarse-to-new-fine start, verified against a cold
 fine cavity ([results](../validation/MAPPING_RESULTS.md)). A bounded

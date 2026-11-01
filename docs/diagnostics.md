@@ -157,3 +157,20 @@ anisotropy campaign: invalid arguments/limits/cases, occupied or failed output,
 nonfinite data, changed inputs/producers, inconsistent work/repetitions and
 invalid result identities. A valid pressure-limit failure or missed independent
 recovery bound remains a nonqualifying measurement, with no speedup ratio.
+
+`CFD-B007 momentum.<field>` identifies a failed momentum verification fixture:
+invalid/empty/nonfinite norms or order inputs (`norms`, `orders.*`), seed or
+generated-checkpoint shape (`<trial>.seed`, `<trial>.initial`), a vortex solve,
+actual timestep count or time-refinement failure (`<trial>.run`, `<trial>.steps`,
+`temporal`), an invalid 1000-step stability control (`stability.run`), changed
+default artifacts or work (`defaults.<filename>`, `defaults.pressure_iterations`),
+an invalid self-reference/profile (`self.*`), or output/argument errors
+(`output`, `arguments`). An intentional stability iteration limit is recorded
+separately from numerical acceptance. Explicit cavity grid selectors use
+`CFD-X001 recipe.cavity_grid`; shared sweep grids use `CFD-B004 sweep.grids`.
+
+`CFD-B004 sweep.collection.<run_directory>` rejects an archive that passed its
+measurement-time checks but fails revalidation after all child runs. The row
+retains `accepted_at_measurement`, gains `collection_verified=false` and is
+excluded from qualifying costs. `sweep.collection.manifest` identifies a changed
+sealed manifest. Collection does not repair files or relax archive checks.

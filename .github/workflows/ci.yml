@@ -10,9 +10,9 @@ name: CFD checks
         options: [ic0, multigrid]
         default: ic0
       external:
-        description: "External work: all existing checks, backend, resolution, mapping, refinement, comparison, accuracy (24/48 cost/error), pressure (isotropic IC(0)/MG), or anisotropy (point/line MG kernels and coupled flow)"
+        description: "External work: existing checks, accuracy (24/48), momentum (Stage V shared 16/24/32/48 and 96 reference), pressure, or anisotropy"
         type: choice
-        options: [all, backend, resolution, mapping, refinement, comparison, accuracy, pressure, anisotropy]
+        options: [all, backend, resolution, mapping, refinement, comparison, accuracy, momentum, pressure, anisotropy]
         default: all
 permissions:
   contents: read
@@ -40,6 +40,8 @@ jobs:
       - run: python -O validation/test_compare_backends.py -v
       - run: python validation/test_accuracy_sweep.py -v
       - run: python -O validation/test_accuracy_sweep.py -v
+      - run: python validation/test_momentum_accuracy.py -v
+      - run: python -O validation/test_momentum_accuracy.py -v
       - run: python validation/test_process_measure.py -v
       - run: python -O validation/test_process_measure.py -v
   external-backend:
@@ -303,8 +305,52 @@ jobs:
             runs/anisotropy/flow/report.json
             runs/anisotropy-evidence.zip
             runs/anisotropy-archive.json
+  momentum-verification:
+    if: github.event_name == 'workflow_dispatch' && inputs.external == 'momentum'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python -m pip install -r requirements-validation.txt
+      - run: cargo build --release --locked
+      - run: |
+          mkdir -p runs/momentum
+          cargo test --release --locked -p cfd-craft --test momentum -- --nocapture > runs/momentum/operator.log
+          git fetch --no-tags origin f358be613bc0f94cb452f4eed39ed93503cbbb42
+          git worktree add --detach runs/momentum-main FETCH_HEAD
+          cargo build --release --locked --manifest-path runs/momentum-main/Cargo.toml
+      - run: python integrations/install_openfoam13.py --output runs/openfoam13
+      - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
+      - run: python validation/momentum_accuracy.py --output runs/momentum/fixtures
+      - run: |
+          set +e
+          python validation/compare_backends.py --grid-sweep --grids 16 24 32 48 --sweep-rounds 3 --native-wall-s 600 --native-max-steps 20000 --native-pressure-preconditioner multigrid --foam-iterations 3000 --timeout-s 180 --accuracy-target 0.01 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/momentum/sweep
+          code=$?
+          test "$code" -eq 0 -o "$code" -eq 2
+      - run: |
+          set +e
+          python validation/momentum_baseline.py --sweep runs/momentum/sweep --baseline-binary runs/momentum-main/target/release/cfd-craft --output runs/momentum/reference-and-controls
+          code=$?
+          test "$code" -eq 0 -o "$code" -eq 2
+      - if: always()
+        run: python validation/archive_evidence.py runs/momentum runs/momentum-evidence.zip --binary target/release/cfd-craft > runs/momentum-archive.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: momentum-verification-evidence
+          path: |
+            runs/momentum-evidence.zip
+            runs/momentum-archive.json
+            runs/momentum/**/report.json
   external-resolution:
-    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'pressure' && inputs.external != 'anisotropy'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'momentum' && inputs.external != 'pressure' && inputs.external != 'anisotropy'
     runs-on: ubuntu-24.04
     # Coarse reference + up to three fine executions, with audit/upload overhead.
     timeout-minutes: 360
@@ -467,6 +513,7 @@ jobs:
       - run: python -O validation/test_manual_examples.py -v
       - run: python validation/manual_examples.py --output runs/manual-examples
       - run: python validation/flow_accuracy.py --output runs/flow-accuracy
+      - run: python validation/momentum_accuracy.py --output runs/momentum-accuracy
       - run: python validation/run_suite.py --output runs/verification
       - run: python validation/run_suite.py --pressure-preconditioner multigrid --output runs/verification-multigrid
       - run: python validation/cavity.py --output runs/cavity

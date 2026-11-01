@@ -62,6 +62,23 @@ do not prove exclusive ownership of a path.
 
 ## Next steps if it recurs
 
+The Stage V campaign (1 November 2026) reproduced the anomaly, including full
+old snapshot files as well as empty directories. Records that passed at child
+return later failed progress/file checks, including in a sequential campaign.
+The accuracy sweep now rechecks all archives at final collection, retains
+measurement-time acceptance and invalidates late changes before pricing them;
+regression tests cover that transition and changed manifests. No archive
+verifier was relaxed and no old output was repaired.
+
+A separately declared campaign with identical numerical/timing settings under
+a fresh private temporary path passed all 32 paired records at collection.
+Its ZIP was packed and extracted there, transferred unchanged, and rechecked:
+51/51 sealed archives verified, including intentional work-limit controls.
+Filesystem-event logs, scoped process snapshots, the reproduction driver and
+rejected attempts were retained. This contains the observation for that
+campaign; the clean private-path result does not establish its cause. See the
+[Stage V report](../../validation/MOMENTUM_VERIFICATION_RESULTS.md).
+
 Keep the changed archive and its first failed checkpoint. Record file-system
 events and processes for the run directory in a separately instrumented
 reproduction. Do not delete the directory, reseal the run or infer a cause from

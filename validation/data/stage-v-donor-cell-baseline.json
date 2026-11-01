@@ -1,0 +1,1026 @@
+{
+  "schema_version": "cfd-craft.stage-v-baseline/0.1",
+  "date": "2026-11-01",
+  "base_commit": "f358be613bc0f94cb452f4eed39ed93503cbbb42",
+  "production_numerics_changed": false,
+  "operator": [
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21566530005073004,
+          0.2793180750464176,
+          0.6140141744171932
+        ],
+        [
+          0.1082213661956636,
+          0.14013456345457095,
+          0.3081104696283693
+        ],
+        [
+          0.0541608018420011,
+          0.07012593190566699,
+          0.1541740147044644
+        ],
+        [
+          0.027086640632320066,
+          0.035070898144445396,
+          0.07710022508015985
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9978086417864774,
+        0.997948084776761,
+        0.9979283030022855
+      ],
+      "phase": [
+        0.137,
+        0.271
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21550472522279707,
+          0.2792897528237735,
+          0.6142365872800993
+        ],
+        [
+          0.10821625352717978,
+          0.14014139205448203,
+          0.30802010168969923
+        ],
+        [
+          0.05416083591434474,
+          0.07012427118069492,
+          0.15415793593073954
+        ],
+        [
+          0.02708643108133694,
+          0.03507091713975357,
+          0.07709667919342533
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9974827134758334,
+        0.9979144088806611,
+        0.9980776819490307
+      ],
+      "phase": [
+        0.419,
+        1.103
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21518296756357175,
+          0.27922241708584056,
+          0.6130395660429868
+        ],
+        [
+          0.10819358169379562,
+          0.14012142713451028,
+          0.3080450791647008
+        ],
+        [
+          0.05415925353109135,
+          0.07012697825082062,
+          0.15416211689616716
+        ],
+        [
+          0.027086897315050602,
+          0.03507096792267386,
+          0.0771012525193302
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9968025661712911,
+        0.9977832972974882,
+        0.9972155164307033
+      ],
+      "phase": [
+        1.337,
+        0.593
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21524731495003116,
+          0.27923057004524915,
+          0.6135052882904031
+        ],
+        [
+          0.10818980821338653,
+          0.14011316351355724,
+          0.3080163622158184
+        ],
+        [
+          0.05415731445741211,
+          0.07012589762628571,
+          0.1541391406790697
+        ],
+        [
+          0.027086937526821654,
+          0.03507119893005623,
+          0.07709890471738604
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9969314630979119,
+        0.997786798404918,
+        0.9975654266104483
+      ],
+      "phase": [
+        2.017,
+        1.771
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21563648560474843,
+          0.2793488251456083,
+          0.6138144445354664
+        ],
+        [
+          0.1082251804992133,
+          0.14012835593366585,
+          0.3080795785498324
+        ],
+        [
+          0.054160616322304095,
+          0.07012740847246109,
+          0.15417065108455716
+        ],
+        [
+          0.02708704478866314,
+          0.03507121969690734,
+          0.07710068224709297
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9977499326571979,
+        0.9979823332287683,
+        0.9977736098652318
+      ],
+      "phase": [
+        2.693,
+        2.291
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21532709417257484,
+          0.27913409159780006,
+          0.6135804530372108
+        ],
+        [
+          0.10817363538672964,
+          0.14012006342352948,
+          0.30787108162600185
+        ],
+        [
+          0.05415893480405025,
+          0.07012680529573105,
+          0.15416055911448914
+        ],
+        [
+          0.027086896944815593,
+          0.03507099806717522,
+          0.0771012107915128
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9970666136704971,
+        0.9976449464927216,
+        0.9975173957811793
+      ],
+      "phase": [
+        3.349,
+        0.887
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21501137025025635,
+          0.27913943361845706,
+          0.6119693022515557
+        ],
+        [
+          0.10817304584574731,
+          0.14011971640710816,
+          0.30793709695185656
+        ],
+        [
+          0.054157260535814704,
+          0.07012529969437636,
+          0.15416167625051683
+        ],
+        [
+          0.027086526324230656,
+          0.03507096996399753,
+          0.0770999461099044
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9964411370990663,
+        0.9976563164110549,
+        0.9964164101705681
+      ],
+      "phase": [
+        4.123,
+        3.517
+      ]
+    },
+    {
+      "grids": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "norms_l1_l2_linf": [
+        [
+          0.21554511958008687,
+          0.2792789494452215,
+          0.6143497806751593
+        ],
+        [
+          0.10821446087556374,
+          0.1401356644724886,
+          0.30809877085827914
+        ],
+        [
+          0.05416150224893977,
+          0.07012786795728954,
+          0.1541619103661425
+        ],
+        [
+          0.027087059346220552,
+          0.03507109589231628,
+          0.07710039824769041
+        ]
+      ],
+      "orders_l1_l2_linf": [
+        0.9975496281763542,
+        0.9978821648306564,
+        0.9981696788690518
+      ],
+      "phase": [
+        5.071,
+        4.237
+      ]
+    }
+  ],
+  "operator_mean_l1_order": 0.9972290870168287,
+  "translating_vortex": {
+    "plan": {
+      "grids": [
+        16,
+        32,
+        64
+      ],
+      "dt_s": 0.0005,
+      "time_refinement_dt_s": [
+        0.0005,
+        0.00025,
+        0.000125
+      ],
+      "offset": [
+        0.7,
+        0.2,
+        0.3
+      ],
+      "amplitude": 0.2,
+      "phase": [
+        0.137,
+        0.271
+      ],
+      "viscosity_m2_s": 0.005,
+      "final_time_s": 0.05,
+      "momentum_change_gate": null,
+      "future_conservative_gate_per_100_steps": 1e-13
+    },
+    "vortices": [
+      {
+        "grid": 16,
+        "max_dt_s": 0.0005,
+        "initial_checkpoint_sha256": "19740c164b9e0646cfbe40877375e863bcb0ee074d35925bfbfe46977c4e2d87",
+        "accepted": true,
+        "run_directory": "vortex-16",
+        "error": {
+          "l1": 0.004709472461304759,
+          "l2": 0.00583870718673166,
+          "linf": 0.012943044191509046
+        },
+        "steps": 100,
+        "solver_s": 0.117273168,
+        "physical_time_s": 0.05,
+        "momentum": [
+          {
+            "component": 0,
+            "initial": 0.7,
+            "final": 0.699458832610379,
+            "normalized_change": 0.0007730962708869959
+          },
+          {
+            "component": 1,
+            "initial": 0.20000000000000004,
+            "final": 0.20000000000000007,
+            "normalized_change": 0.0
+          },
+          {
+            "component": 2,
+            "initial": 0.30000000000000004,
+            "final": 0.2994588326105114,
+            "normalized_change": 0.0018038912982952845
+          }
+        ],
+        "initial_cell_peclet": 11.249999999999998
+      },
+      {
+        "grid": 32,
+        "max_dt_s": 0.0005,
+        "initial_checkpoint_sha256": "6217942abdb79354421be21e4b36d8586c7509f9fd254a715577d36fa2d4f53e",
+        "accepted": true,
+        "run_directory": "vortex-32",
+        "error": {
+          "l1": 0.002414713378034573,
+          "l2": 0.0029909161243319013,
+          "linf": 0.006741348834578664
+        },
+        "steps": 100,
+        "solver_s": 0.599391696,
+        "physical_time_s": 0.05,
+        "momentum": [
+          {
+            "component": 0,
+            "initial": 0.7,
+            "final": 0.6997103594730623,
+            "normalized_change": 0.00041377218133947216
+          },
+          {
+            "component": 1,
+            "initial": 0.20000000000000004,
+            "final": 0.20000000000000004,
+            "normalized_change": 0.0
+          },
+          {
+            "component": 2,
+            "initial": 0.3,
+            "final": 0.299710359473075,
+            "normalized_change": 0.000965468423083278
+          }
+        ],
+        "initial_cell_peclet": 5.624999999999999
+      },
+      {
+        "grid": 64,
+        "max_dt_s": 0.0005,
+        "initial_checkpoint_sha256": "c782e50dae7f2f3d14d7c4c47ac10831479b1e3aa7961db530752fdcba5df465",
+        "accepted": true,
+        "run_directory": "vortex-64",
+        "error": {
+          "l1": 0.0012207428979772819,
+          "l2": 0.0015116813603558796,
+          "linf": 0.0034247050069780016
+        },
+        "steps": 100,
+        "solver_s": 2.389836979,
+        "physical_time_s": 0.05,
+        "momentum": [
+          {
+            "component": 0,
+            "initial": 0.7,
+            "final": 0.6998515573268016,
+            "normalized_change": 0.0002120609617118997
+          },
+          {
+            "component": 1,
+            "initial": 0.20000000000000004,
+            "final": 0.20000000000000004,
+            "normalized_change": 0.0
+          },
+          {
+            "component": 2,
+            "initial": 0.3,
+            "final": 0.2998515573268026,
+            "normalized_change": 0.0004948089106579444
+          }
+        ],
+        "initial_cell_peclet": 2.8124999999999996
+      },
+      {
+        "grid": 64,
+        "max_dt_s": 0.00025,
+        "initial_checkpoint_sha256": "40dee14d0ed925e88cf844fedc9731fad002f9509a956f51c2934f6f46e77551",
+        "accepted": true,
+        "run_directory": "time-2",
+        "error": {
+          "l1": 0.0012207375645074017,
+          "l2": 0.0015116749139069661,
+          "linf": 0.003424691623036602
+        },
+        "steps": 200,
+        "solver_s": 4.745846913,
+        "physical_time_s": 0.05,
+        "momentum": [
+          {
+            "component": 0,
+            "initial": 0.7,
+            "final": 0.6998515574093045,
+            "normalized_change": 0.0002120608438506119
+          },
+          {
+            "component": 1,
+            "initial": 0.20000000000000004,
+            "final": 0.20000000000000004,
+            "normalized_change": 0.0
+          },
+          {
+            "component": 2,
+            "initial": 0.3,
+            "final": 0.29985155740930547,
+            "normalized_change": 0.0004948086356482816
+          }
+        ],
+        "initial_cell_peclet": 2.8124999999999996
+      },
+      {
+        "grid": 64,
+        "max_dt_s": 0.000125,
+        "initial_checkpoint_sha256": "500cb8225e0281b0be3623ba58451b0b49f5d4018b8682d006fa10e8a77f9430",
+        "accepted": true,
+        "run_directory": "time-4",
+        "error": {
+          "l1": 0.0012207362261455335,
+          "l2": 0.0015116732963342137,
+          "linf": 0.0034246882650509347
+        },
+        "steps": 400,
+        "solver_s": 8.810979736,
+        "physical_time_s": 0.05,
+        "momentum": [
+          {
+            "component": 0,
+            "initial": 0.7,
+            "final": 0.6998515574299211,
+            "normalized_change": 0.00021206081439831688
+          },
+          {
+            "component": 1,
+            "initial": 0.20000000000000004,
+            "final": 0.20000000000000004,
+            "normalized_change": 0.0
+          },
+          {
+            "component": 2,
+            "initial": 0.3,
+            "final": 0.2998515574299221,
+            "normalized_change": 0.0004948085669263338
+          }
+        ],
+        "initial_cell_peclet": 2.8124999999999996
+      }
+    ],
+    "spatial_orders": {
+      "l1": 0.973903039255229,
+      "l2": 0.9747474440161735,
+      "linf": 0.9590626741368183
+    },
+    "temporal": {
+      "differences": [
+        {
+          "l1": 2.4170629482640845e-08,
+          "l2": 2.687841614865799e-08,
+          "linf": 4.1441865189506544e-08
+        },
+        {
+          "l1": 6.041734617013961e-09,
+          "l2": 6.7185552336819146e-09,
+          "linf": 1.0358972901691743e-08
+        }
+      ],
+      "difference_order": 2.000220325873797,
+      "fine_difference_over_spatial_error": 4.949227742405754e-06,
+      "maximum_ratio": 0.01
+    },
+    "stability": {
+      "steps": 1000,
+      "termination": "iteration_limit",
+      "numerical_accepted": false,
+      "initial_min": 0.0,
+      "initial_max": 1.0,
+      "final_min": 0.42350959434548774,
+      "final_max": 0.5764904056545123,
+      "new_extrema": 0.0,
+      "final_max_abs_growth": -0.42350959434548774,
+      "advective_cfl_max": 0.45,
+      "initial_advective_rate_s_inv": 66.0,
+      "initial_dt_s": 0.006818173338853521,
+      "mean_dt_s": 0.006869104015858487,
+      "momentum": [
+        {
+          "component": 0,
+          "initial": 1.0,
+          "final": 1.0,
+          "normalized_change": 0.0
+        },
+        {
+          "component": 1,
+          "initial": 0.5,
+          "final": 0.5,
+          "normalized_change": 3.642919299551295e-17
+        },
+        {
+          "component": 2,
+          "initial": 0.0,
+          "final": 0.0,
+          "normalized_change": 0.0
+        }
+      ],
+      "meaning": "baseline at the unchanged cap; intentional work limit is not numerical acceptance"
+    }
+  },
+  "default_controls": [
+    {
+      "case": "cavity",
+      "passed": true,
+      "sha256": {
+        "fields.json": "51904bec2c3e51e7925c972547d24681e43410ff99417fdbeb42fad641c1f18f",
+        "checkpoint.json": "5fcf204e5797b8d2c336361e7993b971fab102bd94ebe3d5ce2027a0b50592a1",
+        "probes.csv": "d8ff066103859adedd639297e470abf4832aa43b05b62d098881a4b6cd2fba2b",
+        "geometry.json": "55c8fadf61f1c019dd77e8d268dd3aead9385de56d433912bb6782f176dd60a8",
+        "case.json": "260a60dfb2b2bc492619ee0fe38b9cf0e13098fd44ddcdf080df2ee598eb488c"
+      },
+      "steps": 2010,
+      "pressure_iterations": 204850,
+      "assessment": "steady_discrete_solution"
+    },
+    {
+      "case": "transient",
+      "passed": true,
+      "sha256": {
+        "fields.json": "4c4cde90371d54cbc24096f2f56e698a1d64b1762bd737446eba021fd8046be0",
+        "checkpoint.json": "87555a87e017fec7d1771d9a1218b7c4d3784e8650f3aeede5b093edbd1ac8f7",
+        "probes.csv": "d8ff066103859adedd639297e470abf4832aa43b05b62d098881a4b6cd2fba2b",
+        "geometry.json": "0f5b1e5fc21dc50e8b825a998b4652a1ed4f1943d5e4158097696bcc43032d12",
+        "case.json": "c40c47563d68d46df038b1d20a2ba15e3556236d83b29fca385dfc6e793b999a"
+      },
+      "steps": 2,
+      "pressure_iterations": 0,
+      "assessment": "transient_interval_completed"
+    },
+    {
+      "case": "masked-canyon",
+      "passed": true,
+      "sha256": {
+        "fields.json": "92cbac4ef0156e960c5c0ebacb936a50db4a6057802f55b00b8a90a4fde9ffbc",
+        "checkpoint.json": "757ad8ecd906f8b4ceb5f917375eb8cd694c1303b92aef11c795b474868f97ab",
+        "probes.csv": "950421e6eeb9722b028c6fc61652426f4d84dfe7b5242f9298c8fb0c081a1327",
+        "geometry.json": "a00ff1053cf22a5d46b391e7d9f0cb9d9e27851ef6180d8a1ec77d4e41f7097f",
+        "case.json": "65fccf03090924151e7d2b1daf4d50f97c33c370ce15d242fb8b87e46c6aeffa"
+      },
+      "steps": 3,
+      "pressure_iterations": 365,
+      "assessment": "incomplete"
+    }
+  ],
+  "paired_sweep": {
+    "passed": true,
+    "workflow_valid": true,
+    "row_count": 32,
+    "collection_verified_rows": 32,
+    "plan": {
+      "configurations": [
+        {
+          "method": "native-steady",
+          "grid": 16
+        },
+        {
+          "method": "openfoam-steady",
+          "grid": 16
+        },
+        {
+          "method": "native-steady",
+          "grid": 24
+        },
+        {
+          "method": "openfoam-steady",
+          "grid": 24
+        },
+        {
+          "method": "native-steady",
+          "grid": 32
+        },
+        {
+          "method": "openfoam-steady",
+          "grid": 32
+        },
+        {
+          "method": "native-steady",
+          "grid": 48
+        },
+        {
+          "method": "openfoam-steady",
+          "grid": 48
+        }
+      ],
+      "shared_grids": [
+        16,
+        24,
+        32,
+        48
+      ],
+      "rounds": 3,
+      "warmups_per_configuration": 1,
+      "target": 0.01,
+      "reference_screen": 0.06,
+      "limits": {
+        "native_wall_s": 600,
+        "foam_wall_s": 180,
+        "native_max_steps": 20000,
+        "foam_iterations": 3000,
+        "native_pressure_preconditioner": "multigrid"
+      },
+      "input_sha256": {
+        "runs/candidate-cfd-craft": "d1d8b67261384f19234be34c48fcc095ef358def30be17a123de224d7a54238e",
+        "validation/compare_backends.py": "eb22d2665ce74c6fca1930ad1c233cca22274fc1fcfc3f4acc36ef5a2aa20221",
+        "cases/verification/lid-cavity.json": "a6fcd5a2ab11880595fcb8b3756dac608c1e68233866b62dec4ffa660db87515",
+        "tutorials/common.py": "0a994f407f647cce1c428ab605218f504ae05a2e48f2c374c77222ced853e7d8",
+        "tutorials/external_cfd.py": "4ed015d25930e9e0e14967ba82fa3b91300b7bb885f9eb87b30d99ca1763e8ea",
+        "validation/check_fields.py": "0d5e76e6a7af0ebe21e990f861f0d3c16c7b4c891c27194eeb9f093d8be548c7",
+        "integrations/openfoam_backend.py": "a66e40e861710068d0225580b24ece547904322eef2d4ea21466e4f664f8d1b3",
+        "integrations/openfoam_cases.py": "2f45357166a193e25e1ef0911159ae663812298dfaf589c4774277cb04cec615",
+        "validation/ghia-re100-u.csv": "f7029e05aba86d6b9e25818a0d9a199693d3f07955b95948a5e0aca884f58c11",
+        "validation/accuracy_sweep.py": "b5e2cb759d70222cd2204ebfc6ef12e0ef77a77d6b4718deeb553e6ae8bc32f6",
+        "validation/process_measure.py": "b02f8d60a2f90b1740b3e2498388e4c9ac4915e2f45d8478f0c65f4958963a3d",
+        "validation/backstep_data.py": "736281b80881ffb8c3773fb54b0288245d6a92352bcd42ecd1eac376754d964d"
+      },
+      "threads": 1,
+      "environment": {
+        "platform": "Linux-6.18.57-x86_64-with-glibc2.39",
+        "processor": "x86_64",
+        "cpu_count": 9,
+        "python": "3.12.14"
+      },
+      "meaning": "same physical cavity and sampled observable; different spatial schemes, span cells, stopping rules and timer scopes; no GCI or extrapolated crossing"
+    },
+    "groups": [
+      {
+        "method": "native-steady",
+        "grid": 16,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": false,
+        "reference_error": 0.038024531628369385,
+        "workflow_median_s": 1.1335314639873104,
+        "solver_median_s": 1.069884594,
+        "workflow_min_s": 1.132916908012703,
+        "workflow_max_s": 1.1382659480004804,
+        "peak_rss_median_kib_linux": 18152,
+        "steps": 1020,
+        "cells": 512
+      },
+      {
+        "method": "openfoam-steady",
+        "grid": 16,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": false,
+        "reference_error": 0.018753665651020157,
+        "workflow_median_s": 0.9311980029888218,
+        "solver_median_s": 0.3136433809995651,
+        "workflow_min_s": 0.88059922499815,
+        "workflow_max_s": 0.9815415870107245,
+        "peak_rss_median_kib_linux": 117408,
+        "steps": 375,
+        "cells": 256
+      },
+      {
+        "method": "native-steady",
+        "grid": 24,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": false,
+        "reference_error": 0.027561337453193044,
+        "workflow_median_s": 5.297368578001624,
+        "solver_median_s": 5.202261269,
+        "workflow_min_s": 5.147212203999516,
+        "workflow_max_s": 5.297405379009433,
+        "peak_rss_median_kib_linux": 19044,
+        "steps": 2010,
+        "cells": 1152
+      },
+      {
+        "method": "openfoam-steady",
+        "grid": 24,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": true,
+        "reference_error": 0.008966323560314793,
+        "workflow_median_s": 1.3411782099865377,
+        "solver_median_s": 0.7262247420003405,
+        "workflow_min_s": 1.3408508970023831,
+        "workflow_max_s": 1.3888377739931457,
+        "peak_rss_median_kib_linux": 117412,
+        "steps": 696,
+        "cells": 576
+      },
+      {
+        "method": "native-steady",
+        "grid": 32,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": false,
+        "reference_error": 0.02351447733736457,
+        "workflow_median_s": 15.137026130993036,
+        "solver_median_s": 15.039257475,
+        "workflow_min_s": 15.039035298003,
+        "workflow_max_s": 15.230175855002017,
+        "peak_rss_median_kib_linux": 20292,
+        "steps": 3240,
+        "cells": 2048
+      },
+      {
+        "method": "openfoam-steady",
+        "grid": 32,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": true,
+        "reference_error": 0.008703802594927756,
+        "workflow_median_s": 2.152372665994335,
+        "solver_median_s": 1.4929056800028775,
+        "workflow_min_s": 2.1506447730062064,
+        "workflow_max_s": 2.2021988939959556,
+        "peak_rss_median_kib_linux": 118040,
+        "steps": 1102,
+        "cells": 1024
+      },
+      {
+        "method": "native-steady",
+        "grid": 48,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": false,
+        "reference_error": 0.016951438299097028,
+        "workflow_median_s": 71.6949664959975,
+        "solver_median_s": 71.612817933,
+        "workflow_min_s": 71.56137659700471,
+        "workflow_max_s": 72.0023013530008,
+        "peak_rss_median_kib_linux": 23820,
+        "steps": 6390,
+        "cells": 4608
+      },
+      {
+        "method": "openfoam-steady",
+        "grid": 48,
+        "timed_rows": 3,
+        "accepted_rows": 3,
+        "all_accepted": true,
+        "qualifies": true,
+        "reference_error": 0.0070799839564753,
+        "workflow_median_s": 6.9899433640093775,
+        "solver_median_s": 6.179427674986073,
+        "workflow_min_s": 6.9078022229950875,
+        "workflow_max_s": 7.195293042008416,
+        "peak_rss_median_kib_linux": 119364,
+        "steps": 2132,
+        "cells": 2304
+      }
+    ],
+    "cost_at_target": {
+      "native-steady": {
+        "target_reached": false,
+        "status": "target_not_reached_within_tested_grids_and_budgets",
+        "workflow_best": null,
+        "solver_best": null
+      },
+      "openfoam-steady": {
+        "target_reached": true,
+        "status": "reached_on_tested_configurations",
+        "workflow_best": {
+          "method": "openfoam-steady",
+          "grid": 24,
+          "timed_rows": 3,
+          "accepted_rows": 3,
+          "all_accepted": true,
+          "qualifies": true,
+          "reference_error": 0.008966323560314793,
+          "workflow_median_s": 1.3411782099865377,
+          "solver_median_s": 0.7262247420003405,
+          "workflow_min_s": 1.3408508970023831,
+          "workflow_max_s": 1.3888377739931457,
+          "peak_rss_median_kib_linux": 117412,
+          "steps": 696,
+          "cells": 576
+        },
+        "solver_best": {
+          "method": "openfoam-steady",
+          "grid": 24,
+          "timed_rows": 3,
+          "accepted_rows": 3,
+          "all_accepted": true,
+          "qualifies": true,
+          "reference_error": 0.008966323560314793,
+          "workflow_median_s": 1.3411782099865377,
+          "solver_median_s": 0.7262247420003405,
+          "workflow_min_s": 1.3408508970023831,
+          "workflow_max_s": 1.3888377739931457,
+          "peak_rss_median_kib_linux": 117412,
+          "steps": 696,
+          "cells": 576
+        }
+      }
+    },
+    "native_over_openfoam_at_target": null,
+    "containment": "fresh private temporary path; ZIP verified there and copied unchanged; cause of earlier workspace anomaly unknown"
+  },
+  "native_96_reference": {
+    "method": "native-steady",
+    "grid": 96,
+    "accepted": true,
+    "numerical_accepted": true,
+    "independent_passed": true,
+    "reference_error": 0.009205407778947489,
+    "run_directory": "native-96",
+    "steps": 21420,
+    "pressure_iterations": 257040,
+    "solver_s": 1.573997587,
+    "momentum_residual": 9.79189377126044e-06,
+    "assessment": "steady_discrete_solution",
+    "termination": "completed",
+    "source_sha256": "826d5370122922aa5beeeba73f954c6f35c70e6d96f4dc4d095e8d64d49b5f92",
+    "initial_state_sha256": "c533ff3ab7d6645ae871cead139ac80de73d86c8b7c66c3ed7b386b86772d5c2",
+    "case_sha256": "7a4551ab4a4b85d9db8c03b10484300de9c6fd222cb8118e4d97e9eefe0e2abb",
+    "reference_screen_passed": true,
+    "initialization": {
+      "kind": "public checksummed checkpoint from converged but unsealed predecessor",
+      "checkpoint_sha256": "452a465a564566e5a5c547a8cd5dbdf6a4906906c1d4ac791e67aa037b3833b9",
+      "predecessor_exit": 1,
+      "predecessor_steps": 21390,
+      "predecessor_solver_s": 1074.449791775,
+      "predecessor_momentum_residual": 9.925379068104201e-06,
+      "additional_steps": 30,
+      "additional_pressure_iterations": 360,
+      "predecessor_byte_comparison": {
+        "fields.json": false,
+        "checkpoint.json": false
+      },
+      "maximum_velocity_change": 2.3129213666539528e-07,
+      "maximum_pressure_change": 6.593393327147812e-08,
+      "byte_comparison_passed": false,
+      "byte_comparison_failure_reason": "ordinary restart advances 30 additional steps to the next monitor window; states have different work, not a same-step restart-identity control"
+    },
+    "meaning": "accepted same-scheme self-reference from a fresh public-contract continuation; its timer is not the cold solve cost or a timed cost-at-target sample"
+  },
+  "diagnostic_solver_work_s": 1076.023789362,
+  "self_convergence": {
+    "available": true,
+    "rows": [
+      {
+        "grid": 16,
+        "accepted": true,
+        "l1": 0.019162708608988586,
+        "l2": 0.021661580206064117,
+        "linf": 0.03724779076156559
+      },
+      {
+        "grid": 24,
+        "accepted": true,
+        "l1": 0.012737723558779253,
+        "l2": 0.014364529390590559,
+        "linf": 0.022033965456933896
+      },
+      {
+        "grid": 32,
+        "accepted": true,
+        "l1": 0.00888622237367951,
+        "l2": 0.010064422777799531,
+        "linf": 0.015218721356946185
+      },
+      {
+        "grid": 48,
+        "accepted": true,
+        "l1": 0.004661527775464143,
+        "l2": 0.005313074172795137,
+        "linf": 0.00835482188854831
+      }
+    ],
+    "orders": {
+      "l1": 1.284481060320357,
+      "l2": 1.276489117149814,
+      "linf": 1.3558197234049578
+    },
+    "reference_grid": 96,
+    "station_count": 257,
+    "meaning": "descriptive centerline difference to a finite same-scheme reference; not exact error or GCI"
+  },
+  "retained_failures": [
+    {
+      "attempt": "first partial sweep",
+      "reason": "active executable rebuilt; frozen binary hash changed; 18 rows retained"
+    },
+    {
+      "attempt": "second partial sweep",
+      "reason": "producer import re-export finalized; frozen producer hash changed; 23 rows retained"
+    },
+    {
+      "attempt": "first complete sweep",
+      "reason": "all 24 timed rows accepted, but OpenFOAM-48 warmup failed archive.progress; inventory included snapshot 1250 absent from recorded progress; archive not repaired"
+    },
+    {
+      "attempt": "cold native 96 reference",
+      "reason": "converged at 21390 steps, then exit 1 writing executable identity after active executable replacement; unsealed output retained"
+    },
+    {
+      "attempt": "predecessor/continuation byte comparison",
+      "reason": "failed: the public restart advances 30 steps to the next monitor window; differing-work states; retained explicitly, not called a restart-identity pass"
+    },
+    {
+      "attempt": "complete repeat later re-audit",
+      "reason": "initial 32 measurement-time passes did not survive; three OpenFOAM archives later failed progress/file checks"
+    },
+    {
+      "attempt": "sequential collection reproduction",
+      "reason": "two late-invalid OpenFOAM-48 rows rejected by new collection guard; packaging found further archive/tree differences; this campaign remains failed"
+    }
+  ],
+  "checks": {
+    "rust_1_88_passing": 77,
+    "rust_1_99_1_passing": 77,
+    "python_suites": 17,
+    "python_modes": [
+      "normal",
+      "-O"
+    ],
+    "new_python_suite_last_rerun_tests": 5,
+    "ruff": "0.16.9",
+    "hosted_reproduction": "wired in CI, not executed on GitHub in this task",
+    "accuracy_sweep_tests_final_rerun": 18,
+    "comparator_tests_final_rerun": 15
+  },
+  "evidence_packaging": {
+    "verified_archives": 51,
+    "tree_identical": true,
+    "round_trip_identical": true,
+    "post_transfer_recheck": "51/51; exact ZIP hash and CRC checked",
+    "filesystem_events_recorded": true,
+    "scoped_process_snapshots_recorded": true,
+    "rejected_attempts": "immutable nested payload, separate from accepted archives",
+    "sealed_archives": 51,
+    "scope": "archive integrity; intentional iteration-limit controls are not numerical acceptance"
+  }
+}

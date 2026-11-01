@@ -1,6 +1,42 @@
 # Performance gap: current state and remaining stages
 
-## Current pressure stage
+## Stage V accuracy baseline (1 November 2026)
+
+The first iteration of the [accuracy/steady-solver plan](../docs/ACCURACY_STEADY_PLAN.md)
+adds verification without changing production numerics. Read the
+[Stage V results](MOMENTUM_VERIFICATION_RESULTS.md) for the exact protocol and
+retained failures. The final private-path 16/24/32/48 sweep passed all 32 rows at collection;
+the transferred evidence ZIP independently verified all 51 sealed archives.
+
+| Grid | Native Ghia error | OpenFOAM Ghia error | Native steps / OpenFOAM iterations | Native solver s | OpenFOAM solver s | Native/OpenFOAM |
+|---|---:|---:|---:|---:|---:|---:|
+| 16² | 0.03802453 | 0.01875367 | 1020 / 375 | 1.070 | 0.314 | 3.41× |
+| 24² | 0.02756134 | 0.00896632 | 2010 / 696 | 5.202 | 0.726 | 7.16× |
+| 32² | 0.02351448 | 0.00870380 | 3240 / 1102 | 15.039 | 1.493 | 10.07× |
+| 48² | 0.01695144 | 0.00707998 | 6390 / 2132 | 71.613 | 6.179 | 11.59× |
+
+These local Rust-1.88 configured-recipe timings do not measure a change in
+solver performance. The donor-cell operator order is 0.997; the translating
+vortex L1 order is 0.974, with independently negligible time error.
+
+A separately budgeted **96²** same-scheme reference now reaches Ghia error
+**0.00921**, after about **1076 s** of accumulated solver work.
+Its cold solve converged but failed during archive writing; a fresh, independently
+accepted public-checkpoint continuation produced the finite reference. Its
+initial state, additional 30 steps, different-work byte comparison and both
+timers are documented. It is not a repeated cost-at-target timing sample.
+The shared paired sweep still has no native qualifying grid, so its formal
+`native_over_openfoam_at_target` remains null. Native reaches the accuracy
+objective in this diagnostic, but the cost deficit remains very large.
+
+**Next:** P3a conservative second-order laminar advection, then P4 implicit
+viscous correction and P5a implicit steady projection. P5b is conditional;
+P3b/P5c extend open boundaries/RANS and P5d adds scalar transport. M repeats
+matched-accuracy measurement after each stage. P2b/P2c remain separate pressure
+work. No defensible percentage of the full gap closed follows from this
+verification-only iteration.
+
+## Previous pressure stage and hosted baseline
 
 Stage P2a, anisotropic unmasked pressure multigrid, builds on main `2ddf17d`
 (merged PR #13). Fixed symmetric principal line/small-plane
@@ -17,7 +53,7 @@ reduce the number of pseudo-time steps by design, or establish physical model
 validity. The prescribed-flow optimization worker bypasses pressure, so its
 fitness evaluations gain nothing directly from this change.
 
-## How close native is now
+## Prior hosted comparison (31 October 2026)
 
 Fresh same-host, one-thread comparison of **opt-in native multigrid** and the
 pinned OpenFOAM Foundation 13 SIMPLEC/GAMG cavity recipe, measured 2026-10-31.
@@ -108,6 +144,7 @@ norms. A same-grid configured timing ratio describes those recipes. A
 matched-accuracy ratio additionally requires both methods to reach the error
 target. Neither is experimental validation of urban dispersion.
 
-There is no defensible percentage of the full gap closed while one method
-does not reach the declared error objective. Pressure-kernel speedups and
-coarse-grid throughput are useful progress, with their scope retained.
+There is no defensible percentage of the full gap closed without repeated
+matched-accuracy costs. The Stage V 96² diagnostic establishes an accepted
+native target crossing; it does not supply that repeated cost measurement.
+Pressure-kernel speedups and coarse-grid throughput retain their own scope.

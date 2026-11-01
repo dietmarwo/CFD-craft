@@ -120,8 +120,12 @@ def run_method(method, grid, destination, binary, foam_root, limits):
         row.update(reference_error=error, predicted_u=[float(v) for v in predicted])
     else:
         prepared = destination / "input"
-        require(grid in (24, 48, 72), "openfoam.grid", "unsupported recipe grid")
-        cmp.backend.prepare("cavity", grid // 24, limits["foam_iterations"], prepared)
+        require(
+            grid in cmp.backend.CAVITY_GRIDS, "openfoam.grid", "unsupported recipe grid"
+        )
+        cmp.backend.prepare(
+            "cavity", 1, limits["foam_iterations"], prepared, cavity_grid=grid
+        )
         command = [
             sys.executable,
             str(cmp.ROOT / "integrations/openfoam_backend.py"),
@@ -388,6 +392,24 @@ def summarize(rows, configurations, rounds, target):
     return groups, cost, ratios
 
 
+def collect_archive(row, destination, binary):
+    """Recheck sealed evidence after all child runs, before calculating costs."""
+    archive = destination / "run"
+    require(
+        cmp.digest(archive / "manifest.json") == row["archive_manifest_sha256"],
+        "collection.manifest",
+        "sealed manifest changed after measurement",
+    )
+    if row["method"] == "native-steady":
+        require(
+            audit(archive)["passed"],
+            "collection.native",
+            "final archive/field audit failed",
+        )
+    else:
+        cmp.backend.verify(archive)
+
+
 def sweep(
     binary,
     foam_root,
@@ -401,7 +423,9 @@ def sweep(
     foam_iterations=3000,
     native_diagnostic=True,
     native_pressure_preconditioner="ic0",
+    grids=None,
     runner=run_method,
+    collector=None,
 ):
     require(
         isinstance(levels, (list, tuple))
@@ -425,13 +449,23 @@ def sweep(
         "select ic0 or multigrid",
     )
     require(type(native_diagnostic) is bool, "native_diagnostic", "boolean required")
+    if grids is not None:
+        require(
+            isinstance(grids, (list, tuple))
+            and bool(grids)
+            and all(type(n) is int and n in cmp.backend.CAVITY_GRIDS for n in grids)
+            and len(set(grids)) == len(grids),
+            "grids",
+            "distinct supported cavity grids required",
+        )
     binary, foam_root = Path(binary).resolve(), Path(foam_root).resolve()
     require(binary.is_file(), "binary", "file required")
     require(foam_root.is_dir(), "foam_root", "directory required")
-    configurations = [
-        dict(method=m, grid=24 * level) for level in levels for m in METHODS
-    ]
-    if native_diagnostic:
+    selected_grids = (
+        list(grids) if grids is not None else [24 * level for level in levels]
+    )
+    configurations = [dict(method=m, grid=n) for n in selected_grids for m in METHODS]
+    if native_diagnostic and grids is None:
         configurations.insert(0, dict(method="native-steady", grid=12))
     inputs = [
         binary,
@@ -457,6 +491,7 @@ def sweep(
         passed=False,
         plan=dict(
             configurations=configurations,
+            shared_grids=selected_grids,
             rounds=rounds,
             warmups_per_configuration=1,
             target=target,
@@ -541,6 +576,25 @@ def sweep(
                         )
                     identity_check()
                     cmp.backend.write_json(path, report)
+        # Retain acceptance transitions caused by late snapshot writes.
+        final_collector = collector or (
+            collect_archive if runner is run_method else None
+        )
+        if final_collector is not None:
+            for row in report["rows"]:
+                if row.get("error"):
+                    continue
+                row["accepted_at_measurement"] = row["accepted"]
+                try:
+                    final_collector(row, output / row["run_directory"], binary)
+                    row["collection_verified"] = True
+                except (ValueError, OSError, KeyError, TypeError, IndexError) as exc:
+                    row.update(
+                        accepted=False,
+                        collection_verified=False,
+                        error=f"CFD-B004 sweep.collection.{row['run_directory']}: {exc}",
+                    )
+                cmp.backend.write_json(path, report)
         report["completed"] = True
         (
             report["groups"],

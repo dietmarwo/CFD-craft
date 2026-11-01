@@ -68,6 +68,13 @@ Line and plane smoothing for stretched grids is measured in the
 [anisotropic pressure results](validation/ANISOTROPIC_PRESSURE_RESULTS.md).
 The [current performance-gap status](validation/PERFORMANCE_GAP_STATUS.md)
 reports fresh native/OpenFOAM timings, accuracy and the remaining stages.
+The [momentum verification baseline](validation/MOMENTUM_VERIFICATION_RESULTS.md)
+starts the accuracy/steady-solver track: shifted operator and translating-vortex
+tests, conservation/extrema controls, a shared backend grid list and a native
+self-convergence reference. This verification stage leaves solver numerics
+unchanged; conservative second-order momentum is the next numerical change.
+The [accuracy and steady-solver plan](docs/ACCURACY_STEADY_PLAN.md) specifies
+the later methods, opt-in behavior and acceptance gates.
 The opt-in [`profile` command and accuracy sweep](docs/PROFILING.md) attribute
 actual solver phases, retain incomplete grid-sweep rows and report cost at a
 declared error only when the target is reached. See the

@@ -90,6 +90,56 @@ class Sweep(unittest.TestCase):
         self.assertEqual(r["groups"][0]["timed_rows"], 3)
         self.assertEqual(sum(row["warmup"] for row in r["rows"]), 5)
 
+    def test_late_archive_change_invalidates_cost_and_preserves_original_acceptance(
+        self,
+    ):
+        collected = []
+
+        def collector(row, destination, binary):
+            collected.append(destination.name)
+            if row["method"] == "native-steady" and row["round"] == 0:
+                raise ValueError("CFD-X006 archive.files: late snapshot")
+
+        r = self.run_sweep(
+            levels=[1], rounds=1, native_diagnostic=False, collector=collector
+        )
+        self.assertTrue(r["completed"])
+        self.assertFalse(r["workflow_valid"])
+        self.assertFalse(r["passed"])
+        self.assertEqual(len(collected), 4)
+        failed = [row for row in r["rows"] if row.get("error")]
+        self.assertEqual(len(failed), 1)
+        self.assertTrue(failed[0]["accepted_at_measurement"])
+        self.assertFalse(failed[0]["collection_verified"])
+        self.assertIn("sweep.collection.", failed[0]["error"])
+        self.assertFalse(r["cost_at_target"]["native-steady"]["target_reached"])
+
+    def test_collection_checks_the_manifest_identity_again(self):
+        row = dict(method="native-steady", archive_manifest_sha256="old")
+        destination = self.root / "changed"
+        (destination / "run").mkdir(parents=True)
+        (destination / "run/manifest.json").write_text("changed")
+        with self.assertRaisesRegex(ValueError, "sweep.collection.manifest"):
+            s.collect_archive(row, destination, self.binary)
+
+    def test_explicit_grids_are_paired_without_a_native_only_diagnostic(self):
+        r = self.run_sweep(grids=[16, 24, 32, 48], rounds=1)
+        self.assertEqual(r["plan"]["shared_grids"], [16, 24, 32, 48])
+        self.assertEqual(len(r["rows"]), 16)
+        for grid in [16, 24, 32, 48]:
+            self.assertEqual(
+                {row["method"] for row in r["rows"] if row["grid"] == grid},
+                set(s.METHODS),
+            )
+        self.assertNotIn(12, [row["grid"] for row in r["rows"]])
+
+    def test_invalid_explicit_grids_fail_before_claiming_output(self):
+        for grids in [[], [True], [16, 16], [17], "16", [16.0]]:
+            with self.subTest(grids=grids):
+                with self.assertRaisesRegex(ValueError, "sweep.grids"):
+                    self.run_sweep(grids=grids)
+                self.assertFalse((self.root / "out").exists())
+
     def test_orders_alternate_and_warmups_are_not_cost_samples(self):
         def runner(*args):
             row = self.runner(*args)

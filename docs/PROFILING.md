@@ -166,3 +166,19 @@ directory entry and checks that each archive in the extracted copy verifies
 exactly as the original does. It also lists archives whose progress records a
 time directory without files, which a verified archive does not rule out. The
 CI job uploads that zip and prints that list.
+
+## Momentum-verification grid list
+
+`--grid-sweep --grids 16 24 32 48` replaces the level-derived grid list with
+the same explicit list for native and OpenFOAM, omitting the native-only 12²
+diagnostic. The bounded cavity recipe also accepts `--cavity-grid N`; existing
+`--level 1..3` recipes retain their generated numerical inputs. The list and
+all configurations are frozen in the sweep report before execution.
+
+Dispatch `external=momentum` for the full [Stage V protocol](iterations/20-momentum-verification-plan.md):
+the shifted operator fixture, translating vortex and time refinement,
+1000-step stability baseline, shared-grid paired sweep, separately budgeted
+native 96² self-reference and default byte-identity controls. The 96² reference
+is not a timed cost-at-target configuration. Read the
+[results](../validation/MOMENTUM_VERIFICATION_RESULTS.md) for actual completion,
+retained failures and hosted status; an unreached target remains a null ratio.

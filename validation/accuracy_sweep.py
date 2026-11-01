@@ -20,6 +20,7 @@ METHODS = ["native-steady", "openfoam-steady"]
 NATIVE_NUMERICS = dict(
     momentum_advection=("second_order_upwind", "limited_upwind"),
     momentum_limiter=("van_albada", "van_leer", "monotonized_central"),
+    steady_algorithm=("implicit_viscous", "implicit_projection"),
 )
 
 

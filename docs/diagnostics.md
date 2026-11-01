@@ -71,6 +71,9 @@ more than the host can hold.
 | CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
 | CFD-E038 | error | `numerics.momentum_advection`: a second-order momentum scheme with an open boundary, which has no verified outlet or inflow closure yet |
 | CFD-E039 | error | `numerics.momentum_advection`: a second-order momentum scheme with `neutral_rans`, not yet verified with the empty-ABL check |
+| CFD-E045 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm in transient mode |
+| CFD-E046 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with constituents, whose explicit transport limits its steps would exceed |
+| CFD-E047 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with `neutral_rans` or prescribed flow |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
@@ -100,6 +103,7 @@ Codes from a run, a restart or `report`, reported in `summary.json` `error` or o
 | CFD-E053 | Negative concentration beyond round-off; no clipping is applied |
 | CFD-E054 | Eddy viscosity outside the declared numerical regime |
 | CFD-E055 | The time step is not finite and positive |
+| CFD-E056 | An implicit momentum-correction system is nonfinite or singular, or its CG lost positive definiteness |
 | CFD-E060 | Checkpoint identity or checksum mismatch |
 | CFD-E061 | Fields or checkpoint omitted because they would exceed the output budget; the manifest lists them under `omitted` and the run exits 2. `report` repeats the code on stderr for such an archive and exits 0 |
 | CFD-E062 | The output directory already exists |
@@ -168,8 +172,12 @@ actual timestep count or time-refinement failure (`<trial>.run`, `<trial>.steps`
 `temporal`), an invalid 1000-step stability control (`stability.run`), changed
 default artifacts or work (`defaults.<filename>`, `defaults.pressure_iterations`),
 an invalid self-reference/profile (`self.*`), or output/argument errors
-(`output`, `arguments`). An intentional stability iteration limit is recorded
-separately from numerical acceptance. Explicit cavity grid selectors use
+(`output`, `arguments`), and a failed predeclared second-order gate (`gates`).
+An intentional stability iteration limit is recorded separately from numerical
+acceptance. `CFD-B008 steady.<field>` identifies a failed implicit steady-algorithm
+campaign (`validation/steady_algorithms.py`): a run that misses the unchanged
+gates (`<run name>`), fields of different shape (`fields`), a failed fixed-point
+shrink gate (`fixed_point`), unknown schemes (`schemes`) or output errors. Explicit cavity grid selectors use
 `CFD-X001 recipe.cavity_grid`; shared sweep grids use `CFD-B004 sweep.grids`.
 
 `CFD-B004 sweep.collection.<run_directory>` rejects an archive that passed its

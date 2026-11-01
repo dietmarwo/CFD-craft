@@ -86,6 +86,44 @@ class Profiling(unittest.TestCase):
                 (self.root / "plain-mg" / name).read_bytes(),
             )
 
+    def test_implicit_momentum_work_is_recorded_and_validated(self):
+        self.case = json.loads(
+            (ROOT / "cases/verification/lid-cavity.json").read_text()
+        )
+        self.case["grid"]["cells"] = [8, 2, 8]
+        self.case["run"].update(threads=1, mode="steady", max_steps=12)
+        self.case["numerics"]["steady_algorithm"] = "implicit_viscous"
+        self.assertEqual(self.invoke("profile").returncode, 2)
+        out = self.root / "profile"
+        self.assertTrue(check(out)["integrity_passed"])
+        path = out / "profile.json"
+        original = json.loads(path.read_text())
+        work = original["timing"]["phases"]["momentum_solve"]
+        self.assertGreater(work["work_units"], 0)
+        self.assertEqual(
+            original["summary"]["momentum_solver_iterations"], work["work_units"]
+        )
+        self.assertEqual(original["initial_momentum_solver_iterations"], 0)
+        for field, message in [
+            ("work_units", "work.momentum_solve"),
+            ("operator_applications", "work.momentum_solve"),
+        ]:
+            with self.subTest(field=field):
+                changed = copy.deepcopy(original)
+                changed["timing"]["phases"]["momentum_solve"][field] += 1
+                path.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError, "CFD-B003 profile." + message):
+                    check(out)
+        changed = copy.deepcopy(original)
+        del changed["initial_momentum_solver_iterations"]
+        path.write_text(json.dumps(changed))
+        with self.assertRaisesRegex(
+            ValueError, "CFD-B003 profile.initial_momentum_solver_iterations"
+        ):
+            check(out)
+        path.write_text(json.dumps(original))
+        self.assertTrue(check(out)["integrity_passed"])
+
     def test_anisotropic_block_work_is_recorded_and_validated(self):
         self.case = json.loads(
             (ROOT / "cases/verification/lid-cavity.json").read_text()

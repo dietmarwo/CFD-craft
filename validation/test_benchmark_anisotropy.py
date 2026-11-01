@@ -3,6 +3,9 @@
 
 import copy
 import math
+from pathlib import Path
+import posixpath
+import re
 import unittest
 from unittest.mock import patch
 import external_notices
@@ -114,6 +117,30 @@ class PressureEvidence(unittest.TestCase):
         self.assertIn("qualifying False", message)
         self.assertIn('"point_mg": null', message)
         self.assertIn("CFD-E033", message)
+
+
+class Workflow(unittest.TestCase):
+    def test_every_ci_output_directory_has_a_created_parent(self):
+        # Campaign outputs are claimed with mkdir() and need an existing parent;
+        # the anisotropy job once wrote to runs/anisotropy/* without creating it.
+        text = (
+            Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml"
+        ).read_text()
+        jobs = re.split(r"(?m)^  (?=[a-z][\w-]*:\s*$)", text.split("\njobs:\n", 1)[1])
+        checked = 0
+        for job in jobs:
+            name = job.split(":", 1)[0]
+            created = {"."}
+            for line in job.splitlines():
+                for made in re.findall(r"mkdir -p (\S+)", line):
+                    while made not in ("", "."):
+                        created.add(made)
+                        made = posixpath.dirname(made)
+                for out in re.findall(r"--output\s+(\S+)", line):
+                    parent = posixpath.dirname(out) or "."
+                    self.assertIn(parent, created, f"{name}: {out}")
+                    checked += 1
+        self.assertGreater(checked, 10)
 
 
 if __name__ == "__main__":

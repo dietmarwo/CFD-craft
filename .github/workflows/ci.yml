@@ -268,17 +268,23 @@ jobs:
           touch runs/point-baseline/crates/cfd-craft/src/multigrid/line.rs
           cargo build --release --locked --manifest-path runs/point-baseline/Cargo.toml --example pressure_probe
       - run: lscpu | grep -E "Model name|^CPU\(s\)" | sed 's/^/::notice title=runner::/'
+      # Both campaigns claim new output directories and need the parent. A failure
+      # before a report exists is shown as an error annotation with its last line.
       - run: |
           set +e
-          python validation/benchmark_anisotropy.py --baseline-probe runs/point-baseline/target/release/examples/pressure_probe --output runs/anisotropy/kernels
+          mkdir -p runs/anisotropy
+          python validation/benchmark_anisotropy.py --baseline-probe runs/point-baseline/target/release/examples/pressure_probe --output runs/anisotropy/kernels > runs/anisotropy/kernels.log 2>&1
           code=$?
           test ! -f runs/anisotropy/kernels/report.json || python validation/external_notices.py runs/anisotropy/kernels/report.json "anisotropic pressure kernels"
+          test -f runs/anisotropy/kernels/report.json || echo "::error title=anisotropic pressure kernels::exit $code: $(tail -n 1 runs/anisotropy/kernels.log)"
           test "$code" -eq 0
       - run: |
           set +e
-          python validation/benchmark_anisotropic_flow.py --output runs/anisotropy/flow
+          mkdir -p runs/anisotropy
+          python validation/benchmark_anisotropic_flow.py --output runs/anisotropy/flow > runs/anisotropy/flow.log 2>&1
           code=$?
           test ! -f runs/anisotropy/flow/report.json || python validation/external_notices.py runs/anisotropy/flow/report.json "anisotropic coupled flow"
+          test -f runs/anisotropy/flow/report.json || echo "::error title=anisotropic coupled flow::exit $code: $(tail -n 1 runs/anisotropy/flow.log)"
           test "$code" -eq 0
       - if: always()
         run: |

@@ -275,3 +275,86 @@ fn cancellation_and_iteration_limits_leave_the_whole_step_unchanged() {
         serde_json::to_value(&before).unwrap()
     );
 }
+
+#[test]
+fn anisotropic_pressure_projection_and_block_work_remain_independently_checked() {
+    let mut c = case([12, 4, 12], Boundary::Wall);
+    c.domain.size_m = [1.0, 1.0, 0.1];
+    let g = Grid::build(&c).unwrap();
+    let mut exact: Vec<_> = (0..g.count()).map(|i| (0.37 * i as f64).sin()).collect();
+    pressure::center_nullspaces(&g, &mut exact);
+    let b: Vec<_> = g
+        .divergence(&g.gradient(&exact))
+        .iter()
+        .map(|v| -v)
+        .collect();
+    let control = Control::new(20.0).with_profiling();
+    let (p, info) = pressure::solve(&g, &b, 1e-14, 1200, &control).unwrap();
+    assert!(info.relative_residual <= 1.1e-12);
+    assert!(p.iter().zip(&exact).all(|(a, b)| (a - b).abs() < 1e-8));
+    let mut u = g.gradient(&exact);
+    let mut accumulated = vec![0.; g.count()];
+    pressure::project(&g, &mut u, &mut accumulated, 0.125, 1e-14, 1200, &control).unwrap();
+    assert!(u.iter().all(|v| v.abs() < 1e-7));
+    let profile = control.profile().unwrap().unwrap();
+    let work = profile.phases["pressure_solve"].multigrid.as_ref().unwrap();
+    assert!(work.block_solves > 0);
+    assert_eq!(
+        work.block_smoothing_cell_updates,
+        2 * work.block_level_cell_visits
+    );
+    assert_eq!(
+        work.smoothing_cell_updates,
+        work.block_smoothing_cell_updates
+    );
+    let stats = pressure::multigrid_stats(&g).unwrap();
+    assert!(!stats.block_smoothers.is_empty());
+    assert!(stats.block_smoothers.iter().all(|b| b.axes == vec![2]));
+}
+
+#[test]
+fn a_spacing_dependent_policy_change_rebuilds_the_hierarchy() {
+    let c = case([8, 3, 8], Boundary::Wall);
+    let mut g = Grid::build(&c).unwrap();
+    let mut exact: Vec<_> = (0..g.count()).map(|i| (0.37 * i as f64).sin()).collect();
+    pressure::center_nullspaces(&g, &mut exact);
+    let control = Control::new(20.).with_profiling();
+    for changed in [false, true] {
+        if changed {
+            g.dx[2] *= 0.01;
+        }
+        let mut rhs = vec![0.; g.count()];
+        pressure::apply(&g, &exact, &mut rhs);
+        let (x, _) = pressure::solve(&g, &rhs, 1e-13, 1200, &control).unwrap();
+        assert!(x.iter().zip(&exact).all(|(a, b)| (a - b).abs() < 1e-9));
+        assert_eq!(
+            !pressure::multigrid_stats(&g)
+                .unwrap()
+                .block_smoothers
+                .is_empty(),
+            changed
+        );
+    }
+    assert_eq!(
+        control.profile().unwrap().unwrap().phases["pressure_multigrid_setup"].calls,
+        2
+    );
+}
+
+#[test]
+fn a_stiff_two_cell_axis_is_warned_and_included_in_the_block_policy() {
+    let mut c = case([16, 2, 16], Boundary::Wall);
+    c.domain.size_m = [1., 0.001, 1.];
+    assert!(c.check().diagnostics.iter().any(|d| d.code == "CFD-W004"));
+    let g = Grid::build(&c).unwrap();
+    let b = vec![0.; g.count()];
+    pressure::solve(&g, &b, 1e-12, 1200, &Control::new(20.)).unwrap();
+    let stats = pressure::multigrid_stats(&g).unwrap();
+    assert!(
+        stats
+            .block_smoothers
+            .iter()
+            .all(|b| b.axes == vec![1] && b.block_unknowns == 2)
+    );
+    assert!(!stats.block_smoothers.is_empty());
+}

@@ -1,5 +1,11 @@
 # Pressure multigrid results
 
+This is the historical P1 point-smoother/full-coarsening campaign, including
+the shape sweep added in merged PR #13. Its rows are retained unchanged.
+The subsequent line/small-plane and semicoarsening implementation has
+[separate anisotropy results](ANISOTROPIC_PRESSURE_RESULTS.md) and a
+[fresh native/OpenFOAM gap assessment](PERFORMANCE_GAP_STATUS.md).
+
 ## Scope and protocol
 
 Baseline: main `bbd191b` (merged PRs #11 and #12), measured 2026-10-31.

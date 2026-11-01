@@ -66,6 +66,7 @@ more than the host can hold.
 | CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
 | CFD-E030 | error | The geometry leaves no fluid cells |
 | CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid was selected with a mask; the library also rejects a masked/disconnected grid or nonpositive/nonfinite pressure weights |
+| CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |
 | CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
@@ -78,7 +79,7 @@ more than the host can hold.
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
 | CFD-W002 | warning | RANS blockage ratio above the COST 732 recommendation of 3 % |
 | CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
-| CFD-W004 | warning | `numerics.pressure_preconditioner`: multigrid with pressure face weights (1/dx²) differing by more than a factor of 25 between axes of more than two cells. Point smoothing with full coarsening then converges slowly: in a shape sweep multigrid was slower than IC(0) in wall time, and on 64×8×64 with a ratio of 2500 it exceeded 1200 PCG iterations (CFD-E033) where IC(0) needed about 200. See the [multigrid results](../validation/PRESSURE_MULTIGRID_RESULTS.md) |
+| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. See the [pressure guide](PRESSURE_MULTIGRID.md) and anisotropy results |
 | CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
 W002 and W003 encode the COST 732 best-practice guideline (Franke et al., 2007) as summarized by secondary sources that cite it. The primary document was not retrieved from its distribution share; `validation/data-inventory.json` records that. They are warnings because best-practice distances depend on the scenario: a wind-tunnel reproduction may use the tunnel's own dimensions.
@@ -150,3 +151,9 @@ reused pressure time, accepted solver time and workflow time are separate scopes
 PID/group namespace metadata. Process cleanup uses local IDs from NSpid/NSpgid
 and checks namespace identity, rather than comparing ancestor procfs IDs with
 local `killpg` IDs.
+
+`CFD-B006 pressure_suite.<field>` covers the shared rough-pressure probe and
+anisotropy campaign: invalid arguments/limits/cases, occupied or failed output,
+nonfinite data, changed inputs/producers, inconsistent work/repetitions and
+invalid result identities. A valid pressure-limit failure or missed independent
+recovery bound remains a nonqualifying measurement, with no speedup ratio.

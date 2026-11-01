@@ -54,6 +54,23 @@ class Sweep(unittest.TestCase):
             peak_rss_kib_linux=12345,
         )
 
+    def test_native_preconditioner_is_explicit_in_the_frozen_plan(self):
+        report = self.run_sweep(
+            levels=[1],
+            rounds=1,
+            native_diagnostic=False,
+            native_pressure_preconditioner="multigrid",
+        )
+        self.assertEqual(
+            report["plan"]["limits"]["native_pressure_preconditioner"], "multigrid"
+        )
+        for value in [True, None, "unknown"]:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    ValueError, "sweep.native_pressure_preconditioner"
+                ):
+                    self.run_sweep(native_pressure_preconditioner=value)
+
     def run_sweep(self, runner=None, **kw):
         return s.sweep(
             self.binary,

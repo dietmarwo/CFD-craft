@@ -64,6 +64,12 @@ multilevel work; see the [multigrid guide](PRESSURE_MULTIGRID.md). A factor-setu
 only when construction runs, including a zero-RHS first projection. Timers and
 locks occur at phase boundaries; inner iterations update local integer counters.
 
+Anisotropic levels add block updates, solves and level visits. The checker
+requires two block updates per block-level visit and total smoothing updates
+`4 * residual_cell_updates - 2 * block_level_cell_visits`. Point-only records
+keep the previous fields and four-update relation. These counts measure cell
+visits, not the different arithmetic cost of a scalar and a block solve.
+
 The ordinary summary's steps/pressure iterations describe retained state.
 Profile work includes an unsuccessful step. Subtract `initial_steps` and
 `initial_pressure_iterations` for a restarted invocation. A failed projection

@@ -54,6 +54,9 @@ def run_method(method, grid, destination, binary, foam_root, limits):
         case["grid"]["cells"] = [grid, 2, grid]
         case["run"]["wall_time_limit_s"] = limits["native_wall_s"]
         case["run"]["max_steps"] = limits["native_max_steps"]
+        selection = limits.get("native_pressure_preconditioner", "ic0")
+        if selection != "ic0":
+            case["numerics"]["pressure_preconditioner"] = selection
         input_file = destination / "input.json"
         cmp.backend.write_json(input_file, case)
         usage = measure(
@@ -397,6 +400,7 @@ def sweep(
     native_max_steps=20000,
     foam_iterations=3000,
     native_diagnostic=True,
+    native_pressure_preconditioner="ic0",
     runner=run_method,
 ):
     require(
@@ -414,6 +418,12 @@ def sweep(
     number(native_max_steps, "native_max_steps", 1, 20000, integer=True)
     number(foam_iterations, "foam_iterations", 50, 20000, integer=True)
     cmp.backend.snapshot_interval(foam_iterations)
+    require(
+        type(native_pressure_preconditioner) is str
+        and native_pressure_preconditioner in ("ic0", "multigrid"),
+        "native_pressure_preconditioner",
+        "select ic0 or multigrid",
+    )
     require(type(native_diagnostic) is bool, "native_diagnostic", "boolean required")
     binary, foam_root = Path(binary).resolve(), Path(foam_root).resolve()
     require(binary.is_file(), "binary", "file required")
@@ -436,6 +446,7 @@ def sweep(
         foam_wall_s=foam_wall_s,
         native_max_steps=native_max_steps,
         foam_iterations=foam_iterations,
+        native_pressure_preconditioner=native_pressure_preconditioner,
     )
     output = Path(output)
     cmp.backend.claim_directory(output)

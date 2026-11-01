@@ -143,7 +143,7 @@ not claim numerical convergence or empirical validity.
 |---|---|
 | `crates/cfd-craft/src/case.rs` | Typed case contract, semantic checks and physics hash |
 | `grid.rs` | Uniform cells, staggered faces, box masks and connected components |
-| `pressure.rs`, `multigrid.rs` | Matrix-free pressure operator, gauges, default IC(0)/PCG, optional symmetric multigrid and projection |
+| `pressure.rs`, `multigrid.rs`, `multigrid/line.rs` | Matrix-free pressure operator, gauges, default IC(0)/PCG, optional symmetric point/line multigrid and projection |
 | `flow.rs` | Laminar/RANS momentum and turbulence, wall treatment |
 | `transport.rs` | Source/receptor weights and conservative scalar transport |
 | `solver.rs` | State, control, timestep, transactional step and assessment |
@@ -218,6 +218,9 @@ The native method uses explicit SSPRK2 stages and an IC(0)-preconditioned PCG
 pressure solve by default. Setting `numerics.pressure_preconditioner` to
 `multigrid` selects a fixed symmetric cycle on unmasked grids; masks are
 rejected explicitly. The fine equation and acceptance gates are unchanged.
+Strong unequal uniform spacings select exact symmetric line/small-plane blocks
+and semicoarsening; isotropic levels keep the original point cycle. This has
+extra setup/memory cost, so compare complete repeated workloads with IC(0).
 See the [algorithm, API and examples](PRESSURE_MULTIGRID.md). Momentum advection is donor-cell first order; selecting scalar
 MUSCL does not make momentum second order. Diffusion and advection constrain
 the timestep. `max_time_step_s` is a ceiling, not a promise of fixed dt.

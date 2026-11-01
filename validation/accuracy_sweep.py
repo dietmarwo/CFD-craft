@@ -15,6 +15,28 @@ from check_fields import check as audit
 from process_measure import measure
 
 METHODS = ["native-steady", "openfoam-steady"]
+# Opt-in native numerics a sweep may select, by field. Only non-default values are
+# allowed: the consumed case omits defaults, and must equal the planned case.
+NATIVE_NUMERICS = dict(
+    momentum_advection=("second_order_upwind", "limited_upwind"),
+    momentum_limiter=("van_albada", "van_leer", "monotonized_central"),
+)
+
+
+def native_numerics_selection(selection):
+    """Validated numerics overrides; the case's own check rejects bad combinations."""
+    require(
+        isinstance(selection, dict)
+        and all(
+            type(k) is str and k in NATIVE_NUMERICS and v in NATIVE_NUMERICS[k]
+            for k, v in selection.items()
+        ),
+        "native_numerics",
+        f"select non-default values of {sorted(NATIVE_NUMERICS)}",
+    )
+    return dict(sorted(selection.items()))
+
+
 SCHEMA = "cfd-craft.accuracy-sweep/0.1"
 
 
@@ -57,6 +79,7 @@ def run_method(method, grid, destination, binary, foam_root, limits):
         selection = limits.get("native_pressure_preconditioner", "ic0")
         if selection != "ic0":
             case["numerics"]["pressure_preconditioner"] = selection
+        case["numerics"].update(limits.get("native_numerics", {}))
         input_file = destination / "input.json"
         cmp.backend.write_json(input_file, case)
         usage = measure(
@@ -427,6 +450,7 @@ def sweep(
     native_pressure_preconditioner="ic0",
     grids=None,
     runner=run_method,
+    native_numerics=None,
     collector=None,
 ):
     require(
@@ -449,6 +473,9 @@ def sweep(
         and native_pressure_preconditioner in ("ic0", "multigrid"),
         "native_pressure_preconditioner",
         "select ic0 or multigrid",
+    )
+    native_numerics = native_numerics_selection(
+        {} if native_numerics is None else native_numerics
     )
     require(type(native_diagnostic) is bool, "native_diagnostic", "boolean required")
     if grids is not None:
@@ -484,6 +511,9 @@ def sweep(
         foam_iterations=foam_iterations,
         native_pressure_preconditioner=native_pressure_preconditioner,
     )
+    # Omitted when empty, so earlier plans keep their recorded limits.
+    if native_numerics:
+        limits["native_numerics"] = native_numerics
     output = Path(output)
     cmp.backend.claim_directory(output)
     report = dict(

@@ -306,6 +306,12 @@ def main():
         "--native-pressure-preconditioner", choices=["ic0", "multigrid"], default="ic0"
     )
     ap.add_argument("--foam-iterations", type=int, default=3000)
+    ap.add_argument(
+        "--native-numerics",
+        type=json.loads,
+        default={},
+        help='Opt-in native numerics for --grid-sweep, as JSON, e.g. \'{"momentum_advection": "second_order_upwind"}\'',
+    )
     args = ap.parse_args()
     try:
         if args.grid_sweep:
@@ -324,6 +330,7 @@ def main():
                 native_max_steps=args.native_max_steps,
                 native_pressure_preconditioner=args.native_pressure_preconditioner,
                 foam_iterations=args.foam_iterations,
+                native_numerics=args.native_numerics,
             )
             print(
                 json.dumps(
@@ -344,9 +351,9 @@ def main():
             )
             return 1 if not report["workflow_valid"] else 0 if report["passed"] else 2
         require(
-            args.native_pressure_preconditioner == "ic0",
+            args.native_pressure_preconditioner == "ic0" and not args.native_numerics,
             "pressure_preconditioner",
-            "use --grid-sweep to select native multigrid",
+            "use --grid-sweep to select native multigrid or numerics",
         )
         report = compare(
             args.binary, args.foam_root, args.output, args.repeats, args.timeout_s

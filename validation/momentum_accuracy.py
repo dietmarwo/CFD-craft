@@ -4,6 +4,11 @@
 Analytic fields initialize generated, checksummed public-contract checkpoints.
 These are verification initial conditions, not evidence of prior physical runs.
 Donor-cell's order and nonconservative drift are measured, not corrected here.
+With `--momentum-advection`, the same campaign applies the predeclared P3a gates
+of docs/ACCURACY_STEADY_PLAN.md to a second-order scheme: L1 velocity order at
+least 1.7, momentum change at most 1e-13 per 100 steps, no new extrema beyond
+1e-12 for limited schemes, and no growth of the unlimited scheme's overshoot
+between steps 500 and 1000.
 """
 
 import argparse
@@ -27,6 +32,21 @@ AMPLITUDE = 0.2
 VISCOSITY = 0.005
 END_TIME = 0.05
 DT = 0.0005
+# Numerics overrides of the scheme under test; empty for the donor-cell baseline.
+SCHEMES = {
+    "donor_cell": {},
+    "second_order_upwind": dict(momentum_advection="second_order_upwind"),
+    "van_albada": dict(
+        momentum_advection="limited_upwind", momentum_limiter="van_albada"
+    ),
+    "van_leer": dict(momentum_advection="limited_upwind", momentum_limiter="van_leer"),
+    "monotonized_central": dict(
+        momentum_advection="limited_upwind", momentum_limiter="monotonized_central"
+    ),
+}
+ORDER_GATE = 1.7
+CONSERVATION_GATE_PER_100_STEPS = 1e-13
+EXTREMA_GATE = 1e-12
 
 
 def require(ok, field, message):
@@ -34,8 +54,9 @@ def require(ok, field, message):
         raise ValueError(f"CFD-B007 momentum.{field}: {message}")
 
 
-def case_for(cells, dt, viscosity=VISCOSITY):
+def case_for(cells, dt, viscosity=VISCOSITY, scheme="donor_cell"):
     c = json.loads((ROOT / "cases/verification/poiseuille.json").read_text())
+    c["numerics"].update(SCHEMES[scheme])
     c["grid"]["cells"] = list(cells)
     c["boundaries"] = dict(x="periodic", y="periodic", z="periodic")
     c["flow"].update(viscosity_m2_s=viscosity, acceleration_m_s2=[0.0] * 3)
@@ -160,8 +181,8 @@ def initialize(binary, case, velocity, output, label, report):
     return checkpoint
 
 
-def vortex_trial(binary, output, n, dt, label, report):
-    c = case_for([n, 2, n], dt)
+def vortex_trial(binary, output, n, dt, label, report, scheme="donor_cell"):
+    c = case_for([n, 2, n], dt, scheme=scheme)
     c["name"] = label
     initial = exact_vortex(c["grid"]["cells"], 0)
     checkpoint = initialize(binary, c, initial, output, label, report)
@@ -197,11 +218,11 @@ def vortex_trial(binary, output, n, dt, label, report):
     return row, final[indices]
 
 
-def stability_trial(binary, output, report):
-    c = case_for([64, 2, 2], 1.0, viscosity=1e-8)
-    c["name"] = "transverse-step"
+def stability_trial(binary, output, report, scheme="donor_cell", steps=1000):
+    c = case_for([64, 2, 2], 1.0, viscosity=1e-8, scheme=scheme)
+    c["name"] = "transverse-step" if steps == 1000 else f"transverse-step-{steps}"
     c["numerics"]["advective_cfl_max"] = 0.45
-    c["run"].update(max_steps=1000, end_time_s=100.0)
+    c["run"].update(max_steps=steps, end_time_s=100.0)
     values = []
     for axis in range(3):
         x, _, _ = face_coordinates(c["grid"]["cells"], axis)
@@ -220,17 +241,18 @@ def stability_trial(binary, output, report):
     require(
         run["returncode"] == 2
         and summary.get("termination") == "iteration_limit"
-        and summary.get("steps") == 1000
+        and summary.get("steps") == steps
         and run["independent"]["passed"],
         "stability.run",
-        "expected an audited 1000-step iteration-limited run",
+        f"expected an audited {steps}-step iteration-limited run",
     )
     velocity = np.array(
         json.loads((output / c["name"] / "fields.json").read_text())["velocity"]
     )
     v = velocity.reshape(3, -1)[1]
-    report["stability"] = dict(
-        steps=1000,
+    key = "stability" if steps == 1000 else f"stability_{steps}"
+    report[key] = dict(
+        steps=steps,
         termination=summary["termination"],
         numerical_accepted=accepted(run),
         initial_min=0.0,
@@ -248,12 +270,65 @@ def stability_trial(binary, output, report):
     )
 
 
-def campaign(binary, output):
+def scheme_gates(report, scheme):
+    """Predeclared P3a gates; none for the donor-cell baseline."""
+    if scheme == "donor_cell":
+        return []
+    rows = [
+        dict(
+            gate="vortex_l1_order",
+            value=report["spatial_orders"]["l1"],
+            threshold=ORDER_GATE,
+            passed=report["spatial_orders"]["l1"] >= ORDER_GATE,
+        )
+    ]
+    drift = max(
+        m["normalized_change"] / (row["steps"] / 100)
+        for row in report["vortices"]
+        for m in row["momentum"]
+    )
+    rows.append(
+        dict(
+            gate="momentum_change_per_100_steps",
+            value=drift,
+            threshold=CONSERVATION_GATE_PER_100_STEPS,
+            passed=drift <= CONSERVATION_GATE_PER_100_STEPS,
+        )
+    )
+    if scheme == "second_order_upwind":
+        growth = (
+            report["stability"]["final_max_abs_growth"]
+            - (report["stability_500"]["final_max_abs_growth"])
+        )
+        rows.append(
+            dict(
+                gate="overshoot_growth_500_to_1000",
+                value=growth,
+                threshold=EXTREMA_GATE,
+                passed=growth <= EXTREMA_GATE,
+                overshoot=report["stability"]["new_extrema"],
+            )
+        )
+    else:
+        rows.append(
+            dict(
+                gate="new_extrema",
+                value=report["stability"]["new_extrema"],
+                threshold=EXTREMA_GATE,
+                passed=report["stability"]["new_extrema"] <= EXTREMA_GATE,
+            )
+        )
+    return rows
+
+
+def campaign(binary, output, scheme="donor_cell"):
     output = Path(output)
     output.mkdir()
     report = dict(
         schema_version="cfd-craft.momentum-accuracy/0.1",
         passed=False,
+        scheme=scheme,
+        numerics=SCHEMES[scheme],
         runs=[],
         vortices=[],
         plan=dict(
@@ -272,12 +347,14 @@ def campaign(binary, output):
     write_report(output, report)
     try:
         spatial = [
-            vortex_trial(binary, output, n, DT, f"vortex-{n}", report)
+            vortex_trial(binary, output, n, DT, f"vortex-{n}", report, scheme)
             for n in [16, 32, 64]
         ]
         fine, values = spatial[-1]
         time_trials = [
-            vortex_trial(binary, output, 64, DT / divisor, f"time-{divisor}", report)
+            vortex_trial(
+                binary, output, 64, DT / divisor, f"time-{divisor}", report, scheme
+            )
             for divisor in [2, 4]
         ]
         differences = [
@@ -300,7 +377,12 @@ def campaign(binary, output):
             "temporal",
             "time error is not negligible relative to spatial error",
         )
-        stability_trial(binary, output, report)
+        stability_trial(binary, output, report, scheme)
+        if scheme == "second_order_upwind":
+            stability_trial(binary, output, report, scheme, steps=500)
+        report["gates"] = scheme_gates(report, scheme)
+        failed = [g["gate"] for g in report["gates"] if not g["passed"]]
+        require(not failed, "gates", f"failed predeclared gates: {failed}")
         report["passed"] = True
     except (
         ValueError,
@@ -324,9 +406,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--binary", type=Path, default=ROOT / "target/release/cfd-craft")
     ap.add_argument("--output", type=Path, required=True)
+    ap.add_argument("--scheme", choices=sorted(SCHEMES), default="donor_cell")
     args = ap.parse_args()
     try:
-        report = campaign(args.binary.resolve(), args.output)
+        report = campaign(args.binary.resolve(), args.output, args.scheme)
     except (ValueError, OSError) as exc:
         print(f"CFD-B007 momentum.output: {exc}")
         return 1

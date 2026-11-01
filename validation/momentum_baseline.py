@@ -86,12 +86,15 @@ def default_controls(binary, baseline_binary, output):
     return rows
 
 
-def reference(binary, output):
+def reference(binary, output, native_numerics=None):
     limits = dict(
         native_wall_s=1800,
         native_max_steps=80000,
         native_pressure_preconditioner="multigrid",
     )
+    # The self-convergence reference uses the same scheme as the sweep it serves.
+    if native_numerics:
+        limits["native_numerics"] = sweep.native_numerics_selection(native_numerics)
     row = sweep.run_method(
         "native-steady", 96, output / "native-96", binary, None, limits
     )
@@ -117,6 +120,18 @@ def self_convergence(sweep_directory, reference_directory):
     )
     ref_case = json.loads((ref_run / "case.json").read_text())
     ref_fields = json.loads((ref_run / "fields.json").read_text())
+    # A same-scheme reference: the sweep and the reference select the same numerics.
+    planned = campaign["plan"]["limits"].get("native_numerics", {})
+    require(
+        all(ref_case["numerics"].get(k) == v for k, v in planned.items())
+        and all(
+            ref_case["numerics"].get(k) is None
+            for k in sweep.NATIVE_NUMERICS
+            if k not in planned
+        ),
+        "self.scheme",
+        "reference numerics differ from the sweep's",
+    )
     stations = np.linspace(0.0, 1.0, 257)
     ref_profile = np.interp(stations, *cmp.native_centerline(ref_case, ref_fields))
     rows = []
@@ -183,6 +198,12 @@ def main():
         "--reference", type=Path, help="Reuse an already completed reference campaign"
     )
     ap.add_argument("--reference-only", action="store_true")
+    ap.add_argument(
+        "--native-numerics",
+        type=json.loads,
+        default={},
+        help="Opt-in numerics of the 96² reference, as JSON; match the sweep's",
+    )
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
     report = dict(schema_version="cfd-craft.momentum-baseline/0.1", passed=False)
@@ -191,7 +212,9 @@ def main():
         args.output.mkdir()
         claimed = True
         if args.reference is None:
-            report["reference"] = reference(args.binary.resolve(), args.output)
+            report["reference"] = reference(
+                args.binary.resolve(), args.output, args.native_numerics
+            )
         if not args.reference_only:
             require(
                 args.sweep is not None and args.baseline_binary is not None,

@@ -71,6 +71,36 @@ class Sweep(unittest.TestCase):
                 ):
                     self.run_sweep(native_pressure_preconditioner=value)
 
+    def test_native_numerics_are_validated_and_recorded_only_when_selected(self):
+        report = self.run_sweep(levels=[1], rounds=1, native_diagnostic=False)
+        self.assertNotIn("native_numerics", report["plan"]["limits"])
+        selection = dict(
+            momentum_limiter="van_leer", momentum_advection="limited_upwind"
+        )
+        report = s.sweep(
+            self.binary,
+            self.foam,
+            self.root / "selected",
+            runner=self.runner,
+            levels=[1],
+            rounds=1,
+            native_diagnostic=False,
+            native_numerics=selection,
+        )
+        self.assertEqual(
+            list(report["plan"]["limits"]["native_numerics"]),
+            ["momentum_advection", "momentum_limiter"],
+        )
+        for value in [
+            [],
+            dict(momentum_advection="donor_cell"),
+            dict(unknown="x"),
+            dict(momentum_limiter=True),
+        ]:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "sweep.native_numerics"):
+                    self.run_sweep(native_numerics=value)
+
     def run_sweep(self, runner=None, **kw):
         return s.sweep(
             self.binary,

@@ -493,3 +493,64 @@ fn implicit_matrix_rows_at_an_outlet_use_only_adjacent_velocities() {
         assert_eq!(s.advecting[o][f.axis][side], [o, o]);
     }
 }
+
+// One cell on a periodic axis is a two-dimensional run: the y-invariant flow of
+// the two-cell span, with the same outer iterations and the same fields on
+// every plane (up to the round-off of the pressure solves).
+#[test]
+fn a_one_cell_periodic_span_reproduces_the_two_cell_span() {
+    for algorithm in [
+        SteadyAlgorithm::Explicit,
+        SteadyAlgorithm::ImplicitProjection,
+    ] {
+        let mut one = steady_cavity(algorithm);
+        one.numerics.momentum_advection = MomentumAdvection::LimitedUpwind;
+        one.numerics.momentum_limiter = Some(MomentumLimiter::VanLeer);
+        // Converged close to round-off, so the two runs' different pressure-solver
+        // round-off cannot show through the steady tolerance.
+        one.numerics.steady_residual_tolerance = 1e-10;
+        one.numerics.steady_monitor_tolerance = 1e-9;
+        one.run.max_steps = 100_000;
+        let mut two = one.clone();
+        two.grid.cells[1] = 2;
+        one.grid.cells[1] = 1;
+        assert!(
+            one.check()
+                .diagnostics
+                .iter()
+                .all(|d| d.severity != "error")
+        );
+        let mut wall = one.clone();
+        wall.boundaries.y = Boundary::Wall;
+        assert!(
+            wall.check()
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "CFD-E004" && d.path == "grid.cells[1]")
+        );
+        let a = run(&one, &Control::new(120.0), None).unwrap();
+        let b = run(&two, &Control::new(120.0), None).unwrap();
+        assert_eq!(a.summary.assessment, "steady_discrete_solution");
+        assert_eq!(a.summary.assessment, b.summary.assessment);
+        assert_eq!(a.summary.steps, b.summary.steps, "{algorithm:?}");
+        let (g1, g2) = (Grid::build(&one).unwrap(), Grid::build(&two).unwrap());
+        let mut compared = 0;
+        let mut worst = 0.0f64;
+        for (f2, v2) in g2.faces.iter().zip(&b.state.velocity) {
+            let [x, _, z] = f2.coord;
+            let j = g1
+                .faces
+                .iter()
+                .position(|f| f.axis == f2.axis && f.coord == [x, 0, z])
+                .unwrap();
+            let v1 = a.state.velocity[j];
+            if f2.axis == 1 {
+                assert!(v1.abs() <= 1e-12 && v2.abs() <= 1e-12);
+            } else {
+                worst = worst.max((v1 - v2).abs());
+                compared += 1;
+            }
+        }
+        assert!(compared > 0 && worst <= 1e-10, "{algorithm:?}: {worst:e}");
+    }
+}

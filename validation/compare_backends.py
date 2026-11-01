@@ -312,6 +312,13 @@ def main():
         default={},
         help='Opt-in native numerics for --grid-sweep, as JSON, e.g. \'{"momentum_advection": "second_order_upwind"}\'',
     )
+    ap.add_argument(
+        "--native-span",
+        type=int,
+        choices=[1, 2],
+        default=2,
+        help="Periodic span cells of the native --grid-sweep cavity (1: two-dimensional)",
+    )
     args = ap.parse_args()
     try:
         if args.grid_sweep:
@@ -331,6 +338,7 @@ def main():
                 native_pressure_preconditioner=args.native_pressure_preconditioner,
                 foam_iterations=args.foam_iterations,
                 native_numerics=args.native_numerics,
+                native_span=args.native_span,
             )
             print(
                 json.dumps(

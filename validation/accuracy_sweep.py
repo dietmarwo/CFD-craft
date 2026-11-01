@@ -80,7 +80,8 @@ def run_method(method, grid, destination, binary, foam_root, limits):
     archive = destination / "run"
     if method == "native-steady":
         case = cmp.native_case(method)
-        case["grid"]["cells"] = [grid, 2, grid]
+        # One span cell is a two-dimensional native run, like OpenFOAM's.
+        case["grid"]["cells"] = [grid, limits.get("native_span", 2), grid]
         case["run"]["wall_time_limit_s"] = limits["native_wall_s"]
         case["run"]["max_steps"] = limits["native_max_steps"]
         selection = limits.get("native_pressure_preconditioner", "ic0")
@@ -459,6 +460,7 @@ def sweep(
     runner=run_method,
     native_numerics=None,
     collector=None,
+    native_span=2,
 ):
     require(
         isinstance(levels, (list, tuple))
@@ -485,6 +487,11 @@ def sweep(
         {} if native_numerics is None else native_numerics
     )
     require(type(native_diagnostic) is bool, "native_diagnostic", "boolean required")
+    require(
+        type(native_span) is int and native_span in (1, 2),
+        "native_span",
+        "select 1 or 2 periodic span cells",
+    )
     if grids is not None:
         require(
             isinstance(grids, (list, tuple))
@@ -518,9 +525,11 @@ def sweep(
         foam_iterations=foam_iterations,
         native_pressure_preconditioner=native_pressure_preconditioner,
     )
-    # Omitted when empty, so earlier plans keep their recorded limits.
+    # Omitted when empty or default, so earlier plans keep their recorded limits.
     if native_numerics:
         limits["native_numerics"] = native_numerics
+    if native_span != 2:
+        limits["native_span"] = native_span
     output = Path(output)
     cmp.backend.claim_directory(output)
     report = dict(

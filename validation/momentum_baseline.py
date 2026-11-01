@@ -86,12 +86,15 @@ def default_controls(binary, baseline_binary, output):
     return rows
 
 
-def reference(binary, output, native_numerics=None):
+def reference(binary, output, native_numerics=None, native_span=2):
     limits = dict(
         native_wall_s=1800,
         native_max_steps=80000,
         native_pressure_preconditioner="multigrid",
     )
+    require(native_span in (1, 2), "native_span", "select 1 or 2 span cells")
+    if native_span != 2:
+        limits["native_span"] = native_span
     # The self-convergence reference uses the same scheme as the sweep it serves.
     if native_numerics:
         limits["native_numerics"] = sweep.native_numerics_selection(native_numerics)
@@ -204,6 +207,13 @@ def main():
         default={},
         help="Opt-in numerics of the 96² reference, as JSON; match the sweep's",
     )
+    ap.add_argument(
+        "--native-span",
+        type=int,
+        choices=[1, 2],
+        default=2,
+        help="Periodic span cells of the 96² reference; match the sweep's",
+    )
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
     report = dict(schema_version="cfd-craft.momentum-baseline/0.1", passed=False)
@@ -213,7 +223,10 @@ def main():
         claimed = True
         if args.reference is None:
             report["reference"] = reference(
-                args.binary.resolve(), args.output, args.native_numerics
+                args.binary.resolve(),
+                args.output,
+                args.native_numerics,
+                args.native_span,
             )
         if not args.reference_only:
             require(

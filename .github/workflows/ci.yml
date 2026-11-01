@@ -13,6 +13,11 @@ name: CFD checks
         description: "Opt-in native numerics for the accuracy and momentum sweeps, as JSON (for example {\"momentum_advection\": \"second_order_upwind\"})"
         type: string
         default: "{}"
+      native_span:
+        description: "Periodic span cells of the native cavity in the accuracy and momentum sweeps (1: two-dimensional)"
+        type: choice
+        options: ["2", "1"]
+        default: "2"
       momentum_scheme:
         description: "Momentum scheme for the momentum fixtures"
         type: choice
@@ -195,7 +200,7 @@ jobs:
       # 600 s so the 48² baseline completes; the acceptance gates are unchanged.
       - run: |
           set +e
-          python validation/compare_backends.py --grid-sweep --levels 1 2 --sweep-rounds 3 --native-wall-s 600 --native-pressure-preconditioner "${{ inputs.native_pressure }}" --native-numerics "$NATIVE_NUMERICS" --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/accuracy-sweep
+          python validation/compare_backends.py --grid-sweep --levels 1 2 --sweep-rounds 3 --native-wall-s 600 --native-pressure-preconditioner "${{ inputs.native_pressure }}" --native-numerics "$NATIVE_NUMERICS" --native-span "${{ inputs.native_span || '2' }}" --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/accuracy-sweep
           code=$?
           test ! -f runs/accuracy-sweep/report.json || python validation/external_notices.py runs/accuracy-sweep/report.json "cavity accuracy sweep"
           test "$code" -eq 0 -o "$code" -eq 2
@@ -352,14 +357,14 @@ jobs:
           test "$code" -eq 0
       - run: |
           set +e
-          python validation/compare_backends.py --grid-sweep --grids 16 24 32 48 --sweep-rounds 3 --native-wall-s 600 --native-max-steps 20000 --native-pressure-preconditioner multigrid --native-numerics "$NATIVE_NUMERICS" --foam-iterations 3000 --timeout-s 180 --accuracy-target 0.01 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/momentum/sweep > runs/momentum/sweep.log 2>&1
+          python validation/compare_backends.py --grid-sweep --grids 16 24 32 48 --sweep-rounds 3 --native-wall-s 600 --native-max-steps 20000 --native-pressure-preconditioner multigrid --native-numerics "$NATIVE_NUMERICS" --native-span "${{ inputs.native_span || '2' }}" --foam-iterations 3000 --timeout-s 180 --accuracy-target 0.01 --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/momentum/sweep > runs/momentum/sweep.log 2>&1
           code=$?
           test ! -f runs/momentum/sweep/report.json || python validation/external_notices.py runs/momentum/sweep/report.json "paired cavity sweep"
           test -f runs/momentum/sweep/report.json || echo "::error title=paired cavity sweep::exit $code: $(tail -n 1 runs/momentum/sweep.log)"
           test "$code" -eq 0 -o "$code" -eq 2
       - run: |
           set +e
-          python validation/momentum_baseline.py --sweep runs/momentum/sweep --baseline-binary runs/momentum-main/target/release/cfd-craft --native-numerics "$NATIVE_NUMERICS" --output runs/momentum/reference-and-controls > runs/momentum/reference.log 2>&1
+          python validation/momentum_baseline.py --sweep runs/momentum/sweep --baseline-binary runs/momentum-main/target/release/cfd-craft --native-numerics "$NATIVE_NUMERICS" --native-span "${{ inputs.native_span || '2' }}" --output runs/momentum/reference-and-controls > runs/momentum/reference.log 2>&1
           code=$?
           test ! -f runs/momentum/reference-and-controls/report.json || python validation/external_notices.py runs/momentum/reference-and-controls/report.json "momentum reference and controls"
           test -f runs/momentum/reference-and-controls/report.json || echo "::error title=momentum reference and controls::exit $code: $(tail -n 1 runs/momentum/reference.log)"

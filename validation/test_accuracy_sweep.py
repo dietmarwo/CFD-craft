@@ -114,6 +114,25 @@ class Sweep(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "sweep.native_numerics"):
                     self.run_sweep(native_numerics=value)
 
+    def test_the_native_span_is_validated_and_recorded_only_when_two_dimensional(self):
+        report = self.run_sweep(levels=[1], rounds=1, native_diagnostic=False)
+        self.assertNotIn("native_span", report["plan"]["limits"])
+        report = s.sweep(
+            self.binary,
+            self.foam,
+            self.root / "flat",
+            runner=self.runner,
+            levels=[1],
+            rounds=1,
+            native_diagnostic=False,
+            native_span=1,
+        )
+        self.assertEqual(report["plan"]["limits"]["native_span"], 1)
+        for value in [0, 3, 1.0, True, "1"]:
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "sweep.native_span"):
+                    self.run_sweep(native_span=value)
+
     def run_sweep(self, runner=None, **kw):
         return s.sweep(
             self.binary,

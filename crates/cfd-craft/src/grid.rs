@@ -261,13 +261,27 @@ impl Grid {
     /// Fluid-component and solid-cell counts of the case's grid, computed from the cell
     /// mask with a union-find over 4 bytes per cell, without building faces or the pressure
     /// operator. Cells connect through shared faces, including periodic wraps, as in
-    /// [`Grid::build`]. Needs only valid axes (2..4096 cells, at most 1e8 in total).
+    /// [`Grid::build`]. Needs only valid axes (2..4096 cells, or 1..4096 on a
+    /// periodic axis, at most 1e8 in total).
     pub fn mask_topology(c: &Case) -> Result<MaskTopology> {
         let n = c.grid.cells;
         let count = n.iter().try_fold(1usize, |p, v| p.checked_mul(*v));
+        let valid = (0..3).all(|a| {
+            let minimum = if c.boundaries.at(a) == Boundary::Periodic {
+                1
+            } else {
+                2
+            };
+            (minimum..=4096).contains(&n[a])
+        });
         let count = match count {
-            Some(v) if n.iter().all(|v| (2..=4096).contains(v)) && v <= 100_000_000 => v,
-            _ => return Err("the grid needs 2..4096 cells per axis and at most 1e8 cells".into()),
+            Some(v) if valid && v <= 100_000_000 => v,
+            _ => {
+                return Err(
+                    "the grid needs 2..4096 cells per axis (1..4096 on a periodic axis) and at most 1e8 cells"
+                        .into(),
+                );
+            }
         };
         const SOLID: u32 = u32::MAX;
         let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);

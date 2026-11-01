@@ -610,12 +610,17 @@ impl Case {
                     "Supported lengths are 1e-6..1e9 m.",
                 );
             }
-            if self.grid.cells[a] < 2 || self.grid.cells[a] > 4096 {
+            let minimum = if self.boundaries.at(a) == Boundary::Periodic {
+                1
+            } else {
+                2
+            };
+            if self.grid.cells[a] < minimum || self.grid.cells[a] > 4096 {
                 add(
                     "CFD-E004",
                     "error",
                     &format!("grid.cells[{a}]"),
-                    "Each axis needs 2..4096 cells.",
+                    "Each axis needs 2..4096 cells; a periodic axis may have one (a two-dimensional run).",
                 );
             }
             if a != 2 && self.boundaries.at(a) == Boundary::GroundOpenTop {

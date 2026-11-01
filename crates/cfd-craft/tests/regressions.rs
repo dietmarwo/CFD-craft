@@ -204,6 +204,10 @@ fn the_mask_topology_matches_the_built_grid() {
         });
         cases.push(c);
     }
+    // A two-dimensional variant: one cell on the periodic y axis.
+    let mut flat = cases[3].clone();
+    flat.grid.cells = [12, 1, 6];
+    cases.push(flat);
     let mut components = vec![];
     for c in &cases {
         let g = Grid::build(c).unwrap().evidence();
@@ -213,7 +217,7 @@ fn the_mask_topology_matches_the_built_grid() {
         assert!((t.solid_volume_m3 - g.solid_volume_m3).abs() <= 1e-12 * g.solid_volume_m3);
         components.push(t.fluid_components);
     }
-    assert_eq!(components, vec![1, 1, 2, 1]);
+    assert_eq!(components, vec![1, 1, 2, 1, 1]);
 }
 
 #[test]
@@ -390,25 +394,35 @@ fn dense_solve(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Vec<f64> {
 fn the_masked_pressure_operator_matches_an_assembled_reference() {
     // A RANS street with a sealed 2x2x2 pocket inside a hollow box: one component
     // anchored by its outlet and one closed component with a gauge.
-    for periodic_y in [false, true] {
+    // The third variant is two-dimensional: one cell on the periodic y axis.
+    for (periodic_y, span) in [(false, 6), (true, 6), (true, 1)] {
         let mut c = canyon();
         c.constituents.clear();
         c.sources.clear();
         c.receptors.clear();
         c.initial_conditions.clear();
-        c.domain.size_m = [10.0, 6.0, 5.0];
-        c.grid.cells = [10, 6, 5];
+        c.domain.size_m = [10.0, span as f64, 5.0];
+        c.grid.cells = [10, span, 5];
         if periodic_y {
             c.boundaries.y = Boundary::Periodic;
         }
-        let shell = [
-            ([3.0, 1.0, 0.0], [7.0, 5.0, 1.0]),
-            ([3.0, 1.0, 3.0], [7.0, 5.0, 4.0]),
-            ([3.0, 1.0, 1.0], [4.0, 5.0, 3.0]),
-            ([6.0, 1.0, 1.0], [7.0, 5.0, 3.0]),
-            ([4.0, 1.0, 1.0], [6.0, 2.0, 3.0]),
-            ([4.0, 4.0, 1.0], [6.0, 5.0, 3.0]),
-        ];
+        let shell: Vec<([f64; 3], [f64; 3])> = if span == 1 {
+            vec![
+                ([3.0, 0.0, 0.0], [7.0, 1.0, 1.0]),
+                ([3.0, 0.0, 3.0], [7.0, 1.0, 4.0]),
+                ([3.0, 0.0, 1.0], [4.0, 1.0, 3.0]),
+                ([6.0, 0.0, 1.0], [7.0, 1.0, 3.0]),
+            ]
+        } else {
+            vec![
+                ([3.0, 1.0, 0.0], [7.0, 5.0, 1.0]),
+                ([3.0, 1.0, 3.0], [7.0, 5.0, 4.0]),
+                ([3.0, 1.0, 1.0], [4.0, 5.0, 3.0]),
+                ([6.0, 1.0, 1.0], [7.0, 5.0, 3.0]),
+                ([4.0, 1.0, 1.0], [6.0, 2.0, 3.0]),
+                ([4.0, 4.0, 1.0], [6.0, 5.0, 3.0]),
+            ]
+        };
         c.geometry = shell
             .iter()
             .enumerate()

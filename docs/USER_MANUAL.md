@@ -178,7 +178,10 @@ that want to own those policies, including optimization workers.
 ### Grid, velocity, pressure and units
 
 The grid is uniform Cartesian; cell sizes are domain lengths divided by cell
-counts. Every native axis needs at least two cells. Boxes mask cells using
+counts. Every native axis needs at least two cells, except a periodic axis,
+which may have one: a two-dimensional run, whose faces along that axis join a
+cell to itself and carry no flux (the cavity with one span cell reproduces the
+two-cell span to round-off at half the work). Boxes mask cells using
 cell-center membership. An obstacle containing no cell center is rejected,
 rather than silently disappearing. `geometry.json` records the SHA-256 of the
 represented mask with its cell counts, solid volume, per-box cell counts and

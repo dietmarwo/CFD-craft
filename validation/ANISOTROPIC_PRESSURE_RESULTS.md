@@ -1,4 +1,4 @@
-# Anisotropic pressure multigrid: iteration 19 results
+# Anisotropic pressure multigrid results
 
 ## Scope and frozen protocol
 
@@ -171,8 +171,8 @@ The raw evidence records executable/input/producer SHA-256 values, compiler,
 host limits, every child, returned pressure vectors, hierarchy dimensions,
 block bandwidth/storage, work, RSS, repeated profiles and complete native flow
 archives. The [guide](../docs/PRESSURE_MULTIGRID.md#reproduce-comparisons) gives
-local and opt-in CI commands. Hosted execution of this patch is pending; these
-are local cloud-host measurements, not GitHub-runner results.
+local and opt-in CI commands. The tables above come from the recording host;
+the [hosted reproduction](#hosted-reproduction) below ran on a GitHub runner.
 
 Verification passes 75 Rust release tests on minimum 1.88.0 and stable 1.99.1,
 with all-target Clippy warnings denied, plus 395 distinct Python tests per

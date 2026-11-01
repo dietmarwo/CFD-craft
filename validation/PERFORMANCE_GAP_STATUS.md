@@ -1,9 +1,9 @@
 # Performance gap: current state and remaining iterations
 
-## What this iteration changes
+## Current pressure stage
 
-Iteration 19 implements P2a, anisotropic unmasked pressure multigrid. It starts
-from merged PR #13, main `2ddf17d`. Fixed symmetric principal line/small-plane
+Stage P2a, anisotropic unmasked pressure multigrid, builds on main `2ddf17d`
+(merged PR #13). Fixed symmetric principal line/small-plane
 solves and stiff-axis semicoarsening replace point smoothing only where the
 spacing policy selects them. Default IC(0), isotropic point arithmetic, the
 fine pressure operator and independent numerical gates are retained. See
@@ -57,7 +57,7 @@ Therefore the report's `native_over_openfoam_at_target` is **null**, and a
 finite equal-accuracy speed ratio cannot be claimed.
 
 The standard 24²/48² cavities retain point arithmetic and the previous errors
-and stopping steps. This iteration does **not** close their isotropic gap;
+and stopping steps. P2a does **not** close their isotropic gap;
 its benefit is the newly supported anisotropic pressure regime. In the separate
 64x2x12 anisotropic coupled test, the candidate is **1.41×** faster than IC(0)
 for accepted steady convergence (23.632 -> 16.751 s), and **1.64×** for transient
@@ -74,9 +74,8 @@ identities, all rows and profiles. Foundation package
 
 ## Remaining work, in recommended order
 
-These are work packages, not promises that each fits in one patch. P0
-instrumentation and P1 isotropic multigrid are merged; this delivery covers
-P2a, not all of P2.
+These are work packages; each may take several changes. P0 instrumentation,
+P1 isotropic multigrid and P2a are complete; P2a is not all of P2.
 
 | Next iteration | Scope | Evidence required before calling it complete |
 |---|---|---|
@@ -94,10 +93,9 @@ accuracy** comparison is P3. Do not postpone the accuracy work until every
 pressure optimization is exhausted.
 
 All listed CPU implementation and small/medium validation work can run in
-cloud/CI while the owner has only a phone. Dedicated owner-machine, many-core
-and GPU studies remain lower priority until January 2027. This iteration adds
-an opt-in hosted anisotropy campaign; hosted execution of the new patch remains
-to be performed after it is merged.
+cloud CI; many-core and GPU studies remain lower priority. The opt-in
+`external=anisotropy` selector runs the hosted anisotropy campaign; its GitHub
+run is recorded in the [anisotropy results](ANISOTROPIC_PRESSURE_RESULTS.md#hosted-reproduction).
 
 ## What parity would mean
 

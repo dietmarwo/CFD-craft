@@ -231,8 +231,9 @@ The opt-in **CFD checks** selector `external=pressure` runs this original campai
 and packages evidence with directory entries and archive round-trip checks.
 See [recorded results](../validation/PRESSURE_MULTIGRID_RESULTS.md) and the
 [plan](iterations/18-pressure-multigrid-plan.md). No timing threshold is imposed
-in ordinary CI. Masked-grid multigrid, broader anisotropy coverage, momentum accuracy and
-implicit/steady flow algorithms remain separate follow-ups. This change alone
+in ordinary CI. Masked-grid multigrid (P2b) and the hierarchy setup cost (P2c)
+remain separate follow-ups; anisotropic line blocks (P2a), second-order momentum
+and the implicit steady algorithms were added later. This change alone
 does not qualify a canyon model or establish OpenFOAM parity.
 
 The new selector `external=anisotropy` runs the three-method rough-pressure suite

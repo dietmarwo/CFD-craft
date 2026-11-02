@@ -5,7 +5,8 @@ Date: 1 November 2026. Plan and predeclared gates:
 and P5d. Method: [flow model card](../docs/model-cards/flow.md) ("Steady
 pseudo-time algorithms" and "Neutral turbulence package") and
 [transport model card](../docs/model-cards/transport.md). Campaign script:
-`validation/steady_algorithms.py --case canyon`.
+`validation/steady_algorithms.py --case canyon --output DIR` (the candidate
+defaults to `implicit_projection` for the canyon).
 
 All measurements: one solver thread on a 2-vCPU Intel Xeon VM (2.1 GHz) that
 also ran other work, so timings are approximate. The P5c/P5d code is commit
@@ -60,7 +61,9 @@ the same 1.805e-10 turbulence floor) differs by 1.2e-14 (U), 7.3e-15 (k) and
 
 The empty-ABL check is transient in `run_suite.py`; the implicit algorithms run
 in steady mode only, so the check ran in steady mode for both (new option
-`run_suite.py --abl-steady`, gates unchanged):
+`run_suite.py --abl-steady`, gates unchanged; the implicit rows add
+`--abl-numerics '{"steady_algorithm": "implicit_projection"}'`, and the recipe
+row also `"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`):
 
 | Mode | Steps | Solver s | Drift U / k / ε (H..5H) | Floors |
 |---|---:|---:|---|---:|

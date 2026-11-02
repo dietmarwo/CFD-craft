@@ -27,7 +27,7 @@ target/release/cfd-craft run cases/verification/periodic-tracer.json --output ru
 target/release/cfd-craft report runs/tracer
 ~~~
 
-The output directory must be new, and its parent must exist; both are checked before the solve starts. Exit 0 means the request succeeded (a valid case, a passed numerical assessment or a verified archive); exit 2 means a completed execution with incomplete/failed numerical evidence; exit 1 means invalid input or an execution/I/O error. For invalid input, check, run and preview print the check report on stdout: every diagnostic carries a code and the path of the offending field ([diagnostics](docs/diagnostics.md)). `preview CASE --output NEW_DIR [--factor N]` runs the case on a grid coarsened by N (default 2) and refuses a coarsening that changes the solid volume by more than 20 % or the fluid topology. A timeout or cancelled solve retains a report.
+The output directory must be new, and its parent must exist; both are checked before the solve starts. Exit 0 means the request succeeded (a valid case, a passed numerical assessment or a verified archive); exit 2 means a completed execution with incomplete/failed numerical evidence or with artifacts omitted over the output budget (CFD-E061); exit 1 means invalid input or an execution/I/O error. For invalid input, check, run, profile and preview print the check report on stdout: every diagnostic carries a code and the path of the offending field ([diagnostics](docs/diagnostics.md)). `preview CASE --output NEW_DIR [--factor N]` runs the case on a grid coarsened by N (default 2; at least two cells per axis, a one-cell periodic axis stays at one) and refuses a coarsening that changes the solid volume by more than 20 % or the fluid topology. A timeout or cancelled solve retains a report.
 
 Python is optional for the solver. Install the analysis dependencies to reproduce tutorials, independent checks and figures:
 
@@ -45,8 +45,8 @@ Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid c
 
 - Uniform Cartesian finite volumes; staggered face velocities; deterministic box masks and fluid-component discovery.
 - Matrix-free pressure projection, one gauge per unanchored fluid component, cached IC(0) preconditioning (default), opt-in symmetric multigrid on unmasked grids with anisotropic line blocks/semicoarsening, and an independent residual check.
-- Laminar flow, moving tangential walls, donor-cell momentum advection and SSPRK2 stepping.
-- One neutral equilibrium k–epsilon package with rough-wall stress, k-based wall dissipation and a matching upper-boundary treatment.
+- Laminar flow, moving tangential walls, donor-cell momentum advection by default with opt-in conservative second-order momentum (`second_order_upwind`, `limited_upwind`), and SSPRK2 stepping by default with opt-in implicit steady pseudo-time (`implicit_viscous` for laminar flow, `implicit_projection` also for `neutral_rans` and constituents). A periodic axis may have one cell for two-dimensional runs.
+- One neutral equilibrium k–epsilon package with rough-wall stress, k-based wall dissipation and a matching upper-boundary treatment, advanced explicitly or, with `implicit_projection`, by implicit k and ε corrections.
 - Passive gas with linear upwind or bounded MUSCL/MC transport, diffusion, point/line/volume sources, and point or volume-average receptors.
 - Explicit work/time/memory/output budgets, cooperative cancellation, checksummed restart and immutable output-directory behavior.
 - Strict case/result schemas through describe; JSON/CSV evidence; VTK conversion.
@@ -71,10 +71,13 @@ reports fresh native/OpenFOAM timings, accuracy and the remaining stages.
 The [momentum verification baseline](validation/MOMENTUM_VERIFICATION_RESULTS.md)
 starts the accuracy/steady-solver track: shifted operator and translating-vortex
 tests, conservation/extrema controls, a shared backend grid list and a native
-self-convergence reference. This verification stage leaves solver numerics
-unchanged; conservative second-order momentum is the next numerical change.
-The [accuracy and steady-solver plan](docs/ACCURACY_STEADY_PLAN.md) specifies
-the later methods, opt-in behavior and acceptance gates.
+self-convergence reference. The [accuracy and steady-solver plan](docs/ACCURACY_STEADY_PLAN.md)
+specifies the methods built on it, their opt-in behavior and acceptance gates:
+conservative second-order momentum and the implicit steady algorithms, now
+implemented as opt-in choices with unchanged defaults. With them and the
+implicit recipe native reaches the cavity's 0.01 Ghia target in 0.111×
+OpenFOAM's solver time on a shared runner
+([performance iterations](validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
 The opt-in [`profile` command and accuracy sweep](docs/PROFILING.md) attribute
 actual solver phases, retain incomplete grid-sweep rows and report cost at a
 declared error only when the target is reached. See the
@@ -106,7 +109,7 @@ python validation/cavity.py --output runs/cavity
 python validation/scipy_reference.py --output runs/scipy-reference
 ~~~
 
-The independent Python checker tests archived mass, emission-rate/time accounting, positivity, current face-flux continuity and open-boundary scalar rates. It also recomputes every receptor value from the concentration field, the geometry mask from the case boxes, and the finiteness and signs of the stored fields. It does not independently reconstruct the full time history or establish turbulence-model validity.
+The independent Python checker tests archived mass, emission-rate/time accounting (against the constituents' own pseudo-time, `scalar_time_s`, when an implicit steady algorithm archives one), positivity, current face-flux continuity and open-boundary scalar rates. It also recomputes every receptor value from the concentration field, the geometry mask from the case boxes, and the finiteness and signs of the stored fields. It does not independently reconstruct the full time history or establish turbulence-model validity.
 
 The study preset adds a larger transport grid series or a canyon resolution series. Study reports include failed rows. A failed refinement run does not become an accepted grid-convergence result.
 

@@ -23,8 +23,8 @@ verdicts.
 `cfd-craft check CASE` prints a `cfd-craft.check/0.1` report on stdout. Each
 diagnostic has a code, a severity, a JSON path into the case (for example
 `geometry[1]`, `sources[0].rate_kg_s_m`, `numerics.advective_cfl_max`) and a
-message. Errors make the case invalid; warnings do not. `run` and `preview`
-print the same report and exit 1 when the case is invalid, before any output
+message. Errors make the case invalid; warnings do not. `run`, `profile` and
+`preview` print the same report and exit 1 when the case is invalid, before any output
 directory is created. `preview` checks the coarsened case it runs, then compares
 it with the original's cell mask, which it counts without building the original
 grid.
@@ -76,7 +76,7 @@ more than the host can hold.
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
 | CFD-E043 | error | A steady source in a fluid component without an outlet |
 | CFD-E044 | error | The represented source density is not finite |
-| CFD-E070 | error | `run` and `preview`: the estimated peak exceeds 80 % of this host's available memory |
+| CFD-E070 | error | `run`, `profile` and `preview`: the estimated peak exceeds 80 % of this host's available memory |
 | CFD-E072 | error | `preview` only: coarsening changes the solid volume by more than 20 % or the number of fluid components |
 | CFD-E073 | error | `preview` only: the original cell mask cannot be counted (more than 1e8 cells, or its 4 bytes per cell do not fit this host), so the preview cannot be compared with it |
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
@@ -108,7 +108,7 @@ Codes from a run, a restart or `report`, reported in `summary.json` `error` or o
 | CFD-E063 | The output directory cannot be created, for example because its parent does not exist |
 | CFD-E064 | `report` rejects the archive; the message names the failed check |
 | CFD-E065 | The restart checkpoint cannot be read or parsed, or is larger than half of `run.memory_limit_mib` |
-| CFD-E066 | The restart checkpoint lies beyond `run.max_steps` or `run.end_time_s` of the case |
+| CFD-E066 | The restart checkpoint lies beyond `run.max_steps`, or in transient mode beyond `run.end_time_s`, of the case |
 
 ## External backend and reference data
 
@@ -176,7 +176,8 @@ acceptance. `CFD-B008 steady.<field>` identifies a failed implicit steady-algori
 campaign (`validation/steady_algorithms.py`): a run that misses the unchanged
 gates (`<run name>`), fields of different shape or a zero canyon reference field
 (`fields`), a failed fixed-point shrink gate (`fixed_point`), unknown schemes
-(`schemes`) or output errors, for the cavity and for the `--case canyon` campaign. Explicit cavity grid selectors use
+(`schemes`), any other campaign failure (`campaign`) or output errors
+(`output`), for the cavity and for the `--case canyon` campaign. Explicit cavity grid selectors use
 `CFD-X001 recipe.cavity_grid`; shared sweep grids use `CFD-B004 sweep.grids`.
 
 `CFD-B004 sweep.collection.<run_directory>` rejects an archive that passed its

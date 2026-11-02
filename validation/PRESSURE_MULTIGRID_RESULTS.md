@@ -177,5 +177,8 @@ all 69 sealed archives verify in its extracted copy.
 IC(0) remains default. Masked topology/component-preserving coarsening, robust
 anisotropy, cheaper hierarchy construction and coarse operator complexity are
 next pressure work. Better momentum accuracy and an implicit/steady flow
-algorithm remain separate gap-closing steps. The canyon experimental-data gate,
+algorithm remain separate gap-closing steps. (Since then anisotropic smoothing
+followed in P2a, and P3a and P5a closed the cavity gap at matched accuracy; see
+the [gap status](PERFORMANCE_GAP_STATUS.md). Masked coarsening P2b and the
+hierarchy cost P2c remain.) The canyon experimental-data gate,
 and the native physical-qualification status, are unchanged.

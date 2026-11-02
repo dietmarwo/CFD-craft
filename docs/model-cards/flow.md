@@ -119,8 +119,8 @@ Stage V adds [momentum verification](../../validation/MOMENTUM_VERIFICATION_RESU
 without changing these equations. Eight shifted periodic Taylor–Green operator
 tests and a translating-vortex refinement measure donor-cell's first-order
 advection, with separate time refinement. The periodic vortex also records
-mean-momentum drift: the current advective form is not a conservative shared
-momentum-flux scheme. The 1000-step transverse-step fixture measures extrema at
+mean-momentum drift: the default donor-cell advective form is not a
+conservative shared momentum-flux scheme (the opt-in flux form above is). The 1000-step transverse-step fixture measures extrema at
 the existing CFL cap; its intentional work limit is not numerical acceptance.
 These are analytic verification fixtures, not experimental validation.
 

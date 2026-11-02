@@ -243,8 +243,11 @@ level 1; the cavity corruption check is
   level-1 solve, which took about 50 minutes, and more iterations would be
   expected; it is not expected to finish within the 3600 s per-case limit.
   Same-mesh continuation ([continuation results](RESTART_RESULTS.md)) lets it
-  run in bounded stages, each of which must pass the source flux gate; a start
-  from the interpolated coarse solution is not implemented. No GCI or
+  run in bounded stages, each of which must pass the source flux gate. A
+  nearest-cell start from the coarse solution now exists (`prepare-mapped`,
+  [mapping results](MAPPING_RESULTS.md)); the declared refinement campaign has
+  not yet produced an accepted level 2 ([refinement results](REFINEMENT_RESULTS.md)),
+  and conservative interpolation is not implemented. No GCI or
   mesh-independent claim is made.
 - **Near-wall resolution margin.** The step wall's largest y+ (0.96) and the
   upstream wall's near the lip (0.88) are close to the y+ <=1 gate at level 1.

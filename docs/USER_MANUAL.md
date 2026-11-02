@@ -55,7 +55,7 @@ Linux-like shell is used for the examples; the external runtime targets Linux.
 The core workspace has two crates and uses its committed Cargo lockfile.
 
 Every run writes to a new output path and refuses an existing one (E062 for
-the CLI, CFD-U001 for the example scripts). To repeat an example, delete its
+the CLI and the OpenFOAM adapter, CFD-U001 for the native example scripts). To repeat an example, delete its
 earlier output or choose a new name.
 
 ### Example 1: build and discover the schemas
@@ -69,7 +69,9 @@ target/release/cfd-craft describe > runs/describe.json
 `describe` contains `case_schema`, `result_schema`, compiler/source identity,
 coordinate conventions, exit codes and implemented model choices. These
 schemas are generated from the actual Rust types; use them when building a
-client. `cfd-craft help` prints the short CLI usage as JSON.
+client. `cfd-craft help` prints the short CLI usage as JSON. `profile CASE
+--output NEW_DIR` runs a case like `run` and adds a phase profile beside the
+archive; see [profiling](PROFILING.md).
 
 Install analysis tools separately when using Python workflows or field audits:
 
@@ -145,15 +147,18 @@ not claim numerical convergence or empirical validity.
 | `grid.rs` | Uniform cells, staggered faces, box masks and connected components |
 | `pressure.rs`, `multigrid.rs`, `multigrid/line.rs` | Matrix-free pressure operator, gauges, default IC(0)/PCG, optional symmetric point/line multigrid and projection |
 | `flow.rs` | Laminar/RANS momentum and turbulence, wall treatment |
+| `momentum_solve.rs` | Implicit momentum corrections of the steady algorithms, BiCGStab, CFL ramp |
+| `turbulence_solve.rs` | Implicit k and ε corrections of `implicit_projection` with RANS |
 | `transport.rs` | Source/receptor weights and conservative scalar transport |
 | `solver.rs` | State, control, timestep, transactional step and assessment |
+| `profiling.rs`, `verification.rs` | Phase profile; pressure fixture of `verify` |
 | `output.rs` | Checkpoint compatibility, archive publication and integrity reader |
 | `crates/cfd-craft-cli` | Parsing, process/thread/signal policy and build provenance |
 | `integrations/` | External solver, restart/mapping and optional job worker |
 | `tutorials/` | Scientific workflows and prompts |
 | `validation/` | Independent checks, references, contract tests and recorded results |
 
-The first seven Rust filenames above are relative to `crates/cfd-craft/src/`.
+The Rust filenames from `grid.rs` to `output.rs` are relative to `crates/cfd-craft/src/`.
 The public low-level modules are inspectable research interfaces. For ordinary
 applications, prefer `Case`, `Control`, `solver::run` and the CLI/archive API;
 using grid, face or state vectors directly requires respecting their invariants.
@@ -241,8 +246,12 @@ select an implicit SIMPLE-type method. Opt-in `numerics.steady_algorithm`
 selects `implicit_viscous` (SSPRK2 with implicit viscosity, laminar) or
 `implicit_projection` (one implicit correction and one projection per outer
 iteration, a SIMPLEC-type coupling with a CFL ramp, also with `neutral_rans`
-through implicit k and ε steps) for steady runs; constituents advance in
-explicit sub-steps within each outer iteration. Acceptance is unchanged.
+through implicit k and ε steps) for steady runs. Constituents advance in
+explicit stable sub-steps within each outer iteration, at most 16
+(`solver::SCALAR_SUBSTEPS_MAX`), so with a large `max_time_step_s` they cover
+less pseudo-time than the flow; the archived state then records their own
+pseudo-time as `scalar_time_s`, and their steady state is unchanged.
+Acceptance is unchanged.
 `implicit_projection` with `limited_upwind`/`van_leer` reached the cavity's
 gates about 18–40× faster than the explicit mode in the
 [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md), and the
@@ -318,13 +327,16 @@ the case file configures the solver. The groups are:
 | `geometry` | Axis-aligned solid boxes with unique IDs |
 | `constituents`, `initial_conditions` | Species diffusivity and initial mass/concentration |
 | `sources`, `receptors` | Physical support, units and measurement IDs |
-| `numerics` | Advection choice, timestep/pressure/steady tolerances, monitor window |
+| `numerics` | Scalar and momentum advection, steady algorithm, pressure preconditioner, timestep/pressure/steady tolerances, monitor window |
 | `run` | Mode, endpoint, step/time/thread/memory budgets |
 | `output` | Field/checkpoint retention and output budget |
 
 `moving_walls` (omitted in this example), `geometry`, `constituents`,
 `initial_conditions`, `sources` and `receptors` default to empty lists when
-omitted. Other fields and variants must match `describe`. A similarly named field from another CFD package is not
+omitted; `flow.acceleration_m_s2` defaults to zero, and
+`numerics.pressure_preconditioner`, `momentum_advection`, `momentum_limiter`
+and `steady_algorithm` default to `ic0`, `donor_cell`, none and `explicit`.
+Other fields and variants must match `describe`. A similarly named field from another CFD package is not
 accepted. The point coordinate is `point_m`, not `position_m`.
 
 ### Example 5: modify an input without changing the original
@@ -393,7 +405,7 @@ Python example handles and records process failures.
 |---|---:|---|
 | Valid check, accepted solve with all artifacts, consistent native archive, or passed `verify` fixture | 0 | Meaning depends on the command |
 | Invalid input or execution/I/O error | 1 | Inspect coded diagnostic/path or stderr |
-| `run` with incomplete or failed numerical evidence, or an accepted solve that omitted artifacts over its output budget (E061); a failed `verify` fixture | 2 | Keep the archive and inspect termination/assessment |
+| `run` or `profile` with incomplete or failed numerical evidence, or an accepted solve that omitted artifacts over its output budget (E061); a failed `verify` fixture | 2 | Keep the archive and inspect termination/assessment |
 
 `report` can exit 0 for an intact **incomplete** run. It can also repeat an
 artifact-omission warning and exit 0. Never use its exit alone as a convergence
@@ -407,7 +419,8 @@ target/release/cfd-craft preview cases/verification/periodic-tracer.json \
 ```
 
 A preview is labeled in `model_scope`. It preserves the physical domain but
-coarsens cell counts, with at least two per axis. For obstacle cases the solid
+coarsens cell counts, with at least two per axis; a one-cell periodic axis
+stays at one. For obstacle cases the solid
 volume must stay within 20% and the fluid-component count must agree. Rejection
 with E072/E073 is a geometry/preflight result, not a failed full solve. A
 preview is not an accuracy certificate for a fine case.
@@ -461,7 +474,7 @@ flowchart TD
 
 | File | What to read |
 |---|---|
-| `case.json` | Normalized consumed case, including defaults |
+| `case.json` | Normalized consumed case: omitted lists and `acceleration_m_s2` are written out; default numerics selections (`pressure_preconditioner`, `momentum_advection`, `momentum_limiter`, `steady_algorithm`) stay omitted so existing hashes are unchanged |
 | `summary.json` | Status, checks, work, units, receptor values and model scope |
 | `geometry.json` | Mask SHA-256, cell counts, solid volume, box cells and fluid components |
 | `probes.csv` | Final named receptor concentrations in kg/m3 |
@@ -494,7 +507,12 @@ if not all(c["passed"] for c in s["checks"]):
 ```
 
 The independent Python checker reconstructs current continuity, mass,
-source-rate/time accounting, receptor values and mask/field consistency.
+source-rate/time accounting (with `scalar_time_s` when an implicit steady
+algorithm archives it), receptor values and mask/field consistency. Its
+continuity bound (1e-7 of speed over the smallest spacing) holds for every
+archive with tight inner pressure solves; with the implicit recipe's loose
+`pressure_relative_tolerance` only converged fields meet it, so the checker and
+the VTK export reject intermediate archives of such runs.
 It does not reconstruct the entire flux time history or independently validate
 the RANS model. Unkeyed hashes establish consistency, not authorship.
 
@@ -924,16 +942,18 @@ polling. The native solver's own timer is not the Python helper's full time.
 
 The [recorded two-host comparison](../validation/BACKEND_COMPARISON.md) finds
 OpenFOAM's cavity workflow about 4.7–5.5 times faster than native steady, and
-its named solver timer about 8.9 times faster. Native uses two span layers,
-OpenFOAM one empty layer; numerical schemes and norms differ. This does not
+its named solver timer about 8.9 times faster, with the default numerics.
+Native used two span layers, OpenFOAM one empty layer (native can now use one
+with `--native-span 1` in the grid sweep); numerical schemes and norms differ. This does not
 supply a canyon ranking, memory comparison or multi-core scaling result.
 
 The [native performance runner](../docs/iterations/07-14-performance-results.md)
 compares two native builds at fixed work and checked fields. Its kernel/step/CLI
 speedups are not OpenFOAM comparisons. The separate backend runner measures
-configured workflows. Neither measures experimental validity. Pressure/steady
-algorithm improvements remain candidates; no numerical tolerance should be
-weakened merely to improve a runtime table.
+configured workflows. Neither measures experimental validity. Multigrid
+pressure and the implicit steady algorithms are opt-in, with the defaults
+(`ic0`, `explicit`) unchanged; no numerical tolerance should be weakened merely
+to improve a runtime table.
 
 ## Troubleshooting
 

@@ -117,8 +117,8 @@ partial final iteration.
 `prepare` exits 0 on success; invalid requests exit 1. `run` exits 0 for
 accepted numerical evidence, 2 for a completed, timed-out or cancelled run
 without it, and 1 when the execution itself failed (runtime, input, I/O).
-`report` exits 0 or 2 by the archived result, and 1 for an archive that fails
-verification. `compare_backstep` exits 0 when the numerical gate and the
+`report` exits as `run` did for the archived result (0, 2, or 1 for a failed
+execution), and 1 for an archive that fails verification. `compare_backstep` exits 0 when the numerical gate and the
 development screen pass, otherwise 2, and 1 when its output cannot be written.
 Both tutorials exit 0 when everything passes, 2 when they recorded failed,
 unaccepted or cancelled evidence, and 1 on a workflow error.
@@ -160,9 +160,15 @@ continue actual cavity runs against uninterrupted controls, and map actual
 cavity and backstep fields to the next level. CI runs the boundary tests on each
 push/PR. A manual workflow dispatch installs the pinned runtime in two parallel
 jobs; its `external` input selects the work: `backend`, `resolution`, `mapping`,
-`refinement`, `comparison` or `all`. `external-backend` runs the real backend tests (each failing test
-becomes an error annotation), the mapped-against-cold level-2 cavity, the
-external study preset with `--timeout-s 300` and a fixed-work continuation
+`refinement`, `comparison` or `all`, and, not part of `all`, `accuracy`
+(the cavity grid sweep, `compare_backends.py --grid-sweep`, with the inputs
+`native_pressure`, `native_numerics` and `native_span`), `momentum` (the Stage V
+and M protocol, adding `momentum_scheme`), `pressure` and `anisotropy` (the
+native pressure benchmarks). `external-backend` runs the real backend,
+resolution, restart, mapping and refinement tests (each failing test becomes an
+error annotation), the mapped-against-cold level-2 cavity, the manual's
+OpenFOAM recipes (`validation/manual_examples.py --foam-root`, which must exit
+0), the external study preset with `--timeout-s 300` and a fixed-work continuation
 check of the wall-resolved backstep (`simple` profile, 250+250 iterations).
 `external-resolution` runs the resolution smoke preset in one run
 (`--iterations 20000 --timeout-s 3500`). For `resolution` and `all` it then

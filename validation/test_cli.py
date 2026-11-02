@@ -528,6 +528,46 @@ class Boundaries(unittest.TestCase):
             self.assertNotEqual(p.returncode, 0)
             self.assertIn("emission normalization", p.stdout)
 
+    def test_implicit_tracer_archives_pass_the_independent_checker(self):
+        # With a non-binding pseudo-time cap the constituents' sub-step cap
+        # binds, so they cover less pseudo-time than the flow.
+        # A converged run: with a loose inner pressure tolerance only the
+        # converged field is divergence-free to the checker's bound.
+        self.case = self.canyon()
+        self.case["run"]["threads"] = 1
+        self.case["numerics"].update(
+            steady_algorithm="implicit_projection",
+            pressure_relative_tolerance=0.1,
+            max_time_step_s=100.0,
+        )
+        out = self.root / "implicit"
+        p = self.invoke("run", self.save(), "--output", out)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        state = json.loads((out / "fields.json").read_text())
+        self.assertLess(state["scalar_time_s"], state["time_s"])
+        for flag in [[], ["-O"]]:
+            p = self.checker(out, flag)
+            self.assertEqual(p.returncode, 0, p.stdout)
+        # The explicit default archives no separate scalar time.
+        self.case["numerics"] = self.canyon()["numerics"]
+        self.case["run"]["max_steps"] = 3
+        out = self.root / "explicit"
+        self.assertEqual(self.invoke("run", self.save(), "--output", out).returncode, 2)
+        self.assertNotIn("scalar_time_s", json.loads((out / "fields.json").read_text()))
+        self.assertEqual(self.checker(out, []).returncode, 0)
+
+    def test_preview_keeps_a_one_cell_periodic_axis(self):
+        self.case = json.loads(
+            (ROOT / "cases/verification/lid-cavity.json").read_text()
+        )
+        self.case["grid"]["cells"] = [24, 1, 24]
+        self.case["run"].update(mode="steady", max_steps=3, threads=1)
+        out = self.root / "flat-preview"
+        p = self.invoke("preview", self.save(), "--output", out)
+        self.assertIn(p.returncode, (0, 2), p.stderr)
+        case = json.loads((out / "case.json").read_text())
+        self.assertEqual(case["grid"]["cells"], [12, 1, 12])
+
     def test_launcher_forwards_a_signal_that_arrives_while_starting(self):
         work = self.root / "work"
         work.mkdir()

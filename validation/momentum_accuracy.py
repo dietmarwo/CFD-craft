@@ -4,7 +4,7 @@
 Analytic fields initialize generated, checksummed public-contract checkpoints.
 These are verification initial conditions, not evidence of prior physical runs.
 Donor-cell's order and nonconservative drift are measured, not corrected here.
-With `--momentum-advection`, the same campaign applies the predeclared P3a gates
+With `--scheme` other than `donor_cell`, the same campaign applies the predeclared P3a gates
 of docs/ACCURACY_STEADY_PLAN.md to a second-order scheme: L1 velocity order at
 least 1.7, momentum change at most 1e-13 per 100 steps, no new extrema beyond
 1e-12 for limited schemes, and no growth of the unlimited scheme's overshoot

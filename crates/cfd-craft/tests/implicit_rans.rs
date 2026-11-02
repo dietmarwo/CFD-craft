@@ -331,3 +331,46 @@ fn implicit_canyons_with_constituents_restart_bit_for_bit() {
         assert_eq!(x.to_bits(), y.to_bits());
     }
 }
+
+// When the sub-step cap binds, the constituents cover less pseudo-time than
+// the flow; the state records it, and the emitted mass is the rate times it.
+#[test]
+fn the_state_records_the_constituents_pseudo_time() {
+    let mut c = canyon_with_tracer(SteadyAlgorithm::ImplicitProjection);
+    c.numerics.max_time_step_s = 100.0;
+    c.run.max_steps = 25;
+    let r = run(&c, &Control::new(120.0), None).unwrap();
+    let scalar = r.state.scalar_time_s.unwrap();
+    assert!(
+        scalar > 0.0 && scalar < r.state.time_s,
+        "{scalar} {}",
+        r.state.time_s
+    );
+    let Source::Line {
+        from_m,
+        to_m,
+        rate_kg_s_m,
+        ..
+    } = &c.sources[0]
+    else {
+        panic!("line source expected");
+    };
+    let length = (0..3)
+        .map(|a| (to_m[a] - from_m[a]).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    let emitted = r.state.budgets[0].emitted_kg;
+    assert!((emitted - rate_kg_s_m * length * scalar).abs() <= 1e-12 * emitted);
+    let text = serde_json::to_string(&r.state).unwrap();
+    assert!(text.contains("scalar_time_s"));
+    // Explicit runs keep their bytes: no separate scalar time.
+    let mut explicit = canyon_with_tracer(SteadyAlgorithm::Explicit);
+    explicit.run.max_steps = 3;
+    let e = run(&explicit, &Control::new(60.0), None).unwrap();
+    assert_eq!(e.state.scalar_time_s, None);
+    assert!(
+        !serde_json::to_string(&e.state)
+            .unwrap()
+            .contains("scalar_time_s")
+    );
+}

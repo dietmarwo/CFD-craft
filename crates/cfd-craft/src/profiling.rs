@@ -50,7 +50,8 @@ pub struct PhaseTiming {
     pub calls: u64,
     pub inclusive_s: f64,
     pub exclusive_s: f64,
-    /// Attempted PCG iterations for pressure_solve; zero for other phases.
+    /// Attempted inner iterations: PCG for pressure_solve, the implicit
+    /// correction solves for momentum_solve and turbulence_solve; zero for other phases.
     pub work_units: u64,
     pub operator_applications: u64,
     pub preconditioner_applications: u64,

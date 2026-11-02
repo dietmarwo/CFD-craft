@@ -354,11 +354,20 @@ def campaign(binary, output, algorithm, schemes):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--binary", type=Path, default=ROOT / "target/release/cfd-craft")
-    ap.add_argument("--algorithm", default="implicit_viscous")
+    ap.add_argument(
+        "--algorithm",
+        choices=["implicit_viscous", "implicit_projection"],
+        help="Candidate algorithm (default: implicit_viscous for the cavity, "
+        "implicit_projection for the canyon, the only one that runs neutral_rans)",
+    )
     ap.add_argument("--schemes", nargs="+", default=["donor_cell", "van_leer"])
     ap.add_argument("--case", choices=["cavity", "canyon"], default="cavity")
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
+    if args.algorithm is None:
+        args.algorithm = (
+            "implicit_projection" if args.case == "canyon" else "implicit_viscous"
+        )
     require(
         all(s in SCHEMES for s in args.schemes), "schemes", f"one of {sorted(SCHEMES)}"
     )

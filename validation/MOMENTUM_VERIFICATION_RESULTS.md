@@ -151,7 +151,8 @@ recorded above.
 Ordinary Rust CI includes the operator and insulation tests; numerical CI runs
 `validation/momentum_accuracy.py`. The manual **external=momentum** job runs the
 whole protocol on a GitHub runner: fixtures, the paired sweep, the 96²
-reference and the default byte controls against `main` `f358be6`. It ran on
+reference and the default byte controls against `main` (`f358be6` for this
+run; the job now builds `6d33850`). It ran on
 the code of commit `9fdc961` (AMD EPYC 9V74, 4 CPUs, ubuntu-24.04;
 [run 41302658721](https://github.com/dietmarwo/CFD-craft/actions/runs/41302658721)),
 whose solver and fixture code is the code measured above. Every step passed.
@@ -187,6 +188,9 @@ whose solver and fixture code is the code measured above. Every step passed.
 
 Stage V provides verification fixtures and a baseline; it delivers no
 numerical speedup. Each following stage may require more than one PR.
+Done since (1 November 2026): P3a, P3b, P4, P5a, P5c, P5d and M; P5b was not
+needed; P2b and P2c remain open
+([gap status](PERFORMANCE_GAP_STATUS.md)). The table is the plan as recorded.
 
 | Stage | Remaining implementation and exit evidence |
 |---|---|

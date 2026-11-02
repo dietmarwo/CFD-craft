@@ -86,9 +86,11 @@ byte-identical to `main`.
 ## Scope
 
 The cavity is laminar and two-dimensional. The ratio describes this case, these
-recipes and this runner: native computes two span cells, OpenFOAM one, and the
-two stopping rules differ (native: the unchanged `assess` gates with three
-stable monitor windows; OpenFOAM: `residualControl` 1e-7). It does not transfer
-to the RANS canyon, where the implicit algorithm is not yet available (stage
-P5c). Defaults are unchanged: donor-cell and the explicit mode remain the
+recipes and this runner: in run 41345659321 native computed two span cells
+and OpenFOAM one (in run 41361132558 both compute one), and the two stopping
+rules differ (native: the unchanged `assess` gates with three stable monitor
+windows; OpenFOAM: `residualControl` 1e-7). It does not transfer to the RANS
+canyon: `implicit_projection` now runs it
+([results](IMPLICIT_RANS_RESULTS.md)), but there is no OpenFOAM canyon recipe
+to compare with. Defaults are unchanged: donor-cell and the explicit mode remain the
 default numerics until a separate, announced decision.

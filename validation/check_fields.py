@@ -243,8 +243,17 @@ def check(path):
                 rate += source["rate_kg_s_m3"] * math.prod(
                     b - a for a, b in zip(source["min_m"], source["max_m"], strict=True)
                 )
+        # An implicit steady algorithm advances the constituents in capped
+        # explicit sub-steps and archives the pseudo-time they covered.
+        scalar_time = s.get("scalar_time_s", s["time_s"])
         require(
-            abs(budget["emitted_kg"] - rate * s["time_s"]) < 1e-9 * scale,
+            type(scalar_time) in (int, float)
+            and math.isfinite(scalar_time)
+            and 0.0 <= scalar_time <= s["time_s"] * (1 + 1e-12),
+            "scalar pseudo-time outside 0..time_s",
+        )
+        require(
+            abs(budget["emitted_kg"] - rate * scalar_time) < 1e-9 * scale,
             "emission normalization/time accounting",
         )
         # Reconstruct current open-boundary scalar removal from archived face velocities.

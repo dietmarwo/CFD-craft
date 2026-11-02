@@ -474,11 +474,12 @@ pub(crate) fn bicgstab_with(
         if iterations.is_multiple_of(8) {
             control.check()?;
         }
-        iterations += 1;
         let next = dot(&r0, &r);
         if next == 0.0 || !next.is_finite() {
+            // Breakdown: no operator application, so no iteration is counted.
             break;
         }
+        iterations += 1;
         let beta = (next / rho) * (alpha / omega);
         rho = next;
         for i in 0..n {
@@ -587,4 +588,39 @@ pub fn ramp_cfl(steps: usize) -> f64 {
         * CFL_GROWTH
             .powi(steps.min(200) as i32)
             .min(CFL_MAX / CFL_START)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A breakdown stops the iteration before its operator applications, so it
+    // must not be counted: the profile checker requires two applications per
+    // counted iteration. The second product is chosen orthogonal to r0, which
+    // makes the next r0·r exactly zero (BiCG keeps r0·s = 0) while r ≠ 0.
+    #[test]
+    fn a_breakdown_is_not_counted_as_an_iteration() {
+        let control = Control::new(10.0);
+        let mut measured = control.span(crate::profiling::Phase::MomentumSolve);
+        let calls = std::cell::Cell::new(0);
+        let (_, iterations) = bicgstab_with(
+            |x, y| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    y.copy_from_slice(&[x[0], 3.0 * x[1], x[2]]);
+                } else {
+                    y.copy_from_slice(&[1.0, -1.0, 1.0]);
+                }
+            },
+            &[1.0; 3],
+            &[1.0, 1.0, 0.0],
+            0.1,
+            50,
+            &control,
+            &mut measured,
+        )
+        .unwrap();
+        assert_eq!(iterations, 1);
+        assert_eq!(measured.operator_applications, 2 * iterations as u64);
+    }
 }

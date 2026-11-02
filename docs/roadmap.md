@@ -17,7 +17,7 @@ wall and throughput tasks below remain.
 |---|---|---|
 | M0 Contracts and evidence skeleton | Case/result schemas, diagnostics, resource estimator, data inventory, proposed protocols | Done. Diagnostics carry codes and field paths ([catalog](diagnostics.md)). The memory and output estimates bound the measured peak and the written artifacts. `validation/data-inventory.json` lists each dataset's access status. The CODASC protocol is `blocked_data` |
 | M1a Grid and elliptic operators | Uniform staggered grid, mask topology, pressure reference, projection identities, manufactured Poisson | Done. The matrix-free operator matches an independently assembled reference on a masked grid with an outlet, a sealed pocket and a periodic axis (products to 1e-12, solutions to 1e-10). One gauge per closed component; projection and adjoint identities; second-order Poisson convergence |
-| M1b Verified laminar flow | Documented time scheme, channel/cavity/manufactured flow, bounded execution, CPU profile | Mostly. Periodic shear has spatial and temporal order 2.00 and 2.01, with Poiseuille, Couette and the Re=100 cavity ([decisions](decisions/numerics.md)). Diffusion is explicit, not the plan's semi-implicit candidate, and limits the time step. Measured CPU time and memory are in RESULTS |
+| M1b Verified laminar flow | Documented time scheme, channel/cavity/manufactured flow, bounded execution, CPU profile | Mostly. Periodic shear has spatial and temporal order 2.00 and 2.01, with Poiseuille, Couette and the Re=100 cavity ([decisions](decisions/numerics.md)). Diffusion is explicit by default and in transient runs, where it limits the time step; the opt-in implicit steady algorithms treat viscosity implicitly. Measured CPU time and memory are in RESULTS |
 | M2 Passive transport and response matrices | Sources/receptors, analytic transport, superposition, synthetic inverse tutorial, small command job | Done, without area sources. Point, line and volume sources; the Gaussian order is 2.32; superposition holds to 2.2e-16; there is a SciPy reference, the source-inference tutorial and the command launcher. The discrete adjoint is a later extension |
 | M3a Neutral ABL package | k-ε with consistent wall, inlet and top; empty-domain profiles pass | Partly. The empty ABL drifts 0.23 % (U), 0.94 % (k) and 2.68 % (ε) in H..5H, under gates of 2 % and 5 %. Below H, ε drifts up to 16 %. There is one top configuration, the open atmosphere. The building-wall roughness is tied to the cell width, which the plan rules out (§5.3) |
 | M3b Finite canyon evaluation | Grid and domain studies, development and held-out cases, external comparison, experimental verdict | Not passed. The development case (W/H = 1, 270°) and the held-out analogs (W/H = 2; 225°) are steady on 18x16x12. The resolution series does not finish, there is no external comparison, and the experimental verdict is `blocked_data` |
@@ -27,7 +27,7 @@ wall and throughput tasks below remain.
 | M6 Mitigation optimization | Budget-matched baseline, held-out scenarios, fine-grid replay | Not started; needs M4 and validated physics |
 | M7 Neighborhood and climatology | City geometry, conditional scenario maps, separate annual gate | Not started |
 | M8 Time-resolved turbulence | LES with spin-up and averaging studies | Not started |
-| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](iterations/07-14-performance-results.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in unmasked [symmetric multigrid](PRESSURE_MULTIGRID.md) is implemented; masked multigrid and semi-implicit diffusion remain open |
+| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](iterations/07-14-performance-results.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in unmasked [symmetric multigrid](PRESSURE_MULTIGRID.md) and opt-in implicit steady pseudo-time (P4/P5) are implemented; masked multigrid and semi-implicit transient diffusion remain open |
 
 The [performance results](iterations/07-14-performance-results.md) give paired
 CPU and memory measurements of the current implementation against the previous
@@ -35,9 +35,11 @@ one. Their hardware differs from that of the resource measurements in RESULTS.
 The [backend comparison](../validation/BACKEND_COMPARISON.md) times the cavity
 with both backends on one machine: OpenFOAM is 4.7–5.5 times faster than native
 steady mode, mostly because the native method needs about three times as many
-explicit pseudo-time steps, each with a PCG pressure solve. A steady algorithm
-and masked extensions of the optional multigrid preconditioner are the next
-native candidates. The anisotropic line/semicoarsening substep is implemented;
+explicit pseudo-time steps, each with a PCG pressure solve. The opt-in
+implicit steady algorithms ([results](../validation/IMPLICIT_STEADY_RESULTS.md))
+have since reversed that on the cavity at matched accuracy; masked extensions
+of the optional multigrid preconditioner (P2b) and its setup cost (P2c) remain
+the next pressure candidates. The anisotropic line/semicoarsening substep is implemented;
 its [results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md) and a fresh
 [gap status and iteration list](../validation/PERFORMANCE_GAP_STATUS.md)
 separate throughput from accuracy. Accepted
@@ -90,7 +92,7 @@ fine-grid and experimental-validation gates remain open.
 
 - **Building-wall roughness (§5.3):** it is the smaller of the ground roughness and 0.001 cell widths. The plan asks for a wall property specified independently of the ground.
 - **Top boundary (§5.3):** only the open-atmosphere configuration exists; a wind-tunnel reproduction needs its own.
-- **Diffusion (§5.2):** explicit rather than semi-implicit.
+- **Diffusion (§5.2):** explicit by default and in transient runs; implicit only in the opt-in steady algorithms.
 - **Sources (§5.4):** there are no area sources. A source that intersects a solid is rejected outright, so no redistribution policy is needed yet.
 - **Preview (§6.2):** it publishes the derived case and its geometry, and it rejects vanished boxes, topology changes and solid-volume changes above 20 %. It does not list per-box changes against the original.
 - **Geometry evidence (§5.1):** it has no facade/ground classification and no resolved street widths.
@@ -102,19 +104,20 @@ fine-grid and experimental-validation gates remain open.
 
 Throughput is the limit; memory is not. One million cells peak at 851 MiB, against an estimate of 1064 MiB, which meets the plan's M1/M2 memory gate. A three-step run at that size, including the grid construction, takes two minutes.
 
-The steady canyon cost grows roughly with the sixth power of the refinement ratio. Explicit diffusion and advection bound the pseudo-time step, and every step solves the pressure equation twice with about 50 CG iterations each. The 36x32x24 and 54x48x36 canyon grids do not converge within 300 seconds, so the resolution study, and with it any physical canyon claim, waits on a faster solver.
+With the explicit default the steady canyon cost grows roughly with the sixth power of the refinement ratio: explicit diffusion and advection bound the pseudo-time step, and every step solves the pressure equation twice with about 50 CG iterations each, so the 36x32x24 and 54x48x36 canyon grids do not converge within 300 seconds. The opt-in implicit recipe accepts them with the tracer in 57.6 s and 615 s on one thread ([P5c/P5d results](../validation/IMPLICIT_RANS_RESULTS.md)), but the tutorial's study preset still runs the explicit algorithm and the canyon is not grid-converged at 93k cells, so the resolution study, and with it any physical canyon claim, is still open.
 
 ## Next steps, in order
 
 The native accuracy track now starts with the
 [Stage V verification protocol](iterations/20-momentum-verification-plan.md)
 and its [donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md).
-It leaves the production numerics unchanged. The order for closing the cavity
-gap is P3a (conservative second-order laminar momentum), P4 (implicit viscous
-correction), P5a (implicit steady projection), conditional P5b (consistent local
-pseudo-time), then P3b/P5c (open boundaries/RANS) and P5d (scalar transport).
-Repeat matched-accuracy measurement after each numerical stage; keep masked
-multigrid P2b and setup costs P2c as separate pressure work.
+Stages P3a (conservative second-order momentum), P4 (implicit viscous
+correction), P5a (implicit steady projection), P3b/P5c (open boundaries/RANS),
+P5d (scalar transport) and the matched-accuracy measurement M are implemented
+as opt-in choices with unchanged defaults; the conditional P5b was not needed
+([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md),
+[performance iterations](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
+Open: a decision on defaults, masked multigrid P2b and setup costs P2c.
 
 The [mesh-initialization plan](iterations/05-mesh-initialization-plan.md)
 provides an explicit accepted-coarse-to-new-fine start, verified against a cold
@@ -146,7 +149,7 @@ coarse-to-fine initialization exists for accepted cold sources; conservative
 interpolation, chained sources and an accepted fine/coarse turbulent pair
 remain work.
 
-1. **Throughput (M1b, M3b):** multigrid for the pressure equation now that the masked operator is pinned against its reference; semi-implicit diffusion for momentum, k-ε and scalars; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
+1. **Throughput (M1b, M3b):** masked multigrid for the pressure equation (P2b; unmasked multigrid and the implicit steady algorithms exist); semi-implicit diffusion for transient runs; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
 2. **Near-wall consistency (M3a):** a log-consistent velocity gradient in wall-adjacent cells, so the empty ABL also stays homogeneous below H, and a building-wall roughness specified independently of the ground and the grid.
 3. **Resolution study (M3b):** the canyon at 10 or more cells per building height, a domain that meets the COST 732 clearances, and a GCI where the sequence supports one.
 4. **Measured data (M3b):**

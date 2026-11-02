@@ -445,12 +445,17 @@ fn profile_case(
     })
 }
 
-/// The same case on a grid coarsened by `factor`, with at least 2 cells per axis.
+/// The same case on a grid coarsened by `factor`, with at least 2 cells per axis;
+/// a one-cell periodic axis (a two-dimensional run) keeps its single cell.
 fn coarsened(c: &Case, factor: usize) -> Case {
     let mut coarse = c.clone();
     coarse.name = format!("{}-preview", c.name);
     for a in 0..3 {
-        coarse.grid.cells[a] = (c.grid.cells[a] / factor).max(2);
+        coarse.grid.cells[a] = if c.grid.cells[a] == 1 {
+            1
+        } else {
+            (c.grid.cells[a] / factor).max(2)
+        };
     }
     coarse
 }

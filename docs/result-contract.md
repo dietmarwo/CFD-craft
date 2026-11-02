@@ -31,17 +31,22 @@ A failed step is not committed. The saved state is the last accepted state and t
 
 The manifest identifies the actual initial state as well as the case. Two restarts of the same case from different accepted states therefore remain distinguishable. Keep parent checkpoints when their initial states must be reproduced.
 
-Checkpoint compatibility excludes the name, output policy and run budgets from the physics hash. Changing the requested endpoint can change the last clipped timestep; exact step-for-step restart comparisons interrupt a run by its work budget while preserving the same physical endpoint. Reject checkpoints beyond the new requested horizon.
+Checkpoint compatibility excludes `name`, `output` and the whole `run` section (mode, horizon, budgets, threads) from the physics hash. Changing the requested endpoint can change the last clipped timestep; exact step-for-step restart comparisons interrupt a run by its work budget while preserving the same physical endpoint. Reject checkpoints beyond the new requested horizon.
 
 The run directory is created before the solve: a missing parent (CFD-E063) or an existing destination (CFD-E062) fails at once. The output estimate in the check report bounds what a run writes: the fields and checkpoint, the monitor history they carry, and the case, summary and probe text, which grow with the receptors, boxes and sources. A run that passed the check therefore does not normally omit anything. Files use atomic temporary-write/rename publication. If fields or the checkpoint would exceed the output budget, they are omitted and listed in the manifest under `omitted`; the small artifacts are still written and the run exits 2. Complete files can describe a numerically incomplete run.
 
-`report` rejects an archive with CFD-E064 when the completion marker or manifest is missing or altered, a listed artifact changed, an entry is not listed, a file is not a regular file, an artifact the case requested is missing without being listed as omitted, summary.json does not describe case.json, or the manifest and summary disagree on the source or initial state. For an archive whose manifest lists omitted artifacts it prints the summary, repeats CFD-E061 with the omitted names on stderr, and exits 0. Unkeyed hashes do not stop someone from rewriting and rehashing an archive on purpose; validation/check_fields.py recomputes the physics checks for that reason.
+`report` rejects an archive with CFD-E064 when the completion marker or manifest is missing or altered, a listed artifact changed, an entry is not listed, a file is not a regular file, an artifact the case requested is missing without being listed as omitted, summary.json does not describe case.json, the manifest and summary disagree on the source or initial state, or the manifest has an unsupported schema, lacks a required small artifact or lists an unknown artifact name. For an archive whose manifest lists omitted artifacts it prints the summary, repeats CFD-E061 with the omitted names on stderr, and exits 0. Unkeyed hashes do not stop someone from rewriting and rehashing an archive on purpose; validation/check_fields.py recomputes the physics checks for that reason.
 
 With an implicit `numerics.steady_algorithm`, `summary.json` also reports
 `momentum_solver_iterations`, the cumulative inner iterations of the implicit
 momentum-correction solves; `steps` then counts outer iterations. The field is
 omitted for the explicit default, as is the matching checkpoint field, so
-existing results and checkpoints are unchanged.
+existing results and checkpoints are unchanged. With constituents, the
+archived state (fields and checkpoint) also carries `scalar_time_s`, the
+pseudo-time the constituents covered: an implicit algorithm advances them in at
+most 16 explicit stable sub-steps per outer iteration, so it can be less than
+`time_s`, and emitted mass equals the source rate times it. Explicit runs omit
+it (it equals `time_s` there).
 
 ## Numerical check scope
 

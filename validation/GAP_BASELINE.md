@@ -82,6 +82,6 @@ In three of the four 48² OpenFOAM runs (the timed rounds, not the warmup), the 
 
 ## Next numerical iteration
 
-Proceed to P1: a fixed linear symmetric multigrid preconditioner for the unchanged pressure equation, initially on supported unmasked grids. Retain IC(0), fine-operator/true-residual checks and independent topology/projection references. Measure setup, repeated solves, memory and accepted-workflow cost. Momentum accuracy remains a separate high-priority stage because pressure throughput alone cannot establish the missing 0.01 accuracy target.
+(P1 and the later stages are done since; see the [gap status](PERFORMANCE_GAP_STATUS.md).) At the time: proceed to P1: a fixed linear symmetric multigrid preconditioner for the unchanged pressure equation, initially on supported unmasked grids. Retain IC(0), fine-operator/true-residual checks and independent topology/projection references. Measure setup, repeated solves, memory and accepted-workflow cost. Momentum accuracy remains a separate high-priority stage because pressure throughput alone cannot establish the missing 0.01 accuracy target.
 
 See the [profiling guide](../docs/PROFILING.md), [iteration plan](../docs/iterations/17-gap-measurement-plan.md) and [earlier backend comparison](BACKEND_COMPARISON.md).

@@ -61,7 +61,8 @@ machine), so both hosts measure the same native numerics.
 Both solve a unit square cavity with lid speed 1 m/s, viscosity 0.01 m²/s
 (Re=100), zero initial velocity and 24×24 cells in the flow plane. The native
 case is x/z with two periodic span cells (24×2×24, 1152 cells), because native
-validation rejects a one-cell axis; OpenFOAM uses one empty span cell
+validation then rejected a one-cell axis (periodic axes accept one cell since
+performance iteration 6; `compare_backends.py --grid-sweep --native-span 1`); OpenFOAM uses one empty span cell
 (24×24×1, 576 cells, 0.1 m deep). Both are nominally two-dimensional, but the
 native solver computes both span layers.
 

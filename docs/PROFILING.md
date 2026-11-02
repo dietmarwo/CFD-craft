@@ -131,7 +131,7 @@ Install the pinned runtime through the [backend guide](../integrations/OPENFOAM.
 The sweep keeps one warmup and the requested timed rows for each configuration,
 alternating native/OpenFOAM order within each grid block. It adds a native 12²
 diagnostic. Supported paired levels 1,2,3 mean 24²,48²,72² in the flow plane.
-Native keeps two periodic span cells; OpenFOAM keeps one empty span cell.
+Native uses two periodic span cells by default (`--native-span 1` for a two-dimensional native run); OpenFOAM keeps one empty span cell.
 
 Every row retains numerical acceptance, independent evidence, the frozen 0.06
 Ghia screen and measured maximum centerline-u error separately. A timeout,

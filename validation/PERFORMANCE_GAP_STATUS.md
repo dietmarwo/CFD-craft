@@ -30,8 +30,9 @@ its workflow time, with error 0.0054 against 0.0090. From 24² up native is fast
 and more accurate on every shared grid (0.51× solver time at 48²). Before these
 stages, native needed 96² and about 826 s to reach the target.
 
-Defaults are unchanged. Open work: the implicit algorithm for RANS (P5c) and
-scalar transport (P5d), which the canyon needs, and a decision on defaults.
+Defaults are unchanged. Open work at that time: the implicit algorithm for
+RANS (P5c) and scalar transport (P5d), which the canyon needs (both done since;
+see the section above), and a decision on defaults.
 Details: [second-order momentum](SECOND_ORDER_MOMENTUM_RESULTS.md) and
 [implicit steady](IMPLICIT_STEADY_RESULTS.md) results.
 
@@ -149,22 +150,23 @@ identities, all rows and profiles. Foundation package
 ## Remaining work, in recommended order
 
 These are work packages; each may take several changes. P0 instrumentation,
-P1 isotropic multigrid and P2a are complete; P2a is not all of P2.
+P1 isotropic multigrid, P2a, P3 (P3a/P3b), P4, P5 (P5a, P5c, P5d; P5b was not
+needed) and the matched-accuracy measurement M are complete; their rows are
+kept below as the record of what was asked. Open: P2b, P2c, P6 and a decision
+on defaults.
 
 | Next stage | Scope | Evidence required before calling it complete |
 |---|---|---|
 | P2b: masked multigrid | Component-preserving aggregation/interpolation; one nullspace/gauge per sealed component; anchored components; thin passages and disconnected pockets. Extend the current rejection only with verified support | Independent masked `-DG`/Galerkin/reference solves; full preconditioner symmetry/positive-energy tests; no merging across solid barriers; changed coefficients/topology/cancellation/restart controls. Accepted 27k/93k canyon comparisons, field equivalence and an actual coupled benefit; preserve budget failures |
 | P2c: setup and hierarchy cost | Profile cold hierarchy construction and coarse operator growth. Reduce assembly/scratch/transfer overhead where measured, retaining the fixed SPD cycle | Cold/reused work and memory, operator/grid complexity, exact field/reference controls. Require an end-to-end gain for representative repeated and one-off workloads; iteration counts alone are insufficient |
-| P3: momentum accuracy per cost | Independently verified higher-order momentum advection with explicit boundary/conservation treatment. Keep a selectable baseline and frozen physical model | Manufactured spatial/temporal order, periodic and wall/outlet conservation, bounded stability regime, Ghia cost-versus-error refinement. A native run must actually reach the declared 0.01 target before a matched-accuracy ratio can be reported |
-| P4: implicit diffusion decision | Bounded laminar implicit momentum diffusion trial after profiling its attainable benefit. Treat turbulent/scalar extensions separately | Independent diffusion/time-order tests, boundary and energy checks, linear-solver residuals, accepted coupled cost at equal error. The earlier approximately 1.68 stability-headroom estimate is a ceiling under assumptions, not a promised speedup; stop if overhead removes the benefit |
-| P5: a dedicated steady algorithm | Reduce explicit pseudo-time work with a documented steady momentum/pressure coupling; maintain a consistent residual and fixed point | Independent steady equation residuals, conservation and gauge checks, baseline-equivalent converged fields, cavity grid/error sweep and masked/RANS controls. Compare complete convergence, not cost per outer iteration |
+| P3: momentum accuracy per cost (done) | Independently verified higher-order momentum advection with explicit boundary/conservation treatment. Keep a selectable baseline and frozen physical model | Manufactured spatial/temporal order, periodic and wall/outlet conservation, bounded stability regime, Ghia cost-versus-error refinement. A native run must actually reach the declared 0.01 target before a matched-accuracy ratio can be reported |
+| P4: implicit diffusion decision (done) | Bounded laminar implicit momentum diffusion trial after profiling its attainable benefit. Treat turbulent/scalar extensions separately | Independent diffusion/time-order tests, boundary and energy checks, linear-solver residuals, accepted coupled cost at equal error. The earlier approximately 1.68 stability-headroom estimate is a ceiling under assumptions, not a promised speedup; stop if overhead removes the benefit |
+| P5: a dedicated steady algorithm (done) | Reduce explicit pseudo-time work with a documented steady momentum/pressure coupling; maintain a consistent residual and fixed point | Independent steady equation residuals, conservation and gauge checks, baseline-equivalent converged fields, cavity grid/error sweep and masked/RANS controls. Compare complete convergence, not cost per outer iteration |
 | P6: canyon and optimization payoff | Replay representative canyon and optimizer campaigns using experiment-craft/optimization-jobs, frozen budgets, cached converged flows and held-out scenarios where appropriate | Accepted 27k/93k refinement, model-card and empty-ABL gates, reproducible worker/job identities and failed jobs, budget-matched best-so-far outcomes and fine-grid replay. Experimental-data acquisition/model qualification remains a separate prerequisite for physical claims |
 
-P3 can start in parallel with P2b because the current accuracy deficit is already
-visible on unmasked cavities. The recommended next pressure stage is P2b;
-the highest-priority prerequisite for an honest OpenFOAM **cost at equal
-accuracy** comparison is P3. Do not postpone the accuracy work until every
-pressure optimization is exhausted.
+P3–P5 were done before P2b, as recommended, because the accuracy deficit was
+visible on unmasked cavities; the cost-at-equal-accuracy comparison is now
+reported. The recommended next pressure stage is P2b.
 
 All listed CPU implementation and small/medium validation work can run in
 cloud CI; many-core and GPU studies remain lower priority. The opt-in
@@ -176,13 +178,14 @@ run is recorded in the [anisotropy results](ANISOTROPIC_PRESSURE_RESULTS.md#host
 Use the same physical problem, domain, boundary conditions and declared error
 objective; independently accepted fields; repeatable complete-run time and
 memory on the same host. Report setup, solver and outer workflow separately.
-The native SSPRK2 explicit pseudo-time algorithm and the pinned OpenFOAM
+The native steady algorithm (explicit SSPRK2 by default, opt-in
+`implicit_projection`) and the pinned OpenFOAM
 Foundation 13 SIMPLEC/GAMG recipe use different discrete schemes and stopping
 norms. A same-grid configured timing ratio describes those recipes. A
 matched-accuracy ratio additionally requires both methods to reach the error
 target. Neither is experimental validation of urban dispersion.
 
-There is no defensible percentage of the full gap closed without repeated
-matched-accuracy costs. The Stage V 96² diagnostic establishes an accepted
-native target crossing; it does not supply that repeated cost measurement.
+Repeated matched-accuracy costs on the cavity now exist (runs 41345659321 and
+41361132558); they describe the laminar cavity and these recipes, not the
+canyon, for which there is no OpenFOAM recipe.
 Pressure-kernel speedups and coarse-grid throughput retain their own scope.

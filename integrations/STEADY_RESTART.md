@@ -23,7 +23,9 @@ python validation/audit_openfoam_mesh.py --run NEW_RUN --output NEW_AUDIT.json
 
 A verified but numerically unaccepted source makes `report` exit 2; it is
 eligible. `prepare-restart` exits 0 for a prepared stage and 1 otherwise, with a
-coded field path (CFD-X012 `initial_state.*`). A source is eligible when:
+coded field path: CFD-X012 `initial_state.*` for eligibility and receipt errors,
+CFD-X006 for an archive that fails verification or an invalid final field, and
+CFD-E062/E063 for the output path. A source is eligible when:
 
 - it is a sealed archive whose execution completed with a final field;
   failed, timed-out and cancelled runs are rejected, including any older saved

@@ -109,6 +109,13 @@ pub struct State {
     /// zero, so explicit checkpoints keep their bytes.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub momentum_solver_iterations: usize,
+    /// Pseudo-time the constituents have covered, when it differs from
+    /// `time_s`: an implicit steady algorithm advances them in at most
+    /// `SCALAR_SUBSTEPS_MAX` explicit stable sub-steps per outer iteration.
+    /// Emitted mass is the source rate times this time. Omitted (and equal to
+    /// `time_s`) for explicit runs, so their checkpoints keep their bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scalar_time_s: Option<f64>,
     pub monitor_history: Vec<Vec<f64>>,
 }
 fn is_zero(v: &usize) -> bool {
@@ -219,6 +226,7 @@ pub fn initial_state(c: &Case, g: &Grid) -> State {
         floor_events: 0,
         pressure_iterations: 0,
         momentum_solver_iterations: 0,
+        scalar_time_s: None,
         monitor_history: vec![],
     }
 }
@@ -238,6 +246,8 @@ fn validate_with_history(c: &Case, g: &Grid, s: &State, history: &[Vec<f64>]) ->
     }
     if !s.time_s.is_finite()
         || s.time_s < 0.0
+        || s.scalar_time_s
+            .is_some_and(|t| !t.is_finite() || t < 0.0 || t > s.time_s * (1.0 + 1e-12) + 1e-300)
         || s.velocity
             .iter()
             .chain(&s.pressure)
@@ -512,6 +522,7 @@ pub fn step(
         floor_events: s.floor_events,
         pressure_iterations: s.pressure_iterations,
         momentum_solver_iterations: s.momentum_solver_iterations,
+        scalar_time_s: s.scalar_time_s,
         monitor_history: Vec::new(),
     };
     if c.numerics.steady_algorithm == SteadyAlgorithm::ImplicitProjection {
@@ -587,6 +598,12 @@ pub fn step(
                 );
             }
             next.concentrations.push(concentration);
+        }
+        // The constituents' own pseudo-time, kept once it can differ from time_s.
+        if c.numerics.steady_algorithm != SteadyAlgorithm::Explicit || s.scalar_time_s.is_some() {
+            let covered =
+                (0..substeps).fold(s.scalar_time_s.unwrap_or(s.time_s), |t, _| t + sub_dt);
+            next.scalar_time_s = Some(covered);
         }
     }
     // Preserve the public step function's unchanged trailing constituents when

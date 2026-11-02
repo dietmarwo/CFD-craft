@@ -212,6 +212,7 @@ report names.
 - The cause of the extra time directory in the earlier staged study; the
   [mapping results](MAPPING_RESULTS.md) record a second occurrence.
 - A fine-mesh campaign from a coarse-to-fine start (see the
-  [mapping results](MAPPING_RESULTS.md)); then mesh, inlet and model
+  [mapping results](MAPPING_RESULTS.md)); `refinement_campaign.py` now runs one,
+  but no accepted level 2 exists yet ([refinement results](REFINEMENT_RESULTS.md)); then mesh, inlet and model
   sensitivity. Nothing here qualifies the native canyon model or passive-gas
   transport.

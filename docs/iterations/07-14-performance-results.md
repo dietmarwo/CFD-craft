@@ -234,9 +234,11 @@ work off the machine while measuring.
 
 ## Open performance and scientific gates
 
-The pressure solve still runs serial PCG at every projection; a verified
-multigrid preconditioner remains the larger algorithmic opportunity. Explicit
-diffusion and advection still limit the time step. These results do not
+At the time of this record, the pressure solve ran serial PCG at every
+projection; a verified multigrid preconditioner was the larger algorithmic
+opportunity, and explicit diffusion and advection limited the time step. (Opt-in
+multigrid and implicit steady algorithms followed; see the
+[gap status](../../validation/PERFORMANCE_GAP_STATUS.md).) These results do not
 establish accepted fine canyon throughput, asymptotic grid convergence, a
 mesh-independent building-wall law, experimental urban validation or calibrated
 uncertainty. The external fine-backstep acceptance gate and the source-flux

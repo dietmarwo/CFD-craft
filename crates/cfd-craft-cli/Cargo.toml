@@ -4,14 +4,18 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+readme = "README.md"
+include = ["src/**", "Cargo.toml", "Cargo.lock", "build.rs", "README.md", "LICENSE"]
 build = "build.rs"
+repository.workspace = true
+description = "Command-line experiments and verified archives for CFD-craft"
 
 [[bin]]
 name = "cfd-craft"
 path = "src/main.rs"
 
 [dependencies]
-cfd-craft = { path = "../cfd-craft" }
+cfd-craft = { path = "../cfd-craft", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true

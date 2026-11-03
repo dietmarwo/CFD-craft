@@ -1,6 +1,6 @@
 [workspace]
 members = ["crates/cfd-craft", "crates/cfd-craft-cli"]
-exclude = ["integrations/fcmaes-cfd-worker"]
+exclude = ["integrations/fcmaes-cfd-worker", "bindings/python"]
 resolver = "2"
 
 [workspace.package]

@@ -12,7 +12,25 @@ Rust/Python integration, optimizer jobs and troubleshooting. The
 [runnable examples](examples/manual/README.md) include four compiled Rust
 programs and a complete CLI/Python cookbook.
 
-Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These are recorded release gates, rather than a claim of general urban-model validation. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
+Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These remain physical-qualification gates. They do not prevent distribution of an explicitly experimental research package. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
+
+## Installation and release preparation
+
+The 0.1.0 release is prepared for PyPI (`cfd-craft`) and crates.io
+(`cfd-craft`, `cfd-craft-cli`). Publication is a separate action; the commands
+below apply after publication. Before that, install a prepared wheel or build
+from this checkout. See [release instructions](RELEASING.md).
+
+```sh
+python -m pip install cfd-craft==0.1.0
+cargo install cfd-craft-cli --version 0.1.0 --locked
+```
+
+The optional [Python binding](docs/PYTHON.md) calls Rust in-process and returns
+native summaries, including receptor values, checks and termination. It has no
+NumPy dependency. `python -m cfd_craft describe` discovers its schemas. The native
+CLI remains the interface for fields, verified archives, restart and profiling.
+OpenFOAM adapters, optimizer workers and analysis tools remain optional.
 
 ## Start
 

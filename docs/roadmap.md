@@ -59,7 +59,10 @@ fine-grid and experimental-validation gates remain open.
 | Runner integration that keeps CFD evidence | Yes (`integrations/`) |
 | Measured CPU time, peak memory and output size on named hardware | Yes (RESULTS) |
 
-0.1.0 is therefore a verified research prototype. The first release waits on the grid study and the measured data.
+0.1.0 is therefore a research prototype with the verification evidence recorded above.
+The experimental package release is independent of physical qualification; a
+physically qualified canyon release still requires the grid study and measured data.
+See [release preparation](../RELEASING.md).
 
 ## Numeric targets of the plan
 

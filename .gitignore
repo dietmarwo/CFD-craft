@@ -3,3 +3,6 @@ target/
 __pycache__/
 *.pyc
 .venv/
+
+/dist/
+/release-check/

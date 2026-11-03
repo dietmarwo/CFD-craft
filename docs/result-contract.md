@@ -20,6 +20,15 @@ A failed step is not committed. The saved state is the last accepted state and t
 
 ## Files
 
+Source identity is package-safe: each crate fingerprints its Rust sources,
+manifest, build script and source lockfile; the CLI combines its fingerprint
+with the core's. A direct library call identifies the core, while the Python
+binding also identifies its native wrapper. Cargo normalizes packaged manifests
+and lockfiles, so registry and checkout builds can have different fingerprints.
+These are distribution identities, not a guarantee that a downstream consumer
+resolved exactly that lockfile. Applications embedding the library should also
+record their own resolved Cargo.lock and application build identity.
+
 - case.json: normalized consumed case.
 - summary.json: actual stopping reason, checks, physical scales, work and receptor values.
 - geometry.json: cell counts, connected components, mask hash and the cells of each box.

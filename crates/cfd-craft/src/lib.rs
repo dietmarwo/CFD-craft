@@ -14,3 +14,9 @@ pub mod turbulence_solve;
 pub mod verification;
 
 pub type Result<T> = std::result::Result<T, String>;
+
+pub mod input;
+/// Fingerprint of the core package sources and its build lockfile.
+pub const SOURCE_SHA256: &str = env!("CFD_SOURCE_SHA");
+/// Compiler used to build the core.
+pub const RUSTC_VERSION: &str = env!("CFD_RUSTC");

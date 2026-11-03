@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0 release preparation (not yet published)
+
+- Align registry metadata, versioned workspace dependencies, license/readme
+  contents and lockfiles; independently build package archives.
+- Add manual release automation with full-CI, installed-wheel and rebuilt-sdist
+  gates; publication requires the matching tag and registry configuration.
+- Add the in-process Python summary API and package-safe source fingerprints.
+- Retain existing numerical defaults, scientific qualification limits and
+  historical benchmark versions. See [release notes](RELEASE_NOTES.md).
+
 ## [Unreleased]
 
 First version, 0.1.0, a research prototype. Experimental canyon validation and a successful fine-grid resolution study remain open gates.

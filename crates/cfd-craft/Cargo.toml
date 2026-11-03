@@ -4,10 +4,16 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+readme = "README.md"
+include = ["src/**", "Cargo.toml", "Cargo.lock", "build.rs", "README.md", "LICENSE"]
 repository.workspace = true
 description = "Conservative Cartesian flow and passive dispersion research laboratory"
 
+[build-dependencies]
+sha2.workspace = true
+
 [dependencies]
+serde_path_to_error.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 schemars.workspace = true

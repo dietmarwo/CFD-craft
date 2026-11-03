@@ -1,5 +1,6 @@
 name: CFD checks
 "on":
+  workflow_call:
   push:
   pull_request:
   workflow_dispatch:
@@ -31,6 +32,28 @@ name: CFD checks
 permissions:
   contents: read
 jobs:
+  python-binding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path bindings/python/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path bindings/python/Cargo.toml --locked -- -D warnings
+      - run: cargo build --release --workspace --locked
+      - run: python -m pip install maturin==1.9.6
+      - run: maturin build --release --locked --out dist
+      - run: python -m pip install dist/*.whl
+      - working-directory: ${{ runner.temp }}
+        run: |
+          python -I "$GITHUB_WORKSPACE/validation/check_installed.py" --binary "$GITHUB_WORKSPACE/target/release/cfd-craft" --output installed.json
+          python -I -O "$GITHUB_WORKSPACE/validation/check_installed.py" --binary "$GITHUB_WORKSPACE/target/release/cfd-craft" --output installed-optimized.json
+          diff installed.json installed-optimized.json
   external-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -386,7 +409,7 @@ jobs:
             runs/momentum-archive.json
             runs/momentum/**/report.json
   external-resolution:
-    if: github.event_name == 'workflow_dispatch' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'momentum' && inputs.external != 'pressure' && inputs.external != 'anisotropy'
+    if: github.event_name == 'workflow_dispatch' && inputs.external != '' && inputs.external != 'backend' && inputs.external != 'comparison' && inputs.external != 'accuracy' && inputs.external != 'momentum' && inputs.external != 'pressure' && inputs.external != 'anisotropy'
     runs-on: ubuntu-24.04
     # Coarse reference + up to three fine executions, with audit/upload overhead.
     timeout-minutes: 360

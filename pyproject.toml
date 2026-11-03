@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin==1.9.6"]
+build-backend = "maturin"
+
+[project]
+name = "cfd-craft"
+version = "0.1.0"
+description = "Native Cartesian flow and passive-gas dispersion research solver"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "python/README.md"
+classifiers = ["Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Programming Language :: Rust", "Topic :: Scientific/Engineering :: Physics"]
+
+[project.urls]
+Repository = "https://github.com/dietmarwo/CFD-craft"
+Documentation = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md"
+Issues = "https://github.com/dietmarwo/CFD-craft/issues"
+
+[project.scripts]
+cfd-craft-python = "cfd_craft.__main__:main"
+
+[tool.maturin]
+manifest-path = "bindings/python/Cargo.toml"
+python-source = "python"
+module-name = "cfd_craft._native"
+include = [
+    { path = "Cargo.toml", format = "sdist" },
+    { path = "Cargo.lock", format = "sdist" },
+    { path = "LICENSE", format = "sdist" },
+    { path = "crates/**/*", format = "sdist" },
+    { path = "cases/verification/periodic-tracer.json", format = "sdist" },
+    { path = "validation/check_installed.py", format = "sdist" },
+]

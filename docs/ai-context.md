@@ -150,3 +150,12 @@ do not confuse a same-grid ratio with cost at matched accuracy.
 ## Optimization applications
 
 The [F1–F3 tutorials](../tutorials/optimization/README.md) provide runnable native LP/MIP and global-search examples. F1 uses the existing prescribed-flow scalar worker for GP; F3 uses a bounded coupled-flow callback/command route and does not claim a stock coupled-flow application worker. See their separate numerical acceptance and fidelity gates.
+
+## Package interfaces
+
+The optional `bindings/python` workspace builds `cfd_craft` through maturin;
+the core workspace stays independent of PyO3. `check` shares native preflight,
+and `simulate` returns a native summary with the GIL released. The native CLI
+owns fields, archive writing, restart and profiles. Read [PYTHON.md](PYTHON.md)
+and [RELEASING.md](../RELEASING.md). Package distribution does not close the
+physical-validation or grid-study gates.

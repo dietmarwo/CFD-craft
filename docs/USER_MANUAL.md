@@ -37,14 +37,16 @@ grids and GPU execution are outside the implemented native API.
 |---|---|---|
 | Run one native simulation | `target/release/cfd-craft` | Case checks, solver, signals, output directory, archive/build identity |
 | Embed the native solver in Rust | `cfd_craft::solver::run` | Numerical state and checks; the caller owns its pool, control and publication |
-| Script native experiments from Python | CLI through `subprocess.run` | Process orchestration and JSON; no installed Python extension is implied |
+| Run native summaries in Python | `cfd_craft.check` / `cfd_craft.simulate` | Optional installed Rust extension, shared preflight, bounded in-process execution |
+| Script archived native experiments from Python | CLI through `subprocess.run` | Process orchestration, full fields and verified archives |
 | Run a generated OpenFOAM case | `integrations/openfoam_backend.py` | External programs, budgets, dictionaries and separate external archive |
 | Compare or analyze fields | `validation/` and `tutorials/` | Independent audits, numerical references and dataset-specific screens |
 | Run optimization jobs | Optional `fcmaes-cfd-worker` through optimization-jobs | Fallible simulations, job envelopes and optimizer evidence |
 | Coordinate a campaign | experiment-craft | Scheduling and dependencies over existing job envelopes |
 
-The Python modules are source-checkout tools. There is no supported
-`pip install cfd-craft` binding in this repository. The native CLI and library
+The optional [Python package](PYTHON.md) is prepared for `pip install cfd-craft`
+and can be installed from a built wheel before publication. Analysis and OpenFOAM
+modules remain source-checkout tools. The native CLI and library
 do not require OpenFOAM. The external adapter starts separate executables;
 it does not link OpenFOAM into the MIT Rust library.
 
@@ -488,10 +490,11 @@ not inside it: native `report` rejects unlisted entries. The default CLI archive
 writer includes its executable hash. The raw input-file hash, normalized case
 hash, physics hash and initial-state hash express different identities.
 
-The CLI source fingerprint covers Rust/TOML files under `crates/`, root
-Cargo.toml and Cargo.lock. Adding a Rust example can therefore change that
-fingerprint even when numerical source files remain identical. Build identity
-and numerical equivalence need their own evidence.
+The CLI source fingerprint combines the core and CLI package fingerprints.
+Each covers its `src` Rust files, build script, manifest and lockfile: the
+workspace lockfile in a checkout, or the normalized lockfile inside a packaged
+crate. It does not traverse sibling checkouts or depend on example files.
+Build identity and numerical equivalence need their own evidence.
 
 ### Example 11: require a numerical verdict explicitly
 
@@ -636,10 +639,11 @@ still be cancelled, incomplete or numerically failed. Always inspect it.
 
 The library does not create a Rayon pool from case.run.threads. Its caller
 must install an appropriate pool if thread accounting matters. The CLI does
-this for you. A bare library result has an empty source_sha256 and package
-version only; the CLI adds its actual source/compiler identity. Before using
-write_run in another application, fill those fields with that application's
-real build identity. Do not copy the CLI's identity into another producer.
+this for you, as does the Python binding. A bare library result identifies the
+core package's source fingerprint, version and compiler; the CLI and Python
+binding additionally identify their own Rust wrapper sources. Before using
+write_run in another application, include that application's real build identity
+in those fields. Do not copy the CLI's identity into another producer.
 The CLI remains the simplest complete publication API.
 
 ### Example 15: cancellation and job deadlines

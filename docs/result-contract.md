@@ -21,7 +21,8 @@ A failed step is not committed. The saved state is the last accepted state and t
 ## Files
 
 Source identity is package-safe: each crate fingerprints its Rust sources,
-manifest, build script and source lockfile; the CLI combines its fingerprint
+manifest and build script, plus the root workspace manifest and lockfile in a
+checkout or its own lockfile when packaged; the CLI combines its fingerprint
 with the core's. A direct library call identifies the core, while the Python
 binding also identifies its native wrapper. Cargo normalizes packaged manifests
 and lockfiles, so registry and checkout builds can have different fingerprints.

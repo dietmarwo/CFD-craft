@@ -1,72 +1,84 @@
-"""Fail before packaging on inconsistent versions, names or local dependencies."""
+"""Fail before packaging on inconsistent versions, crate metadata or lockfiles.
 
-import argparse
+Checks what `scripts/package_version.py` checks (the three version sources
+agree), plus: every workspace member is publishable, inherits the workspace
+version, ships a README, a LICENSE identical to the root one and a description;
+path dependencies between the crates name the same version; and every lockfile
+that contains a CFD-craft crate records that version. Prints a JSON summary.
+Failures are reported as `CFD-R001 release.<field>` (docs/diagnostics.md).
+"""
+
+import importlib.util
 import json
 from pathlib import Path
+import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+LOCKFILES = [
+    "Cargo.lock",
+    "bindings/python/Cargo.lock",
+    "integrations/fcmaes-cfd-worker/Cargo.lock",
+]
 
 
 def read(path):
-    return tomllib.loads((ROOT / path).read_text())
+    return tomllib.loads((ROOT / path).read_text(encoding="utf-8"))
 
 
-def require(value, message):
+def require(value, field, message):
     if not value:
-        raise RuntimeError(message)
+        sys.exit(f"CFD-R001 release.{field}: {message}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version")
-    args = parser.parse_args()
+    spec = importlib.util.spec_from_file_location(
+        "package_version", ROOT / "scripts/package_version.py"
+    )
+    versions = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(versions)
+    python_version = versions.versions()  # exits when the sources disagree
     root = read("Cargo.toml")
     version = root["workspace"]["package"]["version"]
-    python = read("pyproject.toml")["project"]
-    binding = read("bindings/python/Cargo.toml")["package"]
-    require(
-        version == python["version"] == binding["version"],
-        "Rust/Python version mismatch",
-    )
-    require(
-        args.version is None or args.version == version, "release/tag version mismatch"
-    )
     names = []
     for member in root["workspace"]["members"]:
         manifest = read(member + "/Cargo.toml")
-        pkg = manifest["package"]
-        require(pkg.get("publish") is not False, "public crate has publish=false")
+        package = manifest["package"]
+        name = package["name"]
+        field = f"{name}"
+        require(package.get("publish") is not False, field, "publish = false")
         require(
-            pkg.get("version") == {"workspace": True}, "member version must inherit"
+            package.get("version") == {"workspace": True},
+            field + ".version",
+            "must inherit the workspace version",
         )
-        require((ROOT / member / "README.md").is_file(), "missing packaged readme")
+        require(package.get("description"), field + ".description", "missing")
+        require((ROOT / member / "README.md").is_file(), field + ".readme", "missing")
         require(
             (ROOT / member / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes(),
-            "license drift",
+            field + ".license",
+            "differs from the root LICENSE",
         )
-        for name, dep in manifest.get("dependencies", {}).items():
+        for dep_name, dep in manifest.get("dependencies", {}).items():
             if isinstance(dep, dict) and dep.get("workspace"):
-                dep = root["workspace"]["dependencies"][name]
+                dep = root["workspace"]["dependencies"][dep_name]
             if isinstance(dep, dict) and "path" in dep:
                 require(
                     dep.get("version") == version,
-                    "unversioned/mismatched path dependency: " + name,
+                    f"{name}.dependencies.{dep_name}",
+                    f"path dependency must name version {version}",
                 )
-        names.append(pkg["name"])
-    for lock in [
-        "Cargo.lock",
-        "bindings/python/Cargo.lock",
-        *[
-            str(p.relative_to(ROOT))
-            for p in (ROOT / "integrations").glob("*/Cargo.lock")
-        ],
-    ]:
-        packages = read(lock)["package"]
-        for pkg in packages:
-            if pkg["name"] in names + [binding["name"]] and "source" not in pkg:
-                require(pkg["version"] == version, "stale first-party lockfile version")
-    print(json.dumps({"passed": True, "version": version, "crates": names}, indent=2))
+        names.append(name)
+    first_party = set(names) | {read("bindings/python/Cargo.toml")["package"]["name"]}
+    for lock in LOCKFILES:
+        for package in read(lock)["package"]:
+            if package["name"] in first_party and "source" not in package:
+                require(
+                    package["version"] == version,
+                    f"lockfile.{lock}",
+                    f"records {package['name']} {package['version']}",
+                )
+    print(json.dumps({"version": python_version, "crates": names}))
 
 
 if __name__ == "__main__":

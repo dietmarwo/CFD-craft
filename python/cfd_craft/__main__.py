@@ -35,7 +35,7 @@ def main():
         result = (
             error.report
             if isinstance(error, CfdError) and error.report
-            else {"error": str(error)}
+            else {"error": f"CFD-P001 python.{args.command}: {error}"}
         )
         status = 1
     print(json.dumps(result, indent=2, allow_nan=False))

@@ -1,4 +1,5 @@
 //! Thin JSON bridge to the same preflight and solver used by the native CLI.
+#![forbid(unsafe_code)]
 use cfd_craft::{
     case::{Case, hash_bytes},
     input,
@@ -10,10 +11,23 @@ use pyo3::{
     prelude::*,
 };
 use std::{
+    any::Any,
     path::PathBuf,
-    sync::{Arc, atomic::Ordering, mpsc},
-    time::Duration,
+    sync::{Arc, Mutex, atomic::Ordering, mpsc},
+    time::{Duration, Instant},
 };
+
+/// The cancel file is polled at most this often (each solver check would
+/// otherwise stat the file).
+const CANCEL_POLL: Duration = Duration::from_millis(20);
+
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown panic payload".into())
+}
 
 create_exception!(
     _native,
@@ -59,7 +73,7 @@ fn check_json(py: Python<'_>, case: Vec<u8>) -> String {
 
 #[pyfunction]
 #[pyo3(signature = (case, cancel_file=None))]
-fn simulate_json(py: Python<'_>, case: Vec<u8>, cancel_file: Option<String>) -> PyResult<String> {
+fn simulate_json(py: Python<'_>, case: Vec<u8>, cancel_file: Option<PathBuf>) -> PyResult<String> {
     // Validate bounded wall time before constructing Duration; also refuse host
     // memory exactly as the native CLI does, before allocating solver fields.
     let case = py
@@ -73,9 +87,17 @@ fn simulate_json(py: Python<'_>, case: Vec<u8>, cancel_file: Option<String>) -> 
             Ok(case)
         })
         .map_err(NativeError::new_err)?;
-    let cancel = cancel_file.map(PathBuf::from);
+    let last_poll = Mutex::new(None::<Instant>);
     let control = Arc::new(Control::with_poll(case.run.wall_time_limit_s, move || {
-        if cancel.as_ref().is_some_and(|p| p.exists()) {
+        let Some(path) = cancel_file.as_ref() else {
+            return Ok(());
+        };
+        let mut last = last_poll.lock().unwrap_or_else(|e| e.into_inner());
+        if last.is_some_and(|t| t.elapsed() < CANCEL_POLL) {
+            return Ok(());
+        }
+        *last = Some(Instant::now());
+        if path.exists() {
             Err("cancelled".into())
         } else {
             Ok(())
@@ -124,7 +146,13 @@ fn simulate_json(py: Python<'_>, case: Vec<u8>, cancel_file: Option<String>) -> 
     }
     match (value, joined) {
         (Some(value), Ok(())) => value.map_err(NativeError::new_err),
-        _ => Err(PyRuntimeError::new_err("CFD-craft worker thread panicked")),
+        (_, Err(payload)) => Err(PyRuntimeError::new_err(format!(
+            "CFD-P001 python.worker: the solver thread panicked: {}",
+            panic_message(payload.as_ref())
+        ))),
+        (None, Ok(())) => Err(PyRuntimeError::new_err(
+            "CFD-P001 python.worker: the solver thread ended without a result",
+        )),
     }
 }
 

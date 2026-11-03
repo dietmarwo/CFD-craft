@@ -44,9 +44,8 @@ grids and GPU execution are outside the implemented native API.
 | Run optimization jobs | Optional `fcmaes-cfd-worker` through optimization-jobs | Fallible simulations, job envelopes and optimizer evidence |
 | Coordinate a campaign | experiment-craft | Scheduling and dependencies over existing job envelopes |
 
-The optional [Python package](PYTHON.md) is prepared for `pip install cfd-craft`
-and can be installed from a built wheel before publication. Analysis and OpenFOAM
-modules remain source-checkout tools. The native CLI and library
+The optional [Python package](PYTHON.md) installs with `pip install cfd-craft`.
+Analysis and OpenFOAM modules remain source-checkout tools. The native CLI and library
 do not require OpenFOAM. The external adapter starts separate executables;
 it does not link OpenFOAM into the MIT Rust library.
 
@@ -491,9 +490,10 @@ writer includes its executable hash. The raw input-file hash, normalized case
 hash, physics hash and initial-state hash express different identities.
 
 The CLI source fingerprint combines the core and CLI package fingerprints.
-Each covers its `src` Rust files, build script, manifest and lockfile: the
-workspace lockfile in a checkout, or the normalized lockfile inside a packaged
-crate. It does not traverse sibling checkouts or depend on example files.
+Each covers its `src` Rust files, build script and manifest, plus the root
+workspace's `Cargo.toml` and `Cargo.lock` in a checkout, or the normalized
+lockfile inside a packaged crate. It does not traverse sibling checkouts or
+depend on example files.
 Build identity and numerical equivalence need their own evidence.
 
 ### Example 11: require a numerical verdict explicitly
@@ -578,8 +578,8 @@ wall time without advancing those counters.
 
 ## Rust library API
 
-The package is `cfd-craft`; the Rust import name is `cfd_craft`. Use a path
-dependency to your reviewed checkout. There is no publication step required:
+The package is `cfd-craft`; the Rust import name is `cfd_craft`. Depend on a
+release from crates.io (`cfd-craft = "0.1"`) or on your reviewed checkout:
 
 ```toml
 [dependencies]

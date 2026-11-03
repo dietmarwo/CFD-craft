@@ -8,7 +8,10 @@ readme = "README.md"
 include = ["src/**", "Cargo.toml", "Cargo.lock", "build.rs", "README.md", "LICENSE"]
 build = "build.rs"
 repository.workspace = true
-description = "Command-line experiments and verified archives for CFD-craft"
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Command-line interface of CFD-craft: check, run, report and verify flow and dispersion cases with checksummed archives"
 
 [[bin]]
 name = "cfd-craft"

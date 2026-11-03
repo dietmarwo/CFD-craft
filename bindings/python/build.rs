@@ -15,6 +15,19 @@ fn collect(path: &Path, files: &mut Vec<PathBuf>) {
         }
     }
 }
+/// True when `workspace` is the CFD-craft root workspace that lists this crate.
+fn is_root_workspace(workspace: &Path, root: &Path) -> bool {
+    let Ok(manifest) = fs::read_to_string(workspace.join("Cargo.toml")) else {
+        return false;
+    };
+    let member = format!(
+        "crates/{}",
+        root.file_name().unwrap_or_default().to_string_lossy()
+    );
+    manifest.contains("[workspace]")
+        && manifest.contains(&format!("\"{member}\""))
+        && workspace.join("Cargo.lock").is_file()
+}
 fn main() {
     let root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let mut files = vec![root.join("Cargo.toml"), root.join("build.rs")];
@@ -37,18 +50,29 @@ fn main() {
         hash.update((bytes.len() as u64).to_le_bytes());
         hash.update(bytes);
     }
-    // Cargo puts its normalized lockfile inside a packaged crate. A checkout
-    // uses the workspace lockfile. Never traverse unrelated sibling sources.
+    // A packaged crate (or the separate binding workspace) carries its own
+    // lockfile. In a checkout the crate belongs to the root workspace, whose
+    // manifest (dependency features, release profile) and lockfile are part
+    // of the build, so both are hashed. Anything else is hashed as "no lock"
+    // rather than read from an unrelated directory.
     let local = root.join("Cargo.lock");
-    let lock = if local.is_file() {
-        local
+    let workspace = root.join("../..");
+    let inputs = if local.is_file() {
+        vec![local]
+    } else if is_root_workspace(&workspace, &root) {
+        vec![workspace.join("Cargo.toml"), workspace.join("Cargo.lock")]
     } else {
-        root.join("../../Cargo.lock")
+        Vec::new()
     };
-    println!("cargo:rerun-if-changed={}", lock.display());
-    let bytes = fs::read(&lock).expect("committed or packaged Cargo.lock");
-    hash.update((bytes.len() as u64).to_le_bytes());
-    hash.update(bytes);
+    if inputs.is_empty() {
+        hash.update(b"no-lockfile");
+    }
+    for p in inputs {
+        println!("cargo:rerun-if-changed={}", p.display());
+        let bytes = fs::read(&p).expect("workspace manifest or lockfile");
+        hash.update((bytes.len() as u64).to_le_bytes());
+        hash.update(bytes);
+    }
     println!("cargo:rustc-env=CFD_SOURCE_SHA={:x}", hash.finalize());
     let output = Command::new(std::env::var_os("RUSTC").unwrap())
         .arg("--version")

@@ -62,7 +62,7 @@ fine-grid and experimental-validation gates remain open.
 0.1.0 is therefore a research prototype with the verification evidence recorded above.
 The experimental package release is independent of physical qualification; a
 physically qualified canyon release still requires the grid study and measured data.
-See [release preparation](../RELEASING.md).
+See [RELEASING.md](../RELEASING.md).
 
 ## Numeric targets of the plan
 

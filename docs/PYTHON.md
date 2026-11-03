@@ -1,22 +1,21 @@
 # Native Python interface
 
-`cfd-craft` 0.1.0 is an optional Rust extension for Python 3.10 and newer.
-It is prepared for PyPI; preparation does not mean publication has occurred.
-The binding workspace uses Rust 1.88 and maturin 1.9.6. It adds no Python or
-OpenFOAM dependency to the Rust engine.
+`cfd-craft` is an optional Rust extension for Python 3.10 and newer. It adds no
+Python or OpenFOAM dependency to the Rust engine. Install a release from PyPI:
 
-## Install
+```sh
+python -m pip install cfd-craft
+```
 
-Before publication, from the repository root:
+Wheels exist for CPython 3.10+ (stable ABI) on Linux x86_64, Windows x64 and
+macOS x86_64 and arm64; elsewhere pip builds the source distribution, which
+needs Rust 1.88 or newer. To build from a checkout instead:
 
 ```sh
 python -m pip install maturin==1.9.6
 maturin build --release --locked --out dist
 python -m pip install dist/*.whl
 ```
-
-After publication: `python -m pip install cfd-craft==0.1.0`.
-Compatible wheels need no Rust installation. Building from the sdist needs Rust.
 
 ## Check and simulate
 
@@ -37,8 +36,14 @@ print(result["constituents"][0]["receptors_kg_m3"])
 
 Inputs may be dictionaries, JSON strings or bytes. Raw bytes preserve duplicate
 keys for native rejection. Unknown fields, trailing JSON and invalid budgets are
-rejected. `CfdError.diagnostics` holds native diagnostics with codes and field paths.
-Dictionary inputs use strict JSON serialization (`allow_nan=False`).
+rejected. `CfdError.diagnostics` holds native diagnostics with codes and field
+paths. Dictionary inputs use strict JSON serialization: NaN, infinity or a value
+JSON cannot represent is rejected as `CFD-P001 python.case`.
+
+`check` returns the native preflight report (validity and coded diagnostics).
+It runs the CLI's checks but omits the CLI's geometry evidence and its
+`{"check": ...}` wrapper, so `cfd-craft-python check` prints a different shape
+from native `cfd-craft check`.
 
 `simulate` returns the native summary schema from `describe()["result_schema"]`.
 The summary retains all checks, actual work, termination, assessment and
@@ -48,35 +53,41 @@ assessment is not physical validation. Cancelled, timed-out and iteration-limite
 runs retain their incomplete summaries.
 
 Calls release the GIL during solving. Each call owns its state and a Rayon pool
-bounded by `run.threads`; limit outer concurrency as well to avoid oversubscription.
-`simulate(case, cancel_file=Path("cancel"))` polls for a cancellation file.
-Ctrl-C in the main Python thread cancels and joins the worker, then raises
-`KeyboardInterrupt`. The same preflight estimates and host-memory refusal as the
-native CLI apply. Returning large field arrays is outside this initial API.
+bounded by `run.threads`; limit outer concurrency as well to avoid
+oversubscription. `simulate(case, cancel_file=Path("cancel"))` polls for a
+cancellation file (at most every 20 ms). Ctrl-C in the main Python thread
+cancels and joins the worker, then raises `KeyboardInterrupt`. Wall time, steps
+and threads are enforced as in the CLI. `run.memory_limit_mib` is a preflight
+estimate calibrated on the CLI process, not a limit on the Python process; the
+host-memory refusal reads `/proc/meminfo` and so applies on Linux only.
+Concurrent calls pass preflight independently. Returning large field arrays is
+outside this API.
 
 `python -m cfd_craft` (also `cfd-craft-python`) supports `describe`, `check CASE`
 and `simulate CASE [--cancel-file PATH]`. Exit codes are 0 for success, 1 for
 invalid input/execution errors and 2 for incomplete numerical evidence.
 
-Use the separately installed Rust CLI for checksummed archives, fields, restarts,
-preview and profiles. Existing subprocess workflows remain valid. The Python
-console script has a separate name so installing both interfaces cannot hide the
-native archive CLI.
+Use the Rust CLI (`cargo install cfd-craft-cli --locked`) for checksummed
+archives, fields, restarts, preview and profiles. Existing subprocess workflows
+remain valid. The Python console script has a separate name so installing both
+interfaces cannot hide the native archive CLI.
 
 ## Build identity and acceptance
 
-The Rust core, CLI and binding fingerprint their own Rust sources, manifests,
-build scripts and selected lockfile. CLI/binding identities combine their own
-fingerprint with the core's. A packaged crate uses its normalized Cargo.lock;
-a checkout uses its workspace lockfile. Source and packaged builds may therefore
-have different identities. Numerical fields are compared independently of build
-identity and elapsed time. The Python wrapper version is the binding version.
+The Rust core, CLI and binding fingerprint their own Rust sources, manifest and
+build script plus the lockfile they build with: a packaged crate (and the
+binding's own workspace) its own `Cargo.lock`; a checkout crate the root
+workspace's `Cargo.toml` and `Cargo.lock`. The CLI and binding identities
+combine their own fingerprint with the core's. Source and packaged builds can
+therefore have different identities. Numerical fields are compared
+independently of build identity and elapsed time. `cfd_craft.__version__` is
+the installed distribution version; `cfd_craft._native.__version__` the
+binding's Cargo version.
 
-`validation/check_installed.py` exercises strict parsing, diagnostics, concurrent
-call identity, incomplete work, cancellation and installed console scripts.
-`--binary PATH` also compares numerical summaries with the Rust CLI. Run the
-checker with `python -I` from outside the checkout, normally and under `-O`.
-`scripts/check_sdist.py` rebuilds an extracted source archive and repeats acceptance
-in a fresh environment. The release workflow additionally tests Linux x86_64,
-macOS arm64 and Windows x86_64 wheels on Python 3.10, 3.12 and 3.14; local Linux
-checks alone do not establish those other-platform results.
+`validation/check_installed.py` exercises strict parsing, diagnostics,
+concurrent call identity, incomplete work, cancellation by file and by Ctrl-C
+during a long run (each must stop it within seconds), and the installed console
+script. `--binary PATH` also compares numerical summaries with the Rust CLI.
+Run the checker with `python -I` from outside the checkout, normally and under
+`-O`. The release workflow runs it for every wheel on CPython 3.10 and 3.14 and
+for the source distribution; see [RELEASING.md](../RELEASING.md).

@@ -1,82 +1,120 @@
-# Release preparation: 0.1.0
+# Releasing
 
-The native solver is a research prototype. Experimental canyon validation,
-measured-data access and successful finer-grid/domain evidence remain open.
-An experimental package release does not claim physical qualification.
+One tag publishes every registry artifact with the workspace version:
 
-The manifests and workflows prepare a release; they do not assert that packages
-have been published. The repository's full CI remains a prerequisite. Run all
-checks from a clean checkout with committed lockfiles. Do not rewrite historical
-measurement versions or relax scientific acceptance thresholds for packaging.
+| Registry | Package | Workflow |
+|---|---|---|
+| PyPI | `cfd-craft` (abi3 wheels for Linux x86_64, Windows x64, macOS x86_64 and arm64, plus the source distribution) | `python-release.yml` |
+| crates.io / docs.rs | `cfd-craft`, `cfd-craft-cli` (binary `cfd-craft`) | `publish-crates.yml` |
 
-## Local acceptance
+The Python binding (`bindings/python`, Rust 1.88) and the optional
+`fcmaes-cfd-worker` are separate workspaces with `publish = false`. The version
+is set in `[workspace.package]` of `Cargo.toml`, in `[package]` of
+`bindings/python/Cargo.toml` and in `pyproject.toml`;
+`scripts/package_version.py` fails when they disagree (Cargo's `0.2.0-dev.1`
+equals Python's `0.2.0.dev1`). `scripts/check_release.py` adds the crate
+checks: publishable members inheriting the version, a description, a README and
+a LICENSE identical to the root one, versioned path dependencies, and the
+version recorded in every lockfile that contains a CFD-craft crate. Both report
+failures as `CFD-R001 release.<field>`. Publication is irreversible: never
+reuse a version. MIT project licensing does not relicense dependencies or
+reference data.
+
+A package release is not physical qualification. 0.1.0 is a research
+prototype: experimental canyon validation (blocked by access to raw benchmark
+data) and a successful fine-grid resolution study remain open.
+
+## One-time setup
+
+1. Create a GitHub environment named `release`. Restrict its deployment
+   branches and tags to `v*` tags and, if releases should need approval, add a
+   required reviewer: the environment holds the crates.io token.
+2. PyPI: create a pending Trusted Publisher for project `cfd-craft`: owner
+   `dietmarwo`, repository `CFD-craft`, workflow `python-release.yml`,
+   environment `release`. The first tag then creates the project.
+3. crates.io: the first version must be published with an API token, because
+   crates.io accepts a Trusted Publisher only for an existing crate. On
+   crates.io, Account Settings → API Tokens, create a token with the scopes
+   `publish-new` and `publish-update`, restricted to `cfd-craft*`, with a short
+   expiry, and add it as the secret `CARGO_REGISTRY_TOKEN` of the `release`
+   environment. The tag then publishes `cfd-craft` and `cfd-craft-cli` in that
+   order, skipping versions already on crates.io, so rerunning the job
+   completes a partial upload. A tag run without a token and without Trusted
+   Publishing fails instead of skipping. After the first upload, delete the
+   secret, revoke the token, configure a Trusted Publisher for each crate
+   (owner `dietmarwo`, repository `CFD-craft`, workflow `publish-crates.yml`,
+   environment `release`) and set the repository variable
+   `CRATES_IO_TRUSTED_PUBLISHING` to `true`.
+
+## Qualification before a release
+
+From a clean checkout with committed lockfiles:
+
+1. Run fmt, clippy, the Rust tests and the Python CLI tests in normal and
+   optimized mode; `python3 scripts/check_release.py`.
+2. Reproduce the analytic flow/transport, cavity, independent sparse-reference
+   and empty-ABL results.
+3. Reproduce the canonical canyon smoke and sensitivity cases. Keep every
+   failed refinement case.
+4. Record the actual executable and source fingerprints, compiler,
+   initial-state identity and dependency versions.
+5. Check the input/output schemas and all documented examples.
+6. Build and test the optional worker independently and check actual runner
+   result states.
+7. Package the crates and the Python distribution:
 
 ```sh
-python scripts/check_release.py --version 0.1.0
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --release --workspace --locked
+cargo publish -p cfd-craft -p cfd-craft-cli --dry-run --locked
 python -m pip install maturin==1.9.6
 maturin build --release --locked --out dist
-python -m pip install dist/*.whl
-python -I validation/check_installed.py --output installed.json
-python -I -O validation/check_installed.py --output installed-optimized.json
-diff installed.json installed-optimized.json
-maturin sdist --out dist
-python scripts/check_sdist.py dist/*.tar.gz --output release-check/sdist
+python -m venv /tmp/cfd-check && /tmp/cfd-check/bin/python -m pip install dist/*.whl
+cd /tmp && /tmp/cfd-check/bin/python -I /path/to/CFD-craft/validation/check_installed.py --output installed.json
 ```
 
-Use Python 3.12 for the release scripts. Also run the installed checker from a
-directory outside the checkout. The sdist script does this in a fresh environment.
-The extracted sdist contains its own source, lockfiles and installed checker.
+The dry run packages both crates and builds each from its own archive (current
+stable Cargo stages the unpublished dependency); CI runs `cargo package
+--workspace --locked` on every push. A packaged crate carries its own normalized
+`Cargo.lock`, so its source fingerprint differs from a checkout build's. Builds
+from crates.io use Cargo's default release profile instead of the workspace's
+thin-LTO profile: numerical results are the same, timings can differ from
+[validation/RESULTS.md](validation/RESULTS.md).
 
-Use current stable Cargo for multi-crate packaging:
+`publish-crates.yml` runs the Rust checks and the dry run on pull requests that
+touch the crates and on every tag. `python-release.yml` builds the four wheels
+and the source distribution and runs `validation/check_installed.py` outside the
+checkout on CPython 3.10 and 3.14, normally and under `-O`, on pull requests
+that touch the packaging, manually and on tags; only a tag publishes.
 
-```sh
-cargo +stable package --workspace --locked
+Before a physically validated canyon release, additionally acquire authorized
+measured data, reconstruct the exact setup, freeze the sample/threshold
+protocol before held-out evaluation, and obtain successful grid/domain studies
+with uncertainty appropriate to the claimed effect.
+
+## Tag and publish
+
+Merge the release pull request, then GitHub → Releases → Draft a new release →
+new tag `vX.Y.Z` on `main` → publish. The tag push starts `python-release.yml`
+and `publish-crates.yml`; both refuse a tag that does not equal `v` plus the
+version. From a computer:
+
+```bash
+version="$(python3 scripts/package_version.py)"
+git tag -a "v$version" -m "Release CFD-craft $version"
+git push origin "v$version"
 ```
 
-This stages the mutually dependent workspace crates before verification. Older
-Cargo versions may try to resolve the unpublished dependency on crates.io;
-that packaging-tool limitation does not change the engine MSRV.
-The `.crate` files contain normalized manifests, licenses, package readmes and
-buildable sources. Fixture-based regression suites run from the repository;
-the crate archives are verified with Cargo's independent build step.
+Publication is not atomic across registries. If one workflow fails, inspect
+the registry versions and rerun only that workflow; never bump or republish a
+version blindly.
 
-## Build matrix and publication
+## Post-release verification
 
-`.github/workflows/release.yml` is manual. Dispatch with `version=0.1.0` and
-`publish=false` first. It runs the full existing CI, Cargo package verification,
-sdist round-trip and installed acceptance for Linux x86_64, macOS arm64 and
-Windows x86_64 on Python 3.10, 3.12 and 3.14. Linux wheels use manylinux2014.
-The ABI3 tag is a compatibility claim to test, not evidence of every platform.
-Download the source, wheel and acceptance artifacts and review the logs.
+```bash
+python -m venv /tmp/cfd-craft-check
+/tmp/cfd-craft-check/bin/python -m pip install cfd-craft
+cd /tmp && /tmp/cfd-craft-check/bin/python -I /path/to/CFD-craft/validation/check_installed.py --output installed.json
+cargo install cfd-craft-cli --version "$version" --locked && cfd-craft describe
+```
 
-For publication, the repository owner must configure:
-
-- PyPI's pending trusted publisher for `cfd-craft`, owner `dietmarwo`, repository
-  `CFD-craft`, workflow `release.yml`, GitHub environment `pypi`.
-- A `crates-io` GitHub environment with `CARGO_REGISTRY_TOKEN`, scoped to the
-  intended packages. Reserve/check ownership at release time; availability checks
-  do not reserve registry names.
-
-Commit the reviewed changes and lockfiles, tag that commit `v0.1.0`, push it,
-then dispatch **that tag** with `publish=true`. The workflow refuses publication
-from a branch or mismatching version, and uploads only after all prerequisite
-jobs pass. PyPI uses short-lived OIDC credentials. Crates are published in order:
-cfd-craft, cfd-craft-cli. Cargo waits for index visibility between uploads.
-
-Publication is not atomic across registries. If an upload partially succeeds,
-inspect registry versions before continuing; do not bump or republish blindly.
-After publication, smoke-test fresh `pip install` and `cargo install --locked`
-from the registries. Create the GitHub release using [RELEASE_NOTES.md](RELEASE_NOTES.md)
-and attach artifacts/checksums. A local candidate bundle is not a published release.
-
-## Provenance and scope
-
-Record commit, toolchain, archive SHA-256 and installed acceptance reports.
-Packaged Cargo.lock files are normalized by Cargo and can differ from workspace
-lockfiles. Build identities correctly reflect the selected file. Numerical
-comparisons exclude elapsed time and build provenance, not failed simulations.
-Optional integrations remain source packages, with independent lockfiles and
-checks. MIT project licensing does not relicense dependencies or reference data.
+Check the PyPI page (its description is `python/README.md`), the crate pages
+and docs.rs.

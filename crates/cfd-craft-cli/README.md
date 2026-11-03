@@ -1,11 +1,28 @@
 # cfd-craft-cli
 
-CFD-craft 0.1.0: a CPU research solver for incompressible flow and passive-gas
-dispersion. Experimental canyon validation remains open. Package installation
-does not establish mesh independence or physical qualification.
+The native command-line interface of
+[CFD-craft](https://github.com/dietmarwo/CFD-craft), installed as `cfd-craft`:
 
-Full examples, model cards and evidence: <https://github.com/dietmarwo/CFD-craft>.
-Use `cargo install cfd-craft-cli --version 0.1.0 --locked` for the native CLI
-after publication, or `cfd-craft = "0.1.0"` for the Rust library.
+```sh
+cargo install cfd-craft-cli --locked
+cfd-craft describe
+cfd-craft check CASE.json
+cfd-craft run CASE.json --output NEW_DIR
+cfd-craft report NEW_DIR
+```
 
-The source repository contains the complete fixture-based test suite.
+Every command reads and writes JSON. `run` writes a checksummed archive (case,
+summary, geometry, fields, checkpoint) that `report` verifies; `check` reports
+coded diagnostics with JSON paths before anything runs; `preview`, `profile`
+and `verify` run coarsened previews, profiled runs and a pressure-solver
+verification fixture.
+
+The library is [`cfd-craft`](https://crates.io/crates/cfd-craft); the Python
+package is [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/). Version
+0.1.0 is a research prototype: experimental canyon validation and a successful
+fine-grid resolution study remain open, and numerical acceptance is not
+physical validation. Builds from crates.io use Cargo's default release profile
+rather than the repository's thin-LTO profile; numerical results are the same,
+timings can differ from the recorded ones. See the
+[repository](https://github.com/dietmarwo/CFD-craft) for the user manual and
+evidence. MIT licensed.

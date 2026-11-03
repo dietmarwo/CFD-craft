@@ -1,21 +1,15 @@
 # Changelog
 
-## 0.1.0 release preparation (not yet published)
-
-- Align registry metadata, versioned workspace dependencies, license/readme
-  contents and lockfiles; independently build package archives.
-- Add manual release automation with full-CI, installed-wheel and rebuilt-sdist
-  gates; publication requires the matching tag and registry configuration.
-- Add the in-process Python summary API and package-safe source fingerprints.
-- Retain existing numerical defaults, scientific qualification limits and
-  historical benchmark versions. See [release notes](RELEASE_NOTES.md).
-
 ## [Unreleased]
 
-First version, 0.1.0, a research prototype. Experimental canyon validation and a successful fine-grid resolution study remain open gates.
+## [0.1.0] - 2026-11-03
+
+First version, 0.1.0, a research prototype, released on crates.io (`cfd-craft`, `cfd-craft-cli`) and PyPI (`cfd-craft`). Experimental canyon validation and a successful fine-grid resolution study remain open gates; a package release is not physical qualification.
 
 ### Added
 
+- Releases (from the contributed release-preparation bundle, reviewed): publishable crates with versioned path dependencies, per-crate README and LICENSE; an optional PyO3 binding and Python package (`cfd_craft`: `check`, `simulate` with the GIL released, a bounded per-call Rayon pool, cancel file and Ctrl-C; console script `cfd-craft-python`) whose preflight is the CLI's, moved into the library as `cfd_craft::input`; `python-release.yml` (abi3 wheels for Linux, Windows and macOS plus the sdist, each checked by `validation/check_installed.py` on CPython 3.10 and 3.14) and `publish-crates.yml`, both publishing on a `v*` tag; `scripts/package_version.py` and `scripts/check_release.py`; CI builds the binding on Rust 1.88 and stable and packages both crates. Release-script failures are `CFD-R001 release.<field>`, Python binding failures `CFD-P001 python.<field>` (docs/diagnostics.md).
+- Source fingerprints are package-safe: each crate hashes its own sources, manifest and build script plus the root workspace manifest and lockfile in a checkout, or its packaged lockfile; the CLI and binding combine theirs with the core's. Library results now carry the core fingerprint and compiler instead of an empty identity. Fingerprints recorded before 0.1.0 (for example in validation/RESULTS.md) used the earlier definition.
 - [F1–F3 optimization tutorials](tutorials/optimization/README.md) (contributed by Astra): native LP versus BiteOpt and GP source allocation with fresh superposition replay, a finite sensor-coverage MIP with exhaustive and greedy checks, every coverage-optimal subset's rank and conditioning and held-out inversion, and coupled cavity design with frozen acceptance and two-grid fidelity gates (zero supported designs in both presets). F3's mean squared speed is the trapezoid volume mean of the staggered face velocities, the GP arm's seed and settings are explicit, and lesson failures report `CFD-T001 optimization.<field>`.
 - Implicit steady iteration with RANS and constituents (stages P5c, P5d): `implicit_projection` accepts `neutral_rans` (a variable-viscosity momentum matrix with lagged wall functions, then segregated implicit k and ε steps in delta form, profiled as `turbulence_solve`) and constituents (explicit SSPRK2 sub-steps within each outer iteration, at most 16). It keeps the explicit fixed point on the development canyon (round-off pair to 1.5e-10), the empty-ABL check in steady mode (`run_suite.py --abl-steady`), zero floor events, exact mass budgets and receptors, and accepts the 27k and 93k canyons; the predeclared tightening statistic fails for U on one decade, recorded ([results](validation/IMPLICIT_RANS_RESULTS.md)). CFD-E046 is removed; CFD-E047 now covers prescribed flow and `implicit_viscous` with RANS; CFD-E057 reports a singular k or ε correction system. `steady_algorithms.py --case canyon` runs the canyon campaign.
 - Ten performance iterations ([results](validation/PERFORMANCE_ITERATIONS_RESULTS.md)): seven bit-identical kernel changes pinned by a new kernel-signature regression, inexact inner projections and a non-binding pseudo-time cap as the implicit recipe, a CFL ramp capped at 5, and two-dimensional runs with one cell on a periodic axis (which also fixes the IC(0) factor for faces that join a cell to itself). With the recipe the 24² cavity is 6.8× and the canyon with its tracer 5.4× faster than before the iterations; the 27k canyon with its tracer takes 57.6 s against 2,974 s in the explicit mode. In the hosted paired cavity sweep (run 41361132558) native reaches the 0.01 target at 24² in 0.111× OpenFOAM's solver time and 0.119× its workflow time, more accurately (0.0054 against 0.0090). The accuracy sweep, `compare_backends.py`, `momentum_baseline.py` and the CI dispatch accept `pressure_relative_tolerance`, `max_time_step_s` and a `native_span` of 1.
@@ -54,3 +48,6 @@ First version, 0.1.0, a research prototype. Experimental canyon validation and a
 - Run archives with a manifest, a completion marker and `report` verification; an independent archived-field checker in Python.
 - Analytic and reference verification (periodic shear, Gaussian transport, Poiseuille, Couette, lid cavity, a SciPy sparse reference, an empty-ABL consistency check), source inversion and finite-canyon tutorials.
 - A command launcher for optimization-jobs and an optional native fcmaes simulation worker.
+
+[Unreleased]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dietmarwo/CFD-craft/releases/tag/v0.1.0

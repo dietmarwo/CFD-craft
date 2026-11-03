@@ -10,12 +10,23 @@ requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "python/README.md"
-classifiers = ["Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Programming Language :: Rust", "Topic :: Scientific/Engineering :: Physics"]
+keywords = ["CFD", "computational fluid dynamics", "dispersion", "air quality", "simulation", "Rust"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
 
 [project.urls]
-Repository = "https://github.com/dietmarwo/CFD-craft"
 Documentation = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md"
 Issues = "https://github.com/dietmarwo/CFD-craft/issues"
+Changelog = "https://github.com/dietmarwo/CFD-craft/blob/main/CHANGELOG.md"
+"Optimization ecosystem" = "https://dietmarwo.github.io/optimization-jobs/"
+"AI agent guide" = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/ai-context.md"
+Repository = "https://github.com/dietmarwo/CFD-craft"
 
 [project.scripts]
 cfd-craft-python = "cfd_craft.__main__:main"
@@ -29,6 +40,4 @@ include = [
     { path = "Cargo.lock", format = "sdist" },
     { path = "LICENSE", format = "sdist" },
     { path = "crates/**/*", format = "sdist" },
-    { path = "cases/verification/periodic-tracer.json", format = "sdist" },
-    { path = "validation/check_installed.py", format = "sdist" },
 ]

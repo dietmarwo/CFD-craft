@@ -153,6 +153,8 @@ The [F1–F3 tutorials](../tutorials/optimization/README.md) provide runnable na
 
 ## Package interfaces
 
+Releases install with `pip install cfd-craft` (Python binding) and
+`cargo install cfd-craft-cli --locked` (CLI); the library crate is `cfd-craft`.
 The optional `bindings/python` workspace builds `cfd_craft` through maturin;
 the core workspace stays independent of PyO3. `check` shares native preflight,
 and `simulate` returns a native summary with the GIL released. The native CLI

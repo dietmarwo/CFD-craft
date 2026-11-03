@@ -10,6 +10,8 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import cfd_craft as cfd
@@ -17,7 +19,32 @@ import cfd_craft as cfd
 
 def require(ok, message):
     if not ok:
-        raise RuntimeError(message)
+        raise RuntimeError("CFD-R001 release.installed: " + message)
+
+
+def python_spelling(cargo):
+    """Cargo's `0.3.0-dev.1` is Python's `0.3.0.dev1`; releases are equal."""
+    release, _, pre = cargo.partition("-")
+    if not pre:
+        return release
+    kind, _, number = pre.partition(".")
+    return (
+        release + {"dev": ".dev", "alpha": "a", "beta": "b", "rc": "rc"}[kind] + number
+    )
+
+
+def long_running(case):
+    """A case that runs far longer than any bound below unless it is stopped."""
+    long_case = copy.deepcopy(case)
+    long_case["grid"]["cells"] = [32, 32, 32]
+    long_case["run"].update(
+        end_time_s=1.0e6,
+        max_steps=10_000_000,
+        wall_time_limit_s=120.0,
+        memory_limit_mib=512,
+    )
+    long_case["output"].update(fields=False, checkpoint=False)
+    return long_case
 
 
 def numerical(summary):
@@ -83,7 +110,11 @@ def main():
     }
     version = importlib.metadata.version("cfd-craft")
     require(
-        cfd.__version__ == version == cfd.describe()["version"], "version agreement"
+        cfd.__version__
+        == version
+        == python_spelling(cfd._native.__version__)
+        == python_spelling(cfd.describe()["version"]),
+        "version agreement",
     )
     require(cfd.check(case)["valid"], "valid fixture preflight")
     for bad in [
@@ -104,7 +135,9 @@ def main():
                 "structured native diagnostics",
             )
         else:
-            raise RuntimeError("simulate accepted invalid JSON")
+            raise RuntimeError(
+                "CFD-R001 release.installed: simulate accepted invalid JSON"
+            )
     invalid = copy.deepcopy(case)
     invalid["run"]["wall_time_limit_s"] = 0
     require(not cfd.check(invalid)["valid"], "invalid wall budget")
@@ -187,19 +220,38 @@ def main():
                 "native CLI parity",
             )
             checks.append("native_CLI_parity")
+    long_case = long_running(case)
+    require(cfd.check(long_case)["valid"], "valid long-running fixture")
+    # A cancel file created while the solver runs stops it promptly; a bridge
+    # that ignored it would run until the 120-second wall limit.
+    with tempfile.TemporaryDirectory() as tmp:
+        cancel = Path(tmp) / "cancel"
+        timer = threading.Timer(0.3, cancel.touch)
+        start = time.monotonic()
+        timer.start()
+        try:
+            stopped = cfd.simulate(long_case, cancel_file=cancel)
+        finally:
+            timer.cancel()
+            timer.join()
+        elapsed = time.monotonic() - start
+    require(
+        stopped["termination"] == "cancelled" and elapsed < 10,
+        f"cancel file during the run ({stopped['termination']}, {elapsed:.1f} s)",
+    )
+    checks.append("cancel_file_during_run")
     # A timer needs the GIL: this also detects a bridge that holds it throughout
-    # the solve. The child must join its native worker before it exits.
-    long_case = copy.deepcopy(case)
-    long_case["run"].update(end_time_s=1000.0, max_steps=100000, wall_time_limit_s=5.0)
-    code = """import _thread, json, threading
+    # the solve. Ctrl-C must cancel the solver, not wait for it to finish.
+    code = """import _thread, json, threading, time
 import cfd_craft
 case = json.loads(CASE_JSON)
-timer = threading.Timer(0.2, _thread.interrupt_main)
+timer = threading.Timer(0.3, _thread.interrupt_main)
+start = time.monotonic()
 timer.start()
 try:
     cfd_craft.simulate(case)
 except KeyboardInterrupt:
-    print('interrupted')
+    print('interrupted', time.monotonic() - start)
 else:
     raise RuntimeError('native solve did not raise KeyboardInterrupt')
 finally:
@@ -207,10 +259,12 @@ finally:
     timer.join()
 """.replace("CASE_JSON", repr(json.dumps(long_case)))
     interrupted = subprocess.run(
-        [sys.executable, "-I", "-c", code], capture_output=True, check=True, timeout=15
+        [sys.executable, "-I", "-c", code], capture_output=True, check=True, timeout=60
     )
+    word, seconds = interrupted.stdout.split()
     require(
-        interrupted.stdout.strip() == b"interrupted", "GIL release and Python signal"
+        word == b"interrupted" and float(seconds) < 10,
+        f"Ctrl-C cancels the solve ({interrupted.stdout!r})",
     )
     checks.append("GIL_release_and_interrupt")
     args.output.write_text(

@@ -43,3 +43,7 @@ The native worker varies two of three positive source multipliers and sets the t
 This is a small deterministic allocation example on prescribed flow. It demonstrates real simulator calls, not a surrogate of a known analytic objective. A 24-evaluation BiteOpt hard budget and a 24-evaluation GP budget are both followed by counted rechecks. One seed and small budgets are not an optimizer ranking.
 
 Agent prompts: [source inference](source-inference-prompt.md), [canyon](canyon-prompt.md), [optimization](optimization-prompt.md), [backstep resolution](backstep-resolution-prompt.md), [mapped refinement](refinement-campaign-prompt.md).
+
+## Optimization applications
+
+Continue with [F1–F3](optimization/README.md): fixed-flow source allocation by LP/BiteOpt/GP, sensor-coverage MIP versus identifiability, and coupled-flow design with fine-grid/withheld-condition replay. The [shared catalog](https://github.com/dietmarwo/optimization-jobs/blob/main/tutorials/simulators/README.md) adds CRN lessons and local campaign execution.

@@ -1,0 +1,117 @@
+{
+  "scope": "Executed teaching workflows, not optimizer-performance or physical-validation claims.",
+  "environment": {
+    "python": "3.12.14",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "fcmaes-rust": "0.2.1",
+    "crn-craft": "0.2.0.dev1",
+    "lp-ip-craft": "0.29.0",
+    "sqp-craft": "0.17.0",
+    "rust-core": "1.88.0",
+    "rust-diffsol": "1.89.0"
+  },
+  "checks": {
+    "smoke": {
+      "F1": {
+        "passed": true,
+        "checks": [
+          {
+            "name": "LP-vertex-optimum-and-fresh-full-CFD-superposition",
+            "passed": true
+          }
+        ],
+        "source_sha256": {
+          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
+          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
+          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
+          "sensors.py": "e50c4aba9c61479a94168b17fbbe20f5ad21b761c6b6e864851a09fc4f1e33c3",
+          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
+          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        }
+      },
+      "F2": {
+        "passed": false,
+        "checks": [],
+        "source_sha256": {
+          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
+          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
+          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
+          "sensors.py": "dd0b8571ba3d54613dca3105d2bb27685823f5899725c2fc9b64bc57583b03b9",
+          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
+          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        }
+      },
+      "F3": {
+        "passed": true,
+        "checks": [
+          {
+            "name": "bounded-search-all-failures-retained-and-fidelity-replayed",
+            "passed": true
+          }
+        ],
+        "source_sha256": {
+          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
+          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
+          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
+          "sensors.py": "e50c4aba9c61479a94168b17fbbe20f5ad21b761c6b6e864851a09fc4f1e33c3",
+          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
+          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        }
+      }
+    },
+    "study": {
+      "F1": {
+        "passed": true,
+        "checks": [
+          {
+            "name": "LP-vertex-optimum-and-fresh-full-CFD-superposition",
+            "passed": true
+          }
+        ],
+        "source_sha256": {
+          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
+          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
+          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
+          "sensors.py": "e50c4aba9c61479a94168b17fbbe20f5ad21b761c6b6e864851a09fc4f1e33c3",
+          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
+          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        }
+      },
+      "F2": {
+        "passed": true,
+        "checks": [
+          {
+            "name": "bounded-MIP-independent-primal-integrality-and-20-subset-control",
+            "passed": true
+          }
+        ],
+        "source_sha256": {
+          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
+          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
+          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
+          "sensors.py": "dd0b8571ba3d54613dca3105d2bb27685823f5899725c2fc9b64bc57583b03b9",
+          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
+          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        }
+      },
+      "F3": {
+        "passed": true,
+        "checks": [
+          {
+            "name": "bounded-search-all-failures-retained-and-fidelity-replayed",
+            "passed": true
+          }
+        ],
+        "source_sha256": {
+          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
+          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
+          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
+          "sensors.py": "dd0b8571ba3d54613dca3105d2bb27685823f5899725c2fc9b64bc57583b03b9",
+          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
+          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        }
+      }
+    }
+  }
+}

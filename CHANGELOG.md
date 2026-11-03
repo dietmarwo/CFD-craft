@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Simulator optimization tutorials
+
+- Added [F1–F3 optimization tutorials](tutorials/optimization/README.md): native LP versus BiteOpt/GP source allocation, finite sensor-coverage MIP with inversion checks, and coupled-flow design with frozen acceptance/refinement gates.
+
 First version, 0.1.0, a research prototype. Experimental canyon validation and a successful fine-grid resolution study remain open gates.
 
 ### Added

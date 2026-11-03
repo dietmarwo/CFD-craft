@@ -161,6 +161,10 @@ audit, but the Uy and k residuals stayed above the gate. See the
 [tutorial](tutorials/refinement-campaign-prompt.md) and
 [results](validation/REFINEMENT_RESULTS.md).
 
+## Optimization tutorials
+
+The [three optimization lessons](tutorials/optimization/README.md) derive a source-allocation LP and compare BiteOpt/GP, solve a sensor-coverage MIP with exhaustive checks, and optimize coupled cavity flow with frozen fidelity gates. They retain native results and independent field checks; a completed experiment can support zero designs.
+
 ## Ecosystem
 
 [optimization-jobs](https://github.com/dietmarwo/optimization-jobs) runs the CLI through a trusted command; CFD evidence stays in a separate CFD result artifact. The optional [fcmaes adapter](integrations/README.md) uses fallible, cancellable scalar simulations with hashed case inputs and existing evaluate/retry/surrogate profiles. [experiment-craft](https://github.com/dietmarwo/experiment-craft) can schedule those same command or optimizer envelopes.

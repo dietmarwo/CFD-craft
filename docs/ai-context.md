@@ -146,3 +146,7 @@ distinguishes steady acceptance from transient interval completion. See
 [remaining P2b–P6 work](../validation/PERFORMANCE_GAP_STATUS.md).
 The accuracy sweep supports an explicitly recorded native preconditioner;
 do not confuse a same-grid ratio with cost at matched accuracy.
+
+## Optimization applications
+
+The [F1–F3 tutorials](../tutorials/optimization/README.md) provide runnable native LP/MIP and global-search examples. F1 uses the existing prescribed-flow scalar worker for GP; F3 uses a bounded coupled-flow callback/command route and does not claim a stock coupled-flow application worker. See their separate numerical acceptance and fidelity gates.

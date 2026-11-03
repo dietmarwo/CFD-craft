@@ -1,62 +1,265 @@
 {
+  "schema_version": "cfd-craft.optimization-record/0.1",
   "scope": "Executed teaching workflows, not optimizer-performance or physical-validation claims.",
-  "environment": {
-    "python": "3.12.14",
-    "numpy": "2.3.5",
-    "scipy": "1.17.0",
-    "fcmaes-rust": "0.2.1",
-    "crn-craft": "0.2.0.dev1",
-    "lp-ip-craft": "0.29.0",
-    "sqp-craft": "0.17.0",
-    "rust-core": "1.88.0",
-    "rust-diffsol": "1.89.0"
-  },
-  "checks": {
+  "presets": {
     "smoke": {
       "F1": {
         "passed": true,
         "checks": [
-          {
-            "name": "LP-vertex-optimum-and-fresh-full-CFD-superposition",
-            "passed": true
-          }
+          "LP-vertex-optimum-and-fresh-full-CFD-superposition"
         ],
-        "source_sha256": {
-          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
-          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
-          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
-          "sensors.py": "e50c4aba9c61479a94168b17fbbe20f5ad21b761c6b6e864851a09fc4f1e33c3",
-          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
-          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        "budgets": {
+          "requested_search_calls": 16,
+          "threads": 1,
+          "seeds": {
+            "BiteOpt": 601,
+            "GP": 601
+          },
+          "gp_parameters": {
+            "candidates": 64,
+            "fit_iterations": 10,
+            "fit_restarts": 1,
+            "initial_points": 4
+          },
+          "concentration_scale_kg_m3": 1e-08,
+          "total_multiplier": 3,
+          "lower": [
+            0.1,
+            0.1,
+            0.2
+          ],
+          "upper": [
+            1.4,
+            1.4,
+            2.8
+          ]
+        },
+        "work": {
+          "full_field_solves": 25,
+          "accepted": 25,
+          "failed": 0,
+          "steps": 12500,
+          "pressure_iterations": 0
+        },
+        "results": {
+          "arms": [
+            {
+              "method": "LP",
+              "q": [
+                1.1049188644457395,
+                0.7901622711085226,
+                1.1049188644457382
+              ],
+              "replay_objective": 1.6662105873374249,
+              "superposition_max_error": 1.1102230246251565e-15,
+              "heldout_wind_objective": 1.5888503010247284,
+              "objective": 1.6662105873374258,
+              "reference_objective": 1.6662105873374253
+            },
+            {
+              "method": "BiteOpt",
+              "q": [
+                1.1309095256669133,
+                0.7711320201496916,
+                1.097958454183395
+              ],
+              "replay_objective": 1.6931439921125433,
+              "superposition_max_error": 1.1102230246251565e-15,
+              "heldout_wind_objective": 1.6161405931620225,
+              "search_objective": 1.6931439921125433,
+              "seed": 601,
+              "requested_evaluations": 16,
+              "actual_evaluations": 16
+            },
+            {
+              "method": "GP",
+              "q": [
+                1.1044748129131379,
+                0.810245468002199,
+                1.0852797190846633
+              ],
+              "replay_objective": 1.685547087516064,
+              "superposition_max_error": 1.5543122344752192e-15,
+              "heldout_wind_objective": 1.593036056609884,
+              "search_objective": 1.685547087516064,
+              "seed": 601,
+              "requested_evaluations": 16,
+              "native_work": {
+                "cancelled_evaluations": 0,
+                "cancelled_validation_evaluations": 0,
+                "evaluation_attempts": 16,
+                "evaluations": 16,
+                "failed_evaluations": 0,
+                "model_fits": 5,
+                "validation_evaluations": 1
+              }
+            }
+          ]
         }
       },
       "F2": {
-        "passed": false,
-        "checks": [],
-        "source_sha256": {
-          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
-          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
-          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
-          "sensors.py": "dd0b8571ba3d54613dca3105d2bb27685823f5899725c2fc9b64bc57583b03b9",
-          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
-          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        "passed": true,
+        "checks": [
+          "bounded-MIP-independent-primal-integrality-and-20-subset-check"
+        ],
+        "budgets": {
+          "candidate_sensors": 6,
+          "sensor_budget": 3,
+          "training_scenarios": 12,
+          "total_scenario_weight": 24.0,
+          "concentration_scale_kg_m3": 1e-08,
+          "noise_seed": 812,
+          "heldout_wind": 1.0,
+          "mismatch_wind": 1.3
+        },
+        "work": {
+          "full_field_solves": 11,
+          "accepted": 11,
+          "failed": 0,
+          "steps": 5800,
+          "pressure_iterations": 0
+        },
+        "results": {
+          "arms": [
+            {
+              "method": "MIP",
+              "sensors": [
+                4
+              ],
+              "coverage": 24.0,
+              "inversion": [
+                {
+                  "wind": 1.0,
+                  "rank": 1,
+                  "condition_number": null,
+                  "noiseless_relative_rate_error": 0.629054194206314,
+                  "noisy_relative_rate_error": 0.6271580313656706
+                },
+                {
+                  "wind": 1.3,
+                  "rank": 1,
+                  "condition_number": null,
+                  "noiseless_relative_rate_error": 0.5889050657490239,
+                  "noisy_relative_rate_error": 0.5970313482583397
+                }
+              ]
+            },
+            {
+              "method": "greedy",
+              "sensors": [
+                1,
+                0,
+                2
+              ],
+              "coverage": 24.0,
+              "inversion": [
+                {
+                  "wind": 1.0,
+                  "rank": 3,
+                  "condition_number": 2.0032158914573346,
+                  "noiseless_relative_rate_error": 3.908420657699596e-16,
+                  "noisy_relative_rate_error": 0.006992838206936413
+                },
+                {
+                  "wind": 1.3,
+                  "rank": 3,
+                  "condition_number": 2.0032158914573346,
+                  "noiseless_relative_rate_error": 0.10468577796087994,
+                  "noisy_relative_rate_error": 0.10085346678180195
+                }
+              ]
+            }
+          ],
+          "coverage_optimal_subsets": {
+            "optimum": 24.0,
+            "count": 35,
+            "by_size": {
+              "1": 2,
+              "2": 13,
+              "3": 20
+            },
+            "rank_deficient": 15,
+            "full_rank_condition_range": [
+              2.003215891457335,
+              259.4031608952658
+            ],
+            "interpretation": "Every listed subset is coverage-optimal; the MIP and greedy answers are two of them, chosen by solver and index order."
+          }
         }
       },
       "F3": {
         "passed": true,
         "checks": [
-          {
-            "name": "bounded-search-all-failures-retained-and-fidelity-replayed",
-            "passed": true
-          }
+          "bounded-search-all-failures-retained-and-fidelity-replayed"
         ],
-        "source_sha256": {
-          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
-          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
-          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
-          "sensors.py": "e50c4aba9c61479a94168b17fbbe20f5ad21b761c6b6e864851a09fc4f1e33c3",
-          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
-          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        "budgets": {
+          "requested_search_calls": 12,
+          "coarse": 8,
+          "fine": 16,
+          "training_viscosities": [
+            0.01,
+            0.015
+          ],
+          "holdout_viscosity": 0.0125,
+          "speed_bounds": [
+            0.6,
+            1.4
+          ],
+          "threads": 1,
+          "max_steps": 5000,
+          "wall_seconds_per_solve": 30,
+          "residual_tolerance": 1e-05,
+          "monitor_tolerance": 0.001,
+          "maximum_relative_energy_grid_change": 0.1,
+          "target_mean_square_speed": 0.04,
+          "mean_square_speed": "trapezoid volume mean of squared face-normal velocities"
+        },
+        "work": {
+          "full_field_solves": 45,
+          "accepted": 45,
+          "failed": 0,
+          "steps": 7590,
+          "pressure_iterations": 45540
+        },
+        "results": {
+          "arms": [
+            {
+              "method": "fixed",
+              "speed": 1.0,
+              "coarse_objective": 0.02386387472231062,
+              "fine_objective": 0.24839035847277569,
+              "relative_energy_grid_change": 0.3210187264295463,
+              "holdout_accepted": true,
+              "supported_at_requested_fidelity": false
+            },
+            {
+              "method": "sampling",
+              "speed": 1.0,
+              "coarse_objective": 0.02386387472231062,
+              "fine_objective": 0.24839035847277569,
+              "relative_energy_grid_change": 0.3210187264295463,
+              "holdout_accepted": true,
+              "supported_at_requested_fidelity": false
+            },
+            {
+              "method": "BiteOpt",
+              "speed": 1.0,
+              "coarse_objective": 0.02386387472231062,
+              "fine_objective": 0.24839035847277569,
+              "relative_energy_grid_change": 0.3210187264295463,
+              "holdout_accepted": true,
+              "supported_at_requested_fidelity": false
+            }
+          ],
+          "supported_designs": 0,
+          "distinct_designs": 1,
+          "ranking_changed": false,
+          "search": {
+            "requested_evaluations": 12,
+            "actual_evaluations": 12,
+            "seconds": 1.1479014429999097,
+            "usable_search_candidates": 12
+          }
         }
       }
     },
@@ -64,54 +267,268 @@
       "F1": {
         "passed": true,
         "checks": [
-          {
-            "name": "LP-vertex-optimum-and-fresh-full-CFD-superposition",
-            "passed": true
-          }
+          "LP-vertex-optimum-and-fresh-full-CFD-superposition"
         ],
-        "source_sha256": {
-          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
-          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
-          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
-          "sensors.py": "e50c4aba9c61479a94168b17fbbe20f5ad21b761c6b6e864851a09fc4f1e33c3",
-          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
-          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        "budgets": {
+          "requested_search_calls": 128,
+          "threads": 1,
+          "seeds": {
+            "BiteOpt": 601,
+            "GP": 601
+          },
+          "gp_parameters": {
+            "candidates": 64,
+            "fit_iterations": 10,
+            "fit_restarts": 1,
+            "initial_points": 4
+          },
+          "concentration_scale_kg_m3": 1e-08,
+          "total_multiplier": 3,
+          "lower": [
+            0.1,
+            0.1,
+            0.2
+          ],
+          "upper": [
+            1.4,
+            1.4,
+            2.8
+          ]
+        },
+        "work": {
+          "full_field_solves": 137,
+          "accepted": 137,
+          "failed": 0,
+          "steps": 68500,
+          "pressure_iterations": 0
+        },
+        "results": {
+          "arms": [
+            {
+              "method": "LP",
+              "q": [
+                1.1049188644457395,
+                0.7901622711085226,
+                1.1049188644457382
+              ],
+              "replay_objective": 1.6662105873374249,
+              "superposition_max_error": 1.1102230246251565e-15,
+              "heldout_wind_objective": 1.5888503010247284,
+              "objective": 1.6662105873374258,
+              "reference_objective": 1.6662105873374253
+            },
+            {
+              "method": "BiteOpt",
+              "q": [
+                1.1056719240476744,
+                0.7905522404401928,
+                1.1037758355121328
+              ],
+              "replay_objective": 1.6672491546603079,
+              "superposition_max_error": 1.7763568394002505e-15,
+              "heldout_wind_objective": 1.5898626576101673,
+              "search_objective": 1.6672491546603079,
+              "seed": 601,
+              "requested_evaluations": 128,
+              "actual_evaluations": 128
+            },
+            {
+              "method": "GP",
+              "q": [
+                1.10487005471203,
+                0.7899765035950093,
+                1.1051534416929607
+              ],
+              "replay_objective": 1.666449830352126,
+              "superposition_max_error": 1.5543122344752192e-15,
+              "heldout_wind_objective": 1.5890933091318493,
+              "search_objective": 1.666449830352126,
+              "seed": 601,
+              "requested_evaluations": 128,
+              "native_work": {
+                "cancelled_evaluations": 0,
+                "cancelled_validation_evaluations": 0,
+                "evaluation_attempts": 128,
+                "evaluations": 128,
+                "failed_evaluations": 0,
+                "model_fits": 42,
+                "validation_evaluations": 1
+              }
+            }
+          ]
         }
       },
       "F2": {
         "passed": true,
         "checks": [
-          {
-            "name": "bounded-MIP-independent-primal-integrality-and-20-subset-control",
-            "passed": true
-          }
+          "bounded-MIP-independent-primal-integrality-and-20-subset-check"
         ],
-        "source_sha256": {
-          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
-          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
-          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
-          "sensors.py": "dd0b8571ba3d54613dca3105d2bb27685823f5899725c2fc9b64bc57583b03b9",
-          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
-          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        "budgets": {
+          "candidate_sensors": 6,
+          "sensor_budget": 3,
+          "training_scenarios": 12,
+          "total_scenario_weight": 24.0,
+          "concentration_scale_kg_m3": 1e-08,
+          "noise_seed": 812,
+          "heldout_wind": 1.0,
+          "mismatch_wind": 1.3
+        },
+        "work": {
+          "full_field_solves": 11,
+          "accepted": 11,
+          "failed": 0,
+          "steps": 5800,
+          "pressure_iterations": 0
+        },
+        "results": {
+          "arms": [
+            {
+              "method": "MIP",
+              "sensors": [
+                4
+              ],
+              "coverage": 24.0,
+              "inversion": [
+                {
+                  "wind": 1.0,
+                  "rank": 1,
+                  "condition_number": null,
+                  "noiseless_relative_rate_error": 0.629054194206314,
+                  "noisy_relative_rate_error": 0.6271580313656706
+                },
+                {
+                  "wind": 1.3,
+                  "rank": 1,
+                  "condition_number": null,
+                  "noiseless_relative_rate_error": 0.5889050657490239,
+                  "noisy_relative_rate_error": 0.5970313482583397
+                }
+              ]
+            },
+            {
+              "method": "greedy",
+              "sensors": [
+                1,
+                0,
+                2
+              ],
+              "coverage": 24.0,
+              "inversion": [
+                {
+                  "wind": 1.0,
+                  "rank": 3,
+                  "condition_number": 2.0032158914573346,
+                  "noiseless_relative_rate_error": 3.908420657699596e-16,
+                  "noisy_relative_rate_error": 0.006992838206936413
+                },
+                {
+                  "wind": 1.3,
+                  "rank": 3,
+                  "condition_number": 2.0032158914573346,
+                  "noiseless_relative_rate_error": 0.10468577796087994,
+                  "noisy_relative_rate_error": 0.10085346678180195
+                }
+              ]
+            }
+          ],
+          "coverage_optimal_subsets": {
+            "optimum": 24.0,
+            "count": 35,
+            "by_size": {
+              "1": 2,
+              "2": 13,
+              "3": 20
+            },
+            "rank_deficient": 15,
+            "full_rank_condition_range": [
+              2.003215891457335,
+              259.4031608952658
+            ],
+            "interpretation": "Every listed subset is coverage-optimal; the MIP and greedy answers are two of them, chosen by solver and index order."
+          }
         }
       },
       "F3": {
         "passed": true,
         "checks": [
-          {
-            "name": "bounded-search-all-failures-retained-and-fidelity-replayed",
-            "passed": true
-          }
+          "bounded-search-all-failures-retained-and-fidelity-replayed"
         ],
-        "source_sha256": {
-          "allocation.py": "105f097b9d00a348d28c5a812a3bf8c481116314545e89efeea5ad1d812955ee",
-          "coupled.py": "dc27cd96f0b2a46b7f4248cec55daaa521f56e9a136732daebff3950bcebdf05",
-          "run.py": "81abbefb2790467e98fa24c775a801027db002b40c31488607a51ddab293bb95",
-          "sensors.py": "dd0b8571ba3d54613dca3105d2bb27685823f5899725c2fc9b64bc57583b03b9",
-          "support.py": "e595e63c4a4baf807220ae36e2a6f51b329abd3f83547c056b5859b0ab282cf7",
-          "test_science.py": "7751a0913a8565308abc01ba139ee1855fa29b7a959cf417195f20a3769b4488"
+        "budgets": {
+          "requested_search_calls": 64,
+          "coarse": 16,
+          "fine": 32,
+          "training_viscosities": [
+            0.01,
+            0.015
+          ],
+          "holdout_viscosity": 0.0125,
+          "speed_bounds": [
+            0.6,
+            1.4
+          ],
+          "threads": 2,
+          "max_steps": 5000,
+          "wall_seconds_per_solve": 30,
+          "residual_tolerance": 1e-05,
+          "monitor_tolerance": 0.001,
+          "maximum_relative_energy_grid_change": 0.1,
+          "target_mean_square_speed": 0.04,
+          "mean_square_speed": "trapezoid volume mean of squared face-normal velocities"
+        },
+        "work": {
+          "full_field_solves": 149,
+          "accepted": 149,
+          "failed": 0,
+          "steps": 28140,
+          "pressure_iterations": 168694
+        },
+        "results": {
+          "arms": [
+            {
+              "method": "fixed",
+              "speed": 1.0,
+              "coarse_objective": 0.24839035847277569,
+              "fine_objective": 0.43414117586921724,
+              "relative_energy_grid_change": 0.12050328338182567,
+              "holdout_accepted": true,
+              "supported_at_requested_fidelity": false
+            },
+            {
+              "method": "sampling",
+              "speed": 0.7999999999999999,
+              "coarse_objective": 0.0167705975395729,
+              "fine_objective": 0.014863250772039783,
+              "relative_energy_grid_change": 0.10372423008976789,
+              "holdout_accepted": true,
+              "supported_at_requested_fidelity": false
+            },
+            {
+              "method": "BiteOpt",
+              "speed": 0.8226038273954134,
+              "coarse_objective": 0.013650529140649452,
+              "fine_objective": 0.024752994432164374,
+              "relative_energy_grid_change": 0.10555719878949514,
+              "holdout_accepted": true,
+              "supported_at_requested_fidelity": false
+            }
+          ],
+          "supported_designs": 0,
+          "distinct_designs": 3,
+          "ranking_changed": true,
+          "search": {
+            "requested_evaluations": 64,
+            "actual_evaluations": 64,
+            "seconds": 15.854519810000056,
+            "usable_search_candidates": 64
+          }
         }
       }
     }
+  },
+  "versions": {
+    "fcmaes-rust": "0.2.1",
+    "lp-ip-craft": "0.29.0",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0"
   }
 }

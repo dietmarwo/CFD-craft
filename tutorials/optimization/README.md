@@ -7,7 +7,7 @@ selected design survives conditions or fidelity that were withheld from search.
 | Chapter | Main lesson | Optimization route |
 |---|---|---|
 | [F1 — source allocation](F1-allocation.md) | A fixed linear transport problem exposes an LP | Native LP, BiteOpt and native GP worker |
-| [F2 — sensor selection](F2-sensors.md) | Coverage and identifiability are different | Native bounded MIP, exhaustive and greedy controls |
+| [F2 — sensor selection](F2-sensors.md) | Coverage and identifiability are different | Native bounded MIP, exhaustive check and greedy baseline |
 | [F3 — coupled flow](F3-coupled-flow.md) | Accepted coarse solves may support no fine-grid design | Bounded coupled-flow callback, sampling and BiteOpt |
 
 Use the shared [setup and prompt catalog](https://github.com/dietmarwo/optimization-jobs/blob/main/tutorials/simulators/README.md).

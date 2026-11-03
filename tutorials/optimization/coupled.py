@@ -1,10 +1,15 @@
 """F3: acceptance-aware coupled cavity design with fidelity and condition replay."""
 
 import json
+import math
 import time
 import numpy as np
 import fcmaes_rust
 from support import ROOT, Runs, require, write
+
+
+TARGET = 0.04
+FIDELITY = 0.1
 
 
 def cavity(speed, viscosity, n, threads):
@@ -25,12 +30,39 @@ def cavity(speed, viscosity, n, threads):
     return case
 
 
-def field_objective(folder, speed):
+def mean_square_speed(velocity, case):
+    """Volume mean of |u|^2 from the staggered face-normal velocities.
+
+    The solver stores one normal velocity per face: all x faces, then y, then z
+    (the layout validation/check_fields.py checks). Per component, the squared
+    face values summed along each grid line and divided by its cell count are
+    the trapezoid rule; wall faces carry zero normal velocity. Dividing by a
+    third of the face count instead would weight the coarse grid differently
+    from the fine one.
+    """
+    require(not case["geometry"], "case.geometry", "the cavity has no solid cells")
+    cells = case["grid"]["cells"]
+    velocity = np.asarray(velocity, dtype=float)
+    offset, total = 0, 0.0
+    for axis in range(3):
+        dims = list(cells)
+        if case["boundaries"]["xyz"[axis]] != "periodic":
+            dims[axis] += 1
+        count = math.prod(dims)
+        total += float(np.sum(velocity[offset : offset + count] ** 2))
+        offset += count
+    require(
+        offset == len(velocity),
+        "fields.velocity",
+        f"{len(velocity)} face velocities for {offset} faces",
+    )
+    return total / math.prod(cells)
+
+
+def field_objective(folder, case, speed):
     fields = json.loads((folder / "fields.json").read_text())
-    # Components are stored separately; sum of squares is independent of layout.
-    velocity = np.asarray(fields["velocity"])
-    mean_energy = float(np.sum(velocity**2) / (len(velocity) / 3))
-    return ((mean_energy - 0.04) / 0.04) ** 2 + 0.02 * speed**2, mean_energy
+    energy = mean_square_speed(fields["velocity"], case)
+    return ((energy - TARGET) / TARGET) ** 2 + 0.02 * speed**2, energy
 
 
 def run(args, report):
@@ -39,6 +71,7 @@ def run(args, report):
     coarse, fine = (8, 16) if args.preset == "smoke" else (16, 32)
     budget = 12 if args.preset == "smoke" else 64
     training, holdout = [0.01, 0.015], 0.0125
+    numerics = cavity(1.0, training[0], coarse, args.threads)["numerics"]
     # Frozen before any solve. This is a teaching design objective, not physical validation.
     report["budgets"] = dict(
         requested_search_calls=budget,
@@ -50,10 +83,11 @@ def run(args, report):
         threads=args.threads,
         max_steps=5000,
         wall_seconds_per_solve=30,
-        residual_tolerance=1e-5,
-        monitor_tolerance=0.001,
-        maximum_relative_energy_grid_change=0.1,
-        target_mean_square_speed=0.04,
+        residual_tolerance=numerics["steady_residual_tolerance"],
+        monitor_tolerance=numerics["steady_monitor_tolerance"],
+        maximum_relative_energy_grid_change=FIDELITY,
+        target_mean_square_speed=TARGET,
+        mean_square_speed="trapezoid volume mean of squared face-normal velocities",
     )
     trace = []
 
@@ -63,7 +97,7 @@ def run(args, report):
             case = cavity(speed, viscosity, n, args.threads)
             r = runs(case, phase, phase)
             if r["accepted"]:
-                value, energy = field_objective(args.output / r["path"], speed)
+                value, energy = field_objective(args.output / r["path"], case, speed)
             else:
                 value, energy = float("inf"), None
             rows.append(
@@ -103,7 +137,11 @@ def run(args, report):
     answer = fcmaes_rust.optimize_bite(
         objective, [1.0], [0.6], [1.4], seed=613, max_evaluations=budget
     )
-    require(answer[2] == calls, "coupled objective call accounting differs")
+    require(
+        answer[2] == calls,
+        "search.actual_evaluations",
+        "coupled objective call accounting differs",
+    )
     choices = [
         ("fixed", baseline),
         ("sampling", min(samples, key=lambda r: r["objective"])),
@@ -127,7 +165,11 @@ def run(args, report):
                 / max(b["mean_square_speed"], 1e-12)
                 for a, b in zip(row["cases"], validation["cases"], strict=True)
             )
-        supported = bool(drift is not None and drift <= 0.1 and withheld["accepted"])
+        # The withheld viscosity is a convergence check only: it must be
+        # accepted, but its objective is reported, not gated.
+        supported = bool(
+            drift is not None and drift <= FIDELITY and withheld["accepted"]
+        )
         report["arms"].append(
             dict(
                 method=method,
@@ -150,6 +192,8 @@ def run(args, report):
         coarse_ranking=coarse_ranking,
         fine_ranking=fine_ranking,
         ranking_changed=coarse_ranking != fine_ranking,
+        # Equal speeds are one design; their order in a ranking is a tie.
+        distinct_designs=len({r["training"]["speed"] for r in report["arms"]}),
         supported_designs=sum(
             r["supported_at_requested_fidelity"] for r in report["arms"]
         ),

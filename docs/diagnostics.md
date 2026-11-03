@@ -8,6 +8,16 @@ replays that disagree. These are example/API checks, not new solver numerical
 tolerances. Rust library solver failures retain their existing diagnostics;
 the OpenFOAM example retains the adapter's external codes.
 
+The optimization lessons (`tutorials/optimization`) use
+`CFD-T001 optimization.<field>` when a lesson check fails: an unaccepted
+response, replay or held-out solve (the path names the solve or arm), a native
+LP/MIP status, primal or integrality check, an LP that disagrees with the
+independent vertex reference, a superposition replay outside its tolerance, an
+incomplete or failed GP job, inconsistent evaluation accounting, or a velocity
+field whose length does not match the grid's faces. These are lesson checks,
+not new solver tolerances; F3's fidelity gate is reported per design, not as a
+diagnostic.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that

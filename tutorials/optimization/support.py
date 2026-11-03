@@ -16,7 +16,13 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tutorials"))
-from common import receptor_values, require, run_case  # noqa: E402
+from common import receptor_values, run_case  # noqa: E402
+
+
+def require(condition, field, message):
+    """Fail a lesson check with CFD-T001 and the offending record path."""
+    if not condition:
+        raise ValueError(f"CFD-T001 optimization.{field}: {message}")
 
 
 def plain(value):
@@ -86,6 +92,7 @@ def source_case(threads=1, wind=1.0):
     case["flow"]["velocity_m_s"][0] = wind
     require(
         case["numerics"]["transport"] == "linear_upwind",
+        "case.numerics.transport",
         "superposition needs linear transport",
     )
     return case
@@ -103,7 +110,11 @@ def responses(case, runs, label):
     for i in range(3):
         unit = allocation(case, np.eye(3)[i])
         record = runs(unit, f"{label}-unit-{i}", "response_setup")
-        require(record["accepted"], f"unit response failed: {record['path']}")
+        require(
+            record["accepted"],
+            f"solves.{record['path']}",
+            "unit response solve was not accepted",
+        )
         columns.append(receptor_values(record, unit))
     return np.asarray(columns).T / 1e-8
 
@@ -147,7 +158,8 @@ def native_linear(
     )
     require(
         result.status == "optimal" and result.candidate is not None,
-        f"native linear solve: {result.status}",
+        "native.status",
+        f"native linear solve ended {result.status}",
     )
     x = np.asarray(result.candidate)
     activity = matrix @ x
@@ -158,9 +170,17 @@ def native_linear(
         float(np.max(np.asarray(row_lower) - activity)),
         float(np.max(activity - np.asarray(row_upper))),
     )
-    require(violation <= 1e-7, "native candidate failed independent primal check")
+    require(
+        violation <= 1e-7,
+        "native.primal_violation",
+        "native candidate failed the independent primal check",
+    )
     if kinds:
-        require(np.max(np.abs(x - np.round(x))) <= 1e-7, "MIP integrality check failed")
+        require(
+            np.max(np.abs(x - np.round(x))) <= 1e-7,
+            "native.candidate",
+            "MIP integrality check failed",
+        )
     return x, dict(
         status=result.status,
         objective=float(np.dot(c, x)),
@@ -190,21 +210,28 @@ def main(chapter, function):
         default=ROOT.parent / "optimization-jobs/target/release/optimization-run",
     )
     args = parser.parse_args()
-    require(1 <= args.threads <= 8, "threads must be in 1..8")
+    require(1 <= args.threads <= 8, "threads", "threads must be in 1..8")
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     report = dict(
         schema_version="cfd-craft.optimization-tutorial/0.1",
         chapter=chapter,
         preset=args.preset,
+        state="running",
         passed=False,
         checks=[],
         arms=[],
     )
     start = time.perf_counter()
     try:
+        sources = sorted(Path(__file__).parent.glob("*.py")) + [
+            ROOT / "tutorials/common.py",
+            ROOT / "validation/check_fields.py",
+            ROOT / "cases/verification/source-response.json",
+            ROOT / "cases/verification/lid-cavity.json",
+        ]
         report["source_sha256"] = {
-            p.name: digest(p) for p in sorted(Path(__file__).parent.glob("*.py"))
+            p.relative_to(ROOT).as_posix(): digest(p) for p in sources
         }
         report["binary_sha256"] = digest(args.binary)
         report["versions"] = {
@@ -212,11 +239,16 @@ def main(chapter, function):
             for name in ["fcmaes-rust", "lp-ip-craft", "numpy", "scipy"]
         }
         function(args, report)
-        require(all(c["passed"] for c in report["checks"]), "tutorial gate failed")
+        require(
+            all(c["passed"] for c in report["checks"]),
+            "checks",
+            "tutorial gate failed",
+        )
         report["passed"] = True
     except Exception as error:
         report["error"] = f"{type(error).__name__}: {error}"
     finally:
+        report["state"] = "complete"
         report["total_seconds"] = time.perf_counter() - start
         solves = report.get("solves", [])
         report["work"] = dict(

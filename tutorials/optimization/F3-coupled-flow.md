@@ -14,7 +14,11 @@ limited-upwind momentum advection with the van Leer limiter, and multigrid
 pressure preconditioning. There are no masks or new physics models.
 
 The teaching objective targets mean squared fluid speed `0.04 m²/s²`:
-`((mean_square_speed-0.04)/0.04)^2 + 0.02*lid_speed^2`. Minimize its worst value
+`((mean_square_speed-0.04)/0.04)^2 + 0.02*lid_speed^2`. The solver returns one
+normal velocity per cell face (a staggered grid). `mean_square_speed` sums the
+squared face velocities of each component and divides by the number of cells,
+the trapezoid rule along every grid line with zero normal velocity at the
+walls. Minimize its worst value
 across the two training viscosities. This target is an illustrative design
 criterion, not a measured physical requirement or validation of a ventilation
 system.
@@ -35,8 +39,10 @@ The fixed and sampled baselines are additional evaluations, explicitly retained
 rather than hidden inside the optimizer budget.
 
 Before any search, freeze a maximum 5,000 steps and 30 seconds per native solve,
-residual tolerance `1e-5`, monitor tolerance `0.001` and a maximum 10% relative
-change in mean squared speed between grids. The parent subprocess timeout adds
+the case's residual tolerance `1e-5` and monitor tolerance `0.001` (read from
+`lid-cavity.json` and recorded), and a maximum 10% relative change in mean
+squared speed between grids. The 30-second wall limit makes acceptance depend
+on host load; record the host when comparing runs. The parent subprocess timeout adds
 a fixed allowance for output. These thresholds are not relaxed to obtain a
 successful design.
 
@@ -50,13 +56,17 @@ steps, pressure iterations and failure counts are reported.
 
 Re-evaluate each nominated baseline/search design on the fine grid at both
 training viscosities, then at the withheld viscosity. Require accepted native
-and independent checks and the predeclared grid-change threshold. The summary
-compares coarse and fine rankings, retains every failed case, and reports
-`supported_at_requested_fidelity` per design.
+and independent checks and the predeclared grid-change threshold. The withheld
+viscosity is a convergence check only: its solve must be accepted, and its
+objective is reported but not gated. The summary compares coarse and fine
+rankings, retains every failed case, and reports
+`supported_at_requested_fidelity` per design. `distinct_designs` counts the
+different lid speeds; designs with equal speeds are one design, and their order
+in a ranking is a tie, not a reversal.
 
-The delivered smoke run is a useful negative example: its native solves were
-accepted, but the coarse/fine energy changes exceeded 10%, so zero designs were
-supported. `passed: true` means the experiment and its checks completed; it
+The smoke preset is a useful negative example: its native solves are
+accepted, but the coarse/fine energy changes exceed 10% (about 32%), so zero
+designs are supported. `passed: true` means the experiment and its checks completed; it
 must not be read as `supported_designs > 0`. A numerical acceptance assessment
 also does not establish physical validation.
 

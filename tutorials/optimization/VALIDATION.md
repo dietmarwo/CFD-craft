@@ -1,37 +1,50 @@
-# Validation and implementation record
+# Validation record
 
-Implemented F1–F3 using existing numerical solvers, the native LP/MIP API, native
-BiteOpt and the advertised CFD GP worker. No transport, pressure or physical
-model was changed. [results/verified.json](results/verified.json) records versions,
-source identities and chapter gates; the combined bundle retains raw command
-artifacts, larger-preset summaries, figures and validation logs.
+F1–F3 use the existing numerical solvers, the native LP/MIP API, native
+BiteOpt and the CFD GP worker; no transport, pressure or physical model is
+changed by them. [results/verified.json](results/verified.json) holds the
+numbers below for one complete smoke and one complete study run of the
+committed lessons. [record.py](record.py) writes it from the runs' summaries
+and refuses incomplete or failed runs:
 
-| Check | Result |
+```bash
+python tutorials/optimization/record.py --smoke SMOKE_DIR --study STUDY_DIR \
+  --output tutorials/optimization/results/verified.json
+```
+
+| Check | Result (smoke and study) |
 |---|---|
-| F1 native LP versus independent vertex enumeration | Passed; normalized optimum about 1.6662105873 |
-| F1 fresh full-field superposition replay | Passed; maximum normalized receptor difference below 2e-15 in recorded runs |
-| F1 BiteOpt and native GP, smoke and study | Completed with fresh/changed-wind validation; not a solver-superiority claim |
-| F2 native MIP versus all 20 three-sensor subsets | Passed; both MIP and greedy covered weight 24 |
-| F2 identifiability control | MIP chose one sensor, rank 1; greedy chose three, rank 3 |
-| F3 smoke and study numerical/workflow checks | Passed; every native solve was retained and independently checked |
-| F3 separate fidelity gate | Zero supported designs in both presets; smoke grid changes about 35%, study about 12–14%, above the frozen 10% limit |
-| Four independent/negative Python unit checks | Passed normally and under `python -O` |
-| Core fmt, clippy with warnings denied, release workspace tests | Passed with locked dependencies |
-| Command-job execution and optimized-Python smoke route | Passed for all three chapters |
+| F1 native LP versus independent vertex enumeration | Agree; normalized optimum 1.6662105873 |
+| F1 fresh full-field superposition replay | Largest normalized receptor difference 1.1e-15 to 1.8e-15 for all three arms |
+| F1 BiteOpt and native GP (seed 601 each) | Completed with fresh and changed-wind replays; not a solver-superiority claim |
+| F2 native MIP versus all 20 three-sensor subsets | Both MIP and greedy cover weight 24, the optimum |
+| F2 coverage-optimal subsets | 35 subsets of at most three sensors reach 24 (2 single sensors, 13 pairs, all 20 triples); 15 are rank deficient, the full-rank ones have condition numbers 2.0 to 259 |
+| F2 held-out inversion | MIP: one sensor, rank 1; greedy: three sensors, rank 3, condition 2.0 |
+| F3 numerical and workflow checks | Every native solve accepted (45 smoke, 149 study) and independently checked |
+| F3 fidelity gate (10% change in mean squared speed) | Zero supported designs; smoke 32% (all three arms at lid speed 1.0), study 12.1% (fixed), 10.4% (sampling), 10.6% (BiteOpt) |
+| Eight Python unit and negative checks | Pass normally and under `python -O` |
 
-A rank-deficient inverse now reports nullity and a null full-inverse condition
-number separately from its observed-subspace condition. This prevents a
-one-row matrix's finite singular-value ratio from appearing to certify a
-three-source inverse. The final F2 check was repeated under optimized Python.
+F2 cannot separate the MIP from greedy: two single receptors already detect
+all twelve scenarios, so every three-sensor subset is coverage-optimal, and the
+rank contrast between the two answers comes from the solver's and greedy's tie
+order, not from the objective. That is the lesson's point: coverage optimality
+says nothing about identifiability. A rank-deficient inverse reports its nullity
+and a null full-inverse condition number, separately from the condition number
+of its observed subspace.
 
-F1 uses serial prescribed transport; only F3 exercises coupled pressure/momentum.
-F1's GP work counters are separate from full-field replay counts. All study
-presets were executed, but timings overlapped repository checks and establish
-no performance ranking. The figures report numerical quantities instead.
-F2 deliberately keeps the same small exact scenario design in both presets.
+F3 measures mean squared speed as the trapezoid volume mean of the staggered
+face velocities. Its study designs miss the 10% screen by 0.4 to 2.1 points;
+the gate is not relaxed. The withheld viscosity is a convergence check only.
+In smoke, sampling and BiteOpt return the fixed lid speed, so the three arms
+are one design.
+
+F1 uses serial prescribed transport; only F3 exercises coupled pressure and
+momentum. F1's GP work counters are separate from its full-field solve counts.
+Timings depend on host load and establish no performance ranking. F2 keeps the
+same small exact scenario design in both presets.
 
 The F3 negative result is part of the lesson. Accepted discrete solutions,
 two-grid agreement and physical validation are distinct. These fixtures do
-not qualify canyon/RANS predictions, masked multigrid, a new coupled-flow worker
-or real-world sensor placement. A future refinement study must retain the
-current failures and predeclare its next resolution and criteria.
+not qualify canyon/RANS predictions, masked multigrid, a coupled-flow worker or
+real-world sensor placement. A refinement study must retain the current
+failures and predeclare its next resolution and criteria.

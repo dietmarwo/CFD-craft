@@ -41,16 +41,20 @@ python tutorials/optimization/run.py F1 --preset study --output /tmp/f1-study
 ```
 
 For nondefault locations, supply `--binary`, `--worker` and `--runner` with
-absolute paths. The GP arm obtains the real worker's advertised
-`fcmaes.surrogate/1` example, uses the same input case and runs it through an
-isolated foreground node. It has one run, one concurrent proposal, one evaluation
-thread and a final native recheck. This is the current deterministic GP
-interface, not a noise-aware simulator extension.
+absolute paths. The GP arm sends an explicit `fcmaes.surrogate/1` payload
+(seed 601 like BiteOpt, four initial points, 64 candidates, ten fit iterations
+and one fit restart) for the same input case and runs it through an isolated
+foreground node. The worker's advertised example only confirms that the
+problem identity, dimension and bounds are the lesson's. It has one run, one
+concurrent proposal, one evaluation thread and a final native recheck. This is
+the current deterministic GP interface, not a noise-aware simulator extension.
 
 The smoke preset requests 16 BiteOpt and 16 GP objective evaluations; the study
 requests 128 each. Every BiteOpt evaluation runs full CFD and records its native
 and independent assessment. An unacceptable solve returns an unusable objective
-and remains in the report. The GP's native work manifest retains failed,
+and remains in the report. GP search evaluations are accepted by the worker's
+native steady assessment alone; the independent field check applies to the GP
+answer at the final replay, as it does to every arm. The GP's native work manifest retains failed,
 cancelled and validation evaluations; the chapter fails if that arm is incomplete
 or has failed/cancelled evaluations.
 
@@ -65,7 +69,8 @@ input, snapshots and result remain under `gp/`.
 
 Replay each chosen multiplier vector with a fresh full CFD run. Require steady
 discrete acceptance and the independent field checks. Compare all receptor
-values with `Aq` within the frozen normalized tolerance `1e-4 * max(1,max(Aq))`.
+values with `Aq` within the frozen normalized tolerance `1e-4 * max(1, r)`,
+where `r` is the replay's largest normalized receptor value.
 No replay may beat the independent LP optimum beyond the declared tolerance.
 The final replay fields make this more than a comparison of optimizer return
 values.

@@ -45,6 +45,7 @@ def selection(detection, weights, budget=3):
     optimum = max(v for _, v in exact)
     require(
         abs(coverage(detection, chosen, weights) - optimum) <= 1e-7,
+        "arms.MIP.coverage",
         "MIP differs from exhaustive optimum",
     )
     greedy = []
@@ -56,6 +57,38 @@ def selection(detection, weights, budget=3):
             )
         )
     return chosen, result, exact, greedy
+
+
+def optimal_subsets(detection, weights, a, budget=3):
+    """Every subset of at most `budget` sensors that reaches the coverage optimum.
+
+    Coverage is indifferent to which optimal subset is returned, so the rank and
+    conditioning of each one show what the coverage objective leaves to chance.
+    """
+    n = detection.shape[0]
+    optimum = max(
+        coverage(detection, s, weights)
+        for s in itertools.combinations(range(n), budget)
+    )
+    rows = []
+    for size in range(1, budget + 1):
+        for subset in itertools.combinations(range(n), size):
+            if abs(coverage(detection, subset, weights) - optimum) > 1e-7:
+                continue
+            matrix = a[list(subset)]
+            rank = int(np.linalg.matrix_rank(matrix))
+            rows.append(
+                dict(
+                    sensors=list(subset),
+                    rank=rank,
+                    condition_number=(
+                        float(np.linalg.cond(matrix))
+                        if rank == matrix.shape[1]
+                        else None
+                    ),
+                )
+            )
+    return optimum, rows
 
 
 def inversion(a, values, subset, truth):
@@ -132,11 +165,32 @@ def run(args, report):
     truth = np.array([0.7, 1.3, 0.4])
     base = source_case(1)
     heldout_matrix = responses(base, runs, "holdout-calibration")
+    optimum, optimal = optimal_subsets(detection, weights, heldout_matrix)
+    write(args.output / "optimal-subsets.json", optimal)
+    full = [r for r in optimal if r["condition_number"] is not None]
+    report["coverage_optimal_subsets"] = dict(
+        optimum=optimum,
+        count=len(optimal),
+        by_size={
+            size: sum(len(r["sensors"]) == size for r in optimal) for size in (1, 2, 3)
+        },
+        rank_deficient=sum(r["condition_number"] is None for r in optimal),
+        full_rank_condition_range=(
+            [
+                min(r["condition_number"] for r in full),
+                max(r["condition_number"] for r in full),
+            ]
+            if full
+            else None
+        ),
+        interpretation="Every listed subset is coverage-optimal; the MIP and greedy answers are two of them, chosen by solver and index order.",
+    )
     rng = np.random.default_rng(812)
+    # Wind 1.0 is the calibration wind (in-model); 1.3 is a model mismatch.
     for wind in [1.0, 1.3]:
         c = allocation(source_case(1, wind), truth)
         r = runs(c, f"heldout-{wind}", "holdout")
-        require(r["accepted"], "held-out source solve failed")
+        require(r["accepted"], f"solves.{r['path']}", "held-out source solve failed")
         data = np.asarray(receptor_values(r, c)) / 1e-8
         noise = rng.uniform(-noise_allowance, noise_allowance, len(data))
         for row in report["arms"]:
@@ -148,13 +202,15 @@ def run(args, report):
                     noisy=inversion(
                         heldout_matrix, data + noise, row["sensors"], truth
                     ),
+                    # Physical threshold on the noiseless field; training used
+                    # threshold + noise allowance so noisy data stay detected.
                     detection=bool(np.any(data[row["sensors"]] >= threshold)),
                     noise=noise,
                 )
             )
     report["checks"].append(
         dict(
-            name="bounded-MIP-independent-primal-integrality-and-20-subset-control",
+            name="bounded-MIP-independent-primal-integrality-and-20-subset-check",
             passed=True,
         )
     )

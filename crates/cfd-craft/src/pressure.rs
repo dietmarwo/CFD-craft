@@ -1,3 +1,22 @@
+//! The matrix-free pressure operator, its gauges, the PCG solve and the
+//! projection.
+//!
+//! The operator is the negated divergence of the face gradient on the fluid
+//! cells (`-div(grad p)` with [`Grid::divergence`] and [`Grid::gradient`]):
+//! symmetric positive semidefinite, with outlets as zero-pressure
+//! (Dirichlet) faces. A fluid component without an outlet has a constant
+//! nullspace; it is solved in the mean-zero subspace and needs a right-hand
+//! side with zero net flux (CFD-E031). [`project`] makes face velocities
+//! discretely divergence free with the same definitions.
+//!
+//! [`solve_scaled`] runs PCG with the grid's preconditioner (cached IC(0) by
+//! default, or [multigrid](crate::multigrid)) and accepts a solution only
+//! after recomputing its residual from the face definitions. Failures are
+//! `CFD-E031` (incompatible flux), `CFD-E032` (lost positive definiteness)
+//! and `CFD-E033` (iteration limit); multigrid adds `CFD-E034` (masked grid),
+//! `CFD-E035` and `CFD-E036`. A stop requested by the
+//! [`Control`] returns its `cancelled` or
+//! `wall_time_limit`.
 use crate::{
     Result,
     case::PressurePreconditioner,
@@ -6,9 +25,13 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::MutexGuard;
+/// Work and accuracy of one linear solve.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LinearInfo {
+    /// PCG iterations; 0 for a zero right-hand side.
     pub iterations: usize,
+    /// Recomputed residual norm relative to the norm of the compatible
+    /// right-hand side.
     pub relative_residual: f64,
 }
 
@@ -262,6 +285,11 @@ impl Operator {
     }
 }
 
+/// `y = A x` for the pressure operator, assembled face by face from the
+/// current grid coefficients: interior faces couple their two cells with
+/// weight `area / (distance * volume)`, outlet faces add the same weight to
+/// their cell's diagonal. Solid cells get zero. This is the independent
+/// product the solve's final residual check uses.
 pub fn apply(g: &Grid, x: &[f64], y: &mut [f64]) {
     y.fill(0.0);
     for f in &g.faces {
@@ -282,6 +310,9 @@ pub fn apply(g: &Grid, x: &[f64], y: &mut [f64]) {
         }
     }
 }
+/// Subtracts the mean of `x` over each fluid component without an outlet,
+/// in place: the gauge of the pressure field. Anchored components and solid
+/// cells are unchanged.
 pub fn center_nullspaces(g: &Grid, x: &mut [f64]) {
     for (id, m) in g.components.iter().enumerate() {
         if !g.anchored[id] {
@@ -292,6 +323,9 @@ pub fn center_nullspaces(g: &Grid, x: &mut [f64]) {
         }
     }
 }
+/// Solves `A x = b` to the relative tolerance `tol` within `max` PCG
+/// iterations: [`solve_scaled`] without a round-off scale, so a closed
+/// component's net flux is compared with `|b|`.
 pub fn solve(
     g: &Grid,
     b: &[f64],
@@ -423,6 +457,15 @@ fn projection_rhs(g: &Grid, u: &[f64], dt: f64) -> (Vec<f64>, Vec<f64>) {
     }
     (b, terms)
 }
+/// Projects the face velocities `u` onto the discretely divergence-free
+/// space at time step `dt`, in place, and adds the pressure correction to
+/// `p` (then re-centers its gauge).
+///
+/// It solves `A phi = -div(u) / dt`, subtracts `dt * grad(phi)` from `u` and
+/// adds `phi` to `p`. Only interior and outlet faces change; the caller
+/// reapplies fixed boundary velocities with
+/// [`Grid::enforce_velocity`](crate::grid::Grid::enforce_velocity). Errors
+/// are those of [`solve_scaled`]; `u` and `p` are unchanged on error.
 pub fn project(
     g: &Grid,
     u: &mut [f64],

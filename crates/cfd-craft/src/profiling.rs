@@ -3,6 +3,42 @@
 //! Inclusive phases nest; only exclusive times can be added. One collector can
 //! be shared by callers on different threads, with a separate stack per thread.
 //! No lock or clock read is required inside a numerical cell/PCG iteration.
+//!
+//! Enable it with [`Control::with_profiling`](crate::solver::Control::with_profiling)
+//! and read the [`Profile`] with
+//! [`Control::profile`](crate::solver::Control::profile) after the solve.
+//! The CLI's `profile` command writes the same record into its
+//! `cfd-craft.native-profile/0.1` envelope; its JSON schema is the
+//! `phase_profile_schema` of `cfd-craft describe`. See the
+//! [profiling guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PROFILING.md).
+//!
+//! ```
+//! # let json = r#"{"schema_version": "cfd-craft.case/0.1", "name": "tiny",
+//! #   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+//! #   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+//! #   "flow": {"kind": "laminar", "initial_velocity_m_s": [1.0, 0.0, 0.0],
+//! #            "viscosity_m2_s": 0.1},
+//! #   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+//! #     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+//! #     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+//! #     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+//! #   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 3,
+//! #     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+//! #   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}}"#;
+//! use cfd_craft::{case::Case, solver::{self, Control}};
+//!
+//! let case: Case = serde_json::from_str(json).unwrap();
+//! let control = Control::new(30.0).with_profiling();
+//! let result = solver::run(&case, &control, None)?;
+//! let profile = control.profile()?.expect("profiling enabled");
+//! assert_eq!(profile.phases["step"].calls, 3);
+//! // Exclusive times add up; inclusive times nest and must not be summed.
+//! let total: f64 = profile.phases.values().map(|p| p.exclusive_s).sum();
+//! assert!((total - profile.accounted_exclusive_s).abs() < 1e-12);
+//! // Attempted pressure work covers at least the retained iterations.
+//! assert!(profile.phases["pressure_solve"].work_units >= result.summary.pressure_iterations as u64);
+//! # Ok::<(), String>(())
+//! ```
 use crate::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -15,60 +51,105 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// A measured solver phase. Its snake_case name (for example
+/// `pressure_solve`) is the key in [`Profile::phases`]. Phases nest: an
+/// enclosing phase's inclusive time contains its subphases.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Phase {
+    /// One whole [`solver::run`](crate::solver::run) call.
     SolverRun,
+    /// Semantic case checks at the start of a run.
     CaseValidation,
+    /// Building the grid.
     GridSetup,
+    /// Source densities and receptor weights.
     InputSetup,
+    /// Initial or restart state, its validation and hash.
     StateSetup,
+    /// Choosing the next time step, including the eddy-viscosity check.
     Timestep,
+    /// One transactional step with its momentum, pressure, turbulence and
+    /// scalar subphases.
     Step,
+    /// Evaluating the momentum right-hand side.
     MomentumRhs,
     /// Inexact implicit momentum-correction solves; work units are inner iterations.
     MomentumSolve,
+    /// Forming the momentum update (and assembling implicit matrices) before
+    /// the projection.
     VelocityUpdate,
+    /// A pressure projection, including its solve.
     PressureProjection,
+    /// A pressure PCG solve; work units are attempted iterations.
     PressureSolve,
+    /// Building the cached IC(0) factor; occurs only when it is built.
     PressureFactorSetup,
+    /// Building the multigrid hierarchy; occurs only when it is (re)built.
     PressureMultigridSetup,
+    /// Gathering the compact operator of one pressure solve.
     PressureOperatorSetup,
+    /// A k-epsilon update: in each `neutral_rans` step, and once after the
+    /// initial projection.
     Turbulence,
     /// Inexact implicit k and ε correction solves; work units are inner iterations.
     TurbulenceSolve,
+    /// Transport of one constituent within a step.
     ScalarTransport,
+    /// Checking the candidate state before it is committed.
     StateValidation,
+    /// Appending a monitor row.
     Monitor,
+    /// Recomputing the numerical checks.
     Assessment,
+    /// Writing the run archive (CLI).
     ArchiveWrite,
 }
 
+/// Accumulated time and work of one phase over all its calls.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PhaseTiming {
+    /// Number of finished spans of this phase.
     pub calls: u64,
+    /// Wall seconds including nested phases. Do not add these up.
     pub inclusive_s: f64,
+    /// Wall seconds excluding nested phases; these add up to
+    /// `accounted_exclusive_s`.
     pub exclusive_s: f64,
     /// Attempted inner iterations: PCG for pressure_solve, the implicit
     /// correction solves for momentum_solve and turbulence_solve; zero for other phases.
     pub work_units: u64,
+    /// Operator products: the compact pressure products plus the independent
+    /// true-residual products of pressure_solve, and one (CG) or two
+    /// (BiCGStab) per inner iteration of the implicit solves.
     pub operator_applications: u64,
+    /// Applications of the selected preconditioner.
     pub preconditioner_applications: u64,
+    /// Independent face-by-face residual recomputations of pressure_solve.
     pub true_residual_checks: u64,
+    /// Multilevel work of pressure_solve with the multigrid preconditioner;
+    /// omitted otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multigrid: Option<crate::multigrid::MultigridWork>,
 }
 
+/// A phase profile (schema `cfd-craft.phase-profile/0.1`): wall time and
+/// work per solver phase. Only exclusive times may be added. Work includes
+/// failed attempts, so it can exceed the counters of the retained state.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
+    /// Always `cfd-craft.phase-profile/0.1`.
     pub schema_version: String,
+    /// Wall seconds since the control was created, at the snapshot.
     pub elapsed_s: f64,
+    /// Sum of the exclusive seconds of all phases.
     pub accounted_exclusive_s: f64,
     /// Elapsed minus exclusive phases for a single serial invocation. Parallel
     /// callers may have aggregate phase time exceeding elapsed wall time.
     pub unattributed_s: f64,
+    /// Timing of each phase that ran, keyed by its snake_case phase name.
     pub phases: BTreeMap<String, PhaseTiming>,
 }
 
@@ -130,6 +211,9 @@ impl Collector {
 
 /// A scoped timer; disabled spans do not read a clock or acquire a lock.
 /// Dropping on an error path retains the attempted phase and its work.
+///
+/// Created by [`Control::span`](crate::solver::Control::span). A span is not
+/// `Send`: it must finish on the thread that started it.
 pub struct Span {
     active: Option<(Collector, Phase, ThreadId, u64, Instant)>,
     pub(crate) work_units: u64,

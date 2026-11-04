@@ -1,3 +1,53 @@
+//! Checkpoints and run archives: publication, integrity and restart.
+//!
+//! A run archive is a new directory with `case.json`, `summary.json`,
+//! `geometry.json` and `probes.csv`, optionally `fields.json` and
+//! `checkpoint.json`, then `manifest.json` (artifact hashes, omissions and
+//! identities) and finally `complete.json`, the manifest hash written last.
+//! Every file is written to a temporary name, synced and renamed. Integrity
+//! ([`read_verified`]) and the numerical verdict in the summary are separate
+//! questions: a complete archive can hold an incomplete run.
+//!
+//! A checkpoint wraps a [`State`] with the case's physics hash and a payload
+//! checksum. [`read_checkpoint`] accepts it only for a case with the same
+//! physics hash. See the
+//! [result contract](https://github.com/dietmarwo/CFD-craft/blob/main/docs/result-contract.md)
+//! for the file contract.
+//!
+//! ```
+//! # let json = r#"{"schema_version": "cfd-craft.case/0.1", "name": "tiny",
+//! #   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+//! #   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+//! #   "flow": {"kind": "prescribed_uniform", "velocity_m_s": [1.0, 0.0, 0.0]},
+//! #   "constituents": [{"id": "tracer", "diffusivity_m2_s": 0.01}],
+//! #   "sources": [{"kind": "point", "id": "S0", "constituent": "tracer",
+//! #                "point_m": [0.5, 0.5, 0.5], "rate_kg_s": 1e-6}],
+//! #   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+//! #     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+//! #     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+//! #     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+//! #   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 5,
+//! #     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+//! #   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}}"#;
+//! use cfd_craft::{case::Case, output, solver::{self, Control}};
+//!
+//! let case: Case = serde_json::from_str(json).unwrap();
+//! let partial = solver::run(&case, &Control::new(30.0), None)?;
+//!
+//! let path = std::env::temp_dir().join(format!("cfd-craft-doc-{}.json", std::process::id()));
+//! std::fs::write(&path, output::checkpoint_bytes(&case, &partial.state)?).unwrap();
+//! // The same physics with a larger step budget accepts the checkpoint ...
+//! let mut longer = case.clone();
+//! longer.run.max_steps = 50;
+//! let state = output::read_checkpoint(&longer, &path)?;
+//! assert_eq!(state.steps, 5);
+//! // ... changed physics does not.
+//! let mut other = longer.clone();
+//! other.constituents[0].diffusivity_m2_s = 0.02;
+//! assert!(output::read_checkpoint(&other, &path).unwrap_err().starts_with("CFD-E060"));
+//! std::fs::remove_file(&path).unwrap();
+//! # Ok::<(), String>(())
+//! ```
 use crate::{
     Result,
     case::{Case, hash_bytes},
@@ -19,6 +69,9 @@ struct Checkpoint {
     payload_sha256: String,
     payload: String,
 }
+/// Writes `bytes` to `path` through a new `<path>.partial` file that is
+/// synced and then renamed over `path`. Fails if the temporary file already
+/// exists.
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let tmp = path.with_extension("partial");
     let mut f = OpenOptions::new()
@@ -31,6 +84,9 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .map_err(|e| e.to_string())?;
     fs::rename(tmp, path).map_err(|e| e.to_string())
 }
+/// The JSON bytes of a checkpoint (`cfd-craft.checkpoint/0.1`) of state `s`
+/// for case `c`: the serialized state as a payload, its SHA-256 and the
+/// case's physics hash.
 pub fn checkpoint_bytes(c: &Case, s: &State) -> Result<Vec<u8>> {
     let payload = serde_json::to_string(s).map_err(|e| e.to_string())?;
     serde_json::to_vec(&Checkpoint {
@@ -41,6 +97,16 @@ pub fn checkpoint_bytes(c: &Case, s: &State) -> Result<Vec<u8>> {
     })
     .map_err(|e| e.to_string())
 }
+/// Reads and verifies a checkpoint for case `c` and returns its state, ready
+/// for [`solver::run`](crate::solver::run).
+///
+/// # Errors
+///
+/// `CFD-E065` when the file cannot be read or parsed or is larger than half
+/// of `run.memory_limit_mib`; `CFD-E060` for another schema version, another
+/// physics hash or a payload checksum mismatch; the state checks of
+/// [`validate_state`] (`CFD-E050`, `CFD-E051`); and `CFD-E066` when the state
+/// lies beyond `run.max_steps` or, in transient mode, `run.end_time_s`.
 pub fn read_checkpoint(c: &Case, path: &Path) -> Result<State> {
     let unreadable = |e: String| format!("CFD-E065: checkpoint {}: {e}", path.display());
     let bytes = fs::read(path).map_err(|e| unreadable(e.to_string()))?;
@@ -88,6 +154,11 @@ pub fn create_run_dir(out: &Path) -> Result<()> {
 /// Writes the artifacts into the run directory made by [`create_run_dir`]. The small
 /// artifacts are always written; fields and checkpoint are omitted, and listed in the
 /// manifest, when they would exceed the output budget. Returns the omitted names.
+///
+/// `input_sha256` is the hash of the raw input file. The manifest also
+/// records the SHA-256 of the running executable and the summary's
+/// `source_sha256` and `build_version`; an application other than the CLI
+/// should first replace those two summary fields with its own build identity.
 pub fn write_run(c: &Case, r: &RunResult, out: &Path, input_sha256: &str) -> Result<Vec<String>> {
     let budget = c.output.max_total_mib.saturating_mul(1048576);
     let mut files = BTreeMap::new();
@@ -180,16 +251,21 @@ fn read_regular(path: &Path) -> Result<Vec<u8>> {
     }
     fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
 }
-/// Verifies a run directory: completion marker, manifest, every listed artifact, no
-/// unlisted entries, the artifacts the case requested, and the identities that the
-/// summary, case and manifest share.
 /// A verified archive: its summary and the artifacts the manifest lists as omitted.
 pub struct Verified {
+    /// The archived summary. Its `termination` and `assessment` still have
+    /// to be inspected: integrity says nothing about convergence.
     pub summary: Summary,
+    /// Names of the artifacts omitted over the output budget (CFD-E061).
     pub omitted: Vec<String>,
 }
 
-/// Verifies a run directory. Errors are not coded here; the CLI reports them as CFD-E064.
+/// Verifies a run directory: completion marker, manifest, every listed artifact, no
+/// unlisted entries, the artifacts the case requested, and the identities that the
+/// summary, case and manifest share.
+///
+/// Errors are not coded here; the CLI reports them as CFD-E064. The hashes are
+/// unkeyed: they establish consistency, not authorship.
 pub fn read_verified(out: &Path) -> Result<Verified> {
     let marker: serde_json::Value =
         serde_json::from_slice(&read_regular(&out.join("complete.json"))?)

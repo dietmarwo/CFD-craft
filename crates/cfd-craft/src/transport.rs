@@ -1,16 +1,42 @@
+//! Conservative passive-gas transport: source densities, receptor weights,
+//! initial fields and the finite-volume right-hand side.
+//!
+//! Each face flux is advective (upwind or MUSCL) plus diffusive, applied with
+//! opposite signs to the two cells, so interior fluxes cancel and mass
+//! changes only through sources and boundary faces. Inlets bring zero
+//! concentration; outlets have no diffusive flux; walls, slip faces and
+//! solids have no flux at all. Concentrations are never clipped: a negative
+//! value beyond round-off fails the step (CFD-E053). See the
+//! [transport model card](https://github.com/dietmarwo/CFD-craft/blob/main/docs/model-cards/transport.md).
 use crate::{
     Result,
     case::*,
     grid::{FaceKind, Grid},
 };
 
+/// Sparse receptor weights: `(cell index, weight)` pairs over fluid cells,
+/// summing to one. A receptor value is the weighted sum of the cell
+/// concentrations.
 pub type Weights = Vec<(usize, f64)>;
+/// Index of the cell that contains point `p` (meters). Coordinates beyond
+/// the domain are clamped to the boundary cells.
 pub fn cell_at(g: &Grid, p: [f64; 3]) -> usize {
     Grid::index(
         g.n,
         std::array::from_fn(|a| ((p[a] / g.dx[a]).floor() as usize).min(g.n[a] - 1)),
     )
 }
+/// The represented source density of each constituent, in kg/(m3 s) per
+/// cell and in case order. Each source's integrated [`Source::rate`] is
+/// distributed over its support (the point's cell, the cells a line crosses,
+/// or the overlap of a volume), so the density integrates to that rate.
+///
+/// # Errors
+///
+/// `CFD-E040` when the support touches a solid cell (mass is never
+/// redistributed), `CFD-E041` without support, `CFD-E043` for a steady
+/// source in a fluid component without an outlet, `CFD-E044` for a nonfinite
+/// density.
 pub fn source_fields(c: &Case, g: &Grid) -> Result<Vec<Vec<f64>>> {
     let mut fields = vec![vec![0.0; g.count()]; c.constituents.len()];
     for s in &c.sources {
@@ -91,6 +117,14 @@ pub fn source_fields(c: &Case, g: &Grid) -> Result<Vec<Vec<f64>>> {
     }
     Ok(fields)
 }
+/// The normalized sampling weights of a receptor: trilinear interpolation
+/// between cell centers (clamped at the domain boundary) for a point, exact
+/// cell overlap for a volume average.
+///
+/// # Errors
+///
+/// `CFD-E042` when the receptor has no weight or a positive weight on a
+/// solid cell.
 pub fn receptor_weights(g: &Grid, r: &Receptor) -> Result<Weights> {
     let mut result = vec![];
     match r {
@@ -143,6 +177,9 @@ pub fn receptor_weights(g: &Grid, r: &Receptor) -> Result<Weights> {
     }
     Ok(result)
 }
+/// Initial concentration of each constituent in kg/m3, per cell and in case
+/// order, from the case's initial conditions; zero without one and always
+/// zero in solid cells.
 pub fn initial_fields(c: &Case, g: &Grid) -> Vec<Vec<f64>> {
     c.constituents
         .iter()
@@ -203,6 +240,9 @@ pub fn initial_fields(c: &Case, g: &Grid) -> Vec<Vec<f64>> {
         })
         .collect()
 }
+/// The fluid cell across the lower (`side = 0`) or upper (`side = 1`) face
+/// of cell `i` along axis `a`, or `None` when that face is not interior. On
+/// a one-cell periodic axis the neighbor is `i` itself.
 pub fn neighbor(g: &Grid, i: usize, a: usize, side: usize) -> Option<usize> {
     let f = &g.faces[g.cell_faces[i][a][side]];
     if f.kind == FaceKind::Interior {
@@ -317,12 +357,23 @@ impl<'a> FixedRhs<'a> {
     }
 }
 
+/// The transport right-hand side of one constituent and its mass rates.
 pub struct Rhs {
+    /// Rate of change of the concentration per cell, in kg/(m3 s).
     pub values: Vec<f64>,
+    /// Emission rate of the source density over the domain, in kg/s.
     pub source: f64,
+    /// Mass entering through boundary faces, in kg/s, nonnegative.
     pub inflow: f64,
+    /// Mass leaving through boundary faces, in kg/s, nonnegative.
     pub outflow: f64,
 }
+/// Finite-volume right-hand side `dc/dt` of concentration `c` for face
+/// velocities `u`, cell diffusivities `d` (m2/s, averaged to the faces), the
+/// source density `source` (kg/(m3 s)) and the advection scheme. `inlet`
+/// gives the concentration outside a boundary face, used for inflow
+/// including backflow at an outlet; the solver uses zero. Interior, inlet
+/// and outlet faces carry flux; outlets carry no diffusion.
 pub fn rhs(
     g: &Grid,
     c: &[f64],

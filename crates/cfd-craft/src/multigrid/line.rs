@@ -3,13 +3,22 @@ use super::Matrix;
 use crate::{Result, grid::Grid, solver::Control};
 use serde::{Deserialize, Serialize};
 
+/// Shape and storage of the block smoother of one anisotropic multigrid
+/// level, part of [`MultigridStats`](crate::multigrid::MultigridStats).
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BlockSmootherStats {
+    /// Level index, 0 for the finest.
     pub level: usize,
+    /// Axes spanned by each block: one for a line, two for a small plane.
     pub axes: Vec<usize>,
+    /// Unknowns per block.
     pub block_unknowns: usize,
+    /// Number of blocks on the level.
     pub block_count: usize,
+    /// Half-bandwidth of the banded block factor, from the actual entries.
     pub half_bandwidth: usize,
+    /// Retained bytes of the block ordering, factors, outside-block rows and
+    /// scratch.
     pub allocated_bytes: usize,
 }
 

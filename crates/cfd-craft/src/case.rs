@@ -1,93 +1,305 @@
+//! The case contract `cfd-craft.case/0.1`: the typed JSON input of a native
+//! run, its semantic checks and its identities.
+//!
+//! A [`Case`] describes one calculation completely: domain and grid, boundary
+//! conditions, the flow model, solid boxes, passive constituents with their
+//! sources, initial conditions and receptors, numerics, run budgets and the
+//! output policy. Nothing outside the case configures the solver.
+//!
+//! Checking happens in three layers:
+//!
+//! 1. Deserialization is strict: unknown fields and variants are rejected.
+//!    [`input::parse_case`](crate::input::parse_case) reports a failure as
+//!    `CFD-E000` with the JSON path of the offending element.
+//! 2. [`Case::check`] applies the semantic checks (units, ranges, budgets,
+//!    geometry, physical combinations) and returns a [`CheckReport`] of coded
+//!    [`Diagnostic`]s; [`Case::validate`] turns an invalid report into an
+//!    error.
+//! 3. Checks that need the built grid (box representation, source and
+//!    receptor support) run in [`Grid::build`](crate::grid::Grid::build),
+//!    [`transport::source_fields`](crate::transport::source_fields) and
+//!    [`input::full_check`](crate::input::full_check).
+//!
+//! Every code is listed in the
+//! [diagnostics catalog](https://github.com/dietmarwo/CFD-craft/blob/main/docs/diagnostics.md).
+//!
+//! Units follow the field names: `_m` meters, `_m_s` m/s, `_m2_s` m2/s,
+//! `_kg_s` kg/s, `_kg_m3` kg/m3, `_s` seconds, `_mib` MiB. Coordinates are
+//! local east (x), north (y) and up (z) from the lower domain corner.
+//!
+//! These types derive `JsonSchema`, and `cfd-craft describe` prints the
+//! generated `case_schema`; the schemas there are authoritative for JSON
+//! clients. [`Case::physics_hash`] identifies the physical and numerical
+//! problem for restarts, and [`hash_bytes`] is the digest used for every
+//! identity.
+//!
+//! # Example
+//!
+//! ```
+//! use cfd_craft::case::Case;
+//!
+//! let json = r#"{
+//!   "schema_version": "cfd-craft.case/0.1", "name": "tiny",
+//!   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+//!   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+//!   "flow": {"kind": "prescribed_uniform", "velocity_m_s": [1.0, 0.0, 0.0]},
+//!   "constituents": [{"id": "tracer", "diffusivity_m2_s": 0.01}],
+//!   "sources": [{"kind": "point", "id": "S0", "constituent": "tracer",
+//!                "point_m": [0.5, 0.5, 0.5], "rate_kg_s": 1e-6}],
+//!   "receptors": [{"kind": "point", "id": "R1", "point_m": [3.0, 0.5, 0.5]}],
+//!   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+//!     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+//!     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+//!     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+//!   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 1000,
+//!     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+//!   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}
+//! }"#;
+//! let case: Case = serde_json::from_str(json).unwrap();
+//! let report = case.validate().unwrap();
+//! assert!(report.valid);
+//! assert_eq!(report.cells, 32);
+//!
+//! // Unknown fields are a deserialization error, not a semantic warning.
+//! let typo = json.replace("\"point_m\": [0.5", "\"position_m\": [0.5");
+//! assert!(serde_json::from_str::<Case>(&typo).is_err());
+//! ```
+
+// Doc comments on these types become `description` entries of the generated
+// case schema. Two kinds of item carry rustdoc-only docs
+// (`#[cfg_attr(doc, doc = ...)]`) instead: unit variants of string enums, where
+// a `///` comment would turn the schema's `enum` into a `oneOf`, and fields
+// whose type is another schema type, where it would wrap the field's `$ref` in
+// an `allOf`. Both would change the schema's shape. The meaning of those items
+// is also stated in the documented container, which the schema keeps.
 use crate::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
+/// A complete native case, schema version `cfd-craft.case/0.1`. Nothing
+/// outside the case configures the solver. Unknown fields are rejected; the
+/// lists default to empty when omitted. Deserialization checks only the
+/// types: the semantic checks (ranges, units, budgets, geometry) are those of
+/// `cfd-craft check`, which reports coded diagnostics with field paths.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Case {
+    /// Contract version; must be `cfd-craft.case/0.1` (CFD-E001).
     pub schema_version: String,
+    /// Nonempty experiment label (CFD-E002), copied into the result. It is
+    /// excluded from the physics hash, so renaming keeps checkpoints
+    /// compatible.
     pub name: String,
+    #[cfg_attr(doc, doc = "Physical extent of the domain; see [`Domain`].")]
+    #[allow(missing_docs)]
     pub domain: Domain,
+    #[cfg_attr(doc, doc = "Uniform cell counts per axis; see [`GridSpec`].")]
+    #[allow(missing_docs)]
     pub grid: GridSpec,
+    #[cfg_attr(doc, doc = "Boundary condition per axis; see [`Boundaries`].")]
+    #[allow(missing_docs)]
     pub boundaries: Boundaries,
+    #[cfg_attr(doc, doc = "Flow model; see [`Flow`].")]
+    #[allow(missing_docs)]
     pub flow: Flow,
+    /// Axis-aligned solid boxes (buildings, obstacles). A cell is solid when
+    /// its center lies inside a box. Not allowed with `prescribed_uniform`
+    /// flow (CFD-E013) or with the `multigrid` pressure preconditioner
+    /// (CFD-E034). Default: empty.
     #[serde(default)]
     pub geometry: Vec<Block>,
+    /// Tangentially moving `wall` faces of the domain, such as a cavity lid;
+    /// laminar flow only (CFD-E021). Default: empty.
     #[serde(default)]
     pub moving_walls: Vec<MovingWall>,
+    /// Passive gases transported by the flow. Default: empty, which solves
+    /// the flow only.
     #[serde(default)]
     pub constituents: Vec<Constituent>,
+    /// Continuous emissions into the constituents. Default: empty.
     #[serde(default)]
     pub sources: Vec<Source>,
+    /// Initial concentration fields, at most one per constituent (CFD-E018);
+    /// a constituent without one starts at zero. Default: empty.
     #[serde(default)]
     pub initial_conditions: Vec<Initial>,
+    /// Named concentration samples, reported for every constituent in the
+    /// result's `receptors_kg_m3` and in probes.csv. Default: empty.
     #[serde(default)]
     pub receptors: Vec<Receptor>,
+    #[cfg_attr(
+        doc,
+        doc = "Discretization choices, tolerances and the steady monitor window; see [`Numerics`]."
+    )]
+    #[allow(missing_docs)]
     pub numerics: Numerics,
+    #[cfg_attr(doc, doc = "Mode, endpoint and execution budgets; see [`Run`].")]
+    #[allow(missing_docs)]
     pub run: Run,
+    #[cfg_attr(doc, doc = "Artifact retention and output budget; see [`Output`].")]
+    #[allow(missing_docs)]
     pub output: Output,
 }
+/// Physical extent of the domain: a box from the origin to `size_m`.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Domain {
+    /// Lengths along x (east), y (north) and z (up) in meters, each finite
+    /// and within 1e-6..1e9 (CFD-E003).
     pub size_m: [f64; 3],
 }
+/// Uniform Cartesian grid: the cell size along an axis is the domain length
+/// divided by the cell count.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GridSpec {
+    /// Cell counts along x, y and z: 2..4096 per axis, or 1..4096 on a
+    /// periodic axis, which makes a two-dimensional run (CFD-E004). The total
+    /// enters the memory estimate and may not exceed 1e8 cells (CFD-E006).
     pub cells: [usize; 3],
 }
+/// Boundary condition of the pair of domain faces normal to one axis.
+/// `periodic` identifies the two faces. `open` lets flow in or out: each face
+/// is an inlet or an outlet by the sign of the case flow's normal velocity
+/// there; inlets prescribe that velocity and a zero concentration increment,
+/// outlets fix the pressure level, and faces without normal flow are slip
+/// faces. `wall` is impermeable and no-slip (a rough wall with
+/// `neutral_rans`). `slip` is impermeable and stress-free. `ground_open_top`
+/// (z only, CFD-E005) is a rough ground with a top that applies the
+/// boundary-layer shear stress; `neutral_rans` requires it (CFD-E011) and
+/// laminar flow may not use it (CFD-E023).
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Boundary {
+    #[cfg_attr(
+        doc,
+        doc = "The two faces are identified, so flow and constituents leaving one enter the other. A periodic axis may have one cell."
+    )]
+    #[allow(missing_docs)]
     Periodic,
+    #[cfg_attr(
+        doc,
+        doc = "Inflow or outflow, decided per face by the normal component of [`Flow::vector`] at the face center: inlets prescribe that velocity and a zero concentration increment, outlets fix the pressure level and anchor their fluid component, and faces without normal flow act as slip faces."
+    )]
+    #[allow(missing_docs)]
     Open,
+    #[cfg_attr(
+        doc,
+        doc = "Impermeable no-slip wall, optionally moving tangentially ([`MovingWall`]); with `neutral_rans` a rough wall with the wall functions of the flow model card."
+    )]
+    #[allow(missing_docs)]
     Wall,
+    #[cfg_attr(
+        doc,
+        doc = "Impermeable and stress-free: zero normal velocity and zero tangential gradient."
+    )]
+    #[allow(missing_docs)]
     Slip,
+    #[cfg_attr(
+        doc,
+        doc = "z only: a rough ground at z = 0 with roughness `roughness_m`, and an impermeable top that applies the equilibrium shear stress of the `neutral_rans` inflow. Required by `neutral_rans`, rejected for laminar flow, where the top would act as a no-slip lid."
+    )]
+    #[allow(missing_docs)]
     GroundOpenTop,
 }
+/// Boundary conditions of the domain: `x`, `y` and `z` each set the condition
+/// of the two domain faces normal to that axis (west and east, south and
+/// north, ground and top).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Boundaries {
+    #[cfg_attr(doc, doc = "Condition at x = 0 and x = Lx (west and east).")]
+    #[allow(missing_docs)]
     pub x: Boundary,
+    #[cfg_attr(doc, doc = "Condition at y = 0 and y = Ly (south and north).")]
+    #[allow(missing_docs)]
     pub y: Boundary,
+    #[cfg_attr(doc, doc = "Condition at z = 0 and z = Lz (ground and top).")]
+    #[allow(missing_docs)]
     pub z: Boundary,
 }
 impl Boundaries {
+    /// The condition of axis `a` (0 = x, 1 = y, 2 = z).
+    ///
+    /// # Panics
+    ///
+    /// If `a > 2`.
     pub fn at(&self, a: usize) -> Boundary {
         [self.x, self.y, self.z][a]
     }
 }
+/// Flow model, selected by `kind`: `prescribed_uniform` (a fixed uniform
+/// velocity; only the constituents are solved), `laminar` (incompressible
+/// flow with constant viscosity) or `neutral_rans` (a neutral atmospheric
+/// boundary layer with the k-epsilon model). The numeric fields are checked
+/// as CFD-E012.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Flow {
+    /// A fixed uniform velocity with no flow solve. Its normal component must
+    /// be zero at impermeable boundaries (CFD-E024), and solid boxes are not
+    /// allowed (CFD-E013).
     PrescribedUniform {
+        /// Velocity [u, v, w] in m/s, finite.
         velocity_m_s: [f64; 3],
     },
+    /// Incompressible laminar flow with constant kinematic viscosity, started
+    /// from a uniform velocity.
     Laminar {
+        /// Uniform initial velocity [u, v, w] in m/s, finite. It also sets
+        /// the velocity of `open` inlet faces and decides which open faces are
+        /// inlets or outlets.
         initial_velocity_m_s: [f64; 3],
+        /// Kinematic viscosity in m2/s, finite and positive.
         viscosity_m2_s: f64,
+        /// Uniform body acceleration [x, y, z] in m/s2, for example the
+        /// pressure-gradient drive of a periodic channel. Default: zero.
         #[serde(default)]
         acceleration_m_s2: [f64; 3],
     },
+    /// Neutral atmospheric boundary layer with the k-epsilon model (C_mu 0.09,
+    /// C_epsilon1 1.44, C_epsilon2 1.92, kappa 0.4). Inflow and initial fields
+    /// are the logarithmic equilibrium profiles U = u*/kappa ln((z + z0)/z0),
+    /// k = u*^2/sqrt(C_mu) and epsilon = u*^3/(kappa (z + z0)), with u* set by
+    /// `speed_m_s` at `reference_height_m`. Requires `boundaries.z =
+    /// ground_open_top` (CFD-E011).
     NeutralRans {
+        /// Mean wind speed at `reference_height_m` in m/s, finite and
+        /// positive. It is also the velocity scale of the normalized checks.
         speed_m_s: f64,
+        /// Height of `speed_m_s` above the ground in meters, positive and not
+        /// above the domain top. It is also the length scale of the
+        /// normalized checks.
         reference_height_m: f64,
+        /// Aerodynamic roughness length z0 of the ground in meters, positive.
+        /// Building and other wall faces use min(z0, 0.001 cell width), which
+        /// ties that wall roughness to the grid (see the flow model card).
         roughness_m: f64,
+        /// Meteorological wind direction in degrees: where the wind blows
+        /// from, clockwise from north. 270 blows toward +x (east), 180 toward
+        /// +y (north). Finite; any value is accepted.
         direction_deg_from: f64,
+        /// Molecular kinematic viscosity in m2/s, positive; the eddy viscosity
+        /// C_mu k^2/epsilon is added to it.
         viscosity_m2_s: f64,
+        /// Turbulent Schmidt number Sc_t, positive: constituents diffuse with
+        /// their molecular diffusivity plus nu_t / Sc_t.
         turbulent_schmidt: f64,
     },
 }
 impl Flow {
+    /// True for `prescribed_uniform`, whose velocity stays fixed: no
+    /// momentum or pressure equations are solved.
     pub fn prescribed(&self) -> bool {
         matches!(self, Self::PrescribedUniform { .. })
     }
+    /// True for `neutral_rans`, which adds the k and epsilon fields.
     pub fn rans(&self) -> bool {
         matches!(self, Self::NeutralRans { .. })
     }
+    /// Molecular kinematic viscosity in m2/s; zero for prescribed flow.
     pub fn viscosity(&self) -> f64 {
         match self {
             Self::PrescribedUniform { .. } => 0.0,
@@ -96,6 +308,29 @@ impl Flow {
             }
         }
     }
+    /// The case's reference velocity at height `z` (meters), in m/s: the
+    /// prescribed velocity, the laminar initial velocity, or the logarithmic
+    /// `neutral_rans` profile in the wind direction (negative heights are
+    /// evaluated at the ground).
+    ///
+    /// It initializes the face velocities, sets the velocity of `open` inlet
+    /// faces and decides whether an open face is an inlet, an outlet or a
+    /// slip face.
+    ///
+    /// ```
+    /// use cfd_craft::case::Flow;
+    ///
+    /// let flow: Flow = serde_json::from_str(
+    ///     r#"{"kind": "neutral_rans", "speed_m_s": 3.0, "reference_height_m": 10.0,
+    ///         "roughness_m": 0.1, "direction_deg_from": 270.0,
+    ///         "viscosity_m2_s": 1.5e-5, "turbulent_schmidt": 0.7}"#,
+    /// )
+    /// .unwrap();
+    /// let [u, v, w] = flow.vector(10.0);
+    /// // A wind from the west blows toward +x, at the declared reference speed.
+    /// assert!((u - 3.0).abs() < 1e-12 && v.abs() < 1e-12 && w == 0.0);
+    /// assert!(flow.vector(1.0)[0] < u);
+    /// ```
     pub fn vector(&self, z: f64) -> [f64; 3] {
         match self {
             Self::PrescribedUniform { velocity_m_s } => *velocity_m_s,
@@ -117,6 +352,9 @@ impl Flow {
             }
         }
     }
+    /// Velocity scale of the normalized checks and divergence limits, in m/s:
+    /// `speed_m_s` for `neutral_rans`, otherwise the magnitude of
+    /// [`vector`](Self::vector) at z = 1 m, but at least 1 m/s.
     pub fn reference_speed(&self) -> f64 {
         match self {
             Self::NeutralRans { speed_m_s, .. } => *speed_m_s,
@@ -129,6 +367,9 @@ impl Flow {
                 .max(1.0),
         }
     }
+    /// Friction velocity of the `neutral_rans` inflow profile in m/s,
+    /// u* = kappa speed / ln((z_ref + z0)/z0) with kappa = 0.4; zero for the
+    /// other flow models.
     pub fn ustar(&self) -> f64 {
         match self {
             Self::NeutralRans {
@@ -140,6 +381,10 @@ impl Flow {
             _ => 0.0,
         }
     }
+    /// Equilibrium `(k, epsilon)` of the `neutral_rans` inflow at height `z`
+    /// (meters): k = u*^2/sqrt(C_mu) in m2/s2 and epsilon = u*^3/(kappa (z +
+    /// z0)) in m2/s3. `(0, 0)` for the other flow models. These values
+    /// initialize the fields and set the inlet and top values.
     pub fn turbulence(&self, z: f64) -> (f64, f64) {
         if let Self::NeutralRans { roughness_m, .. } = self {
             let u = self.ustar();
@@ -149,56 +394,112 @@ impl Flow {
         }
     }
 }
+/// An axis-aligned solid box. Cells whose centers lie inside it (lower bound
+/// inclusive, upper bound exclusive) are solid; boxes may overlap. The bounds
+/// must increase on every axis and lie inside the domain (CFD-E014), and the
+/// box must contain at least one cell center (CFD-E028). Fewer than ten cells
+/// across its height draws warning CFD-W001.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Block {
+    /// Unique nonempty ID (CFD-E014); the key of the box's cell count in
+    /// geometry.json.
     pub id: String,
+    /// Lower corner [x, y, z] in meters.
     pub min_m: [f64; 3],
+    /// Upper corner [x, y, z] in meters.
     pub max_m: [f64; 3],
 }
+/// A tangential velocity of one `wall` face of the domain, such as a cavity
+/// lid. Laminar flow only, at most one per face, and the velocity component
+/// normal to the wall must be zero (CFD-E021).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MovingWall {
+    /// Axis normal to the wall: 0 (x), 1 (y) or 2 (z). That axis must have
+    /// `wall` boundaries.
     pub axis: usize,
+    /// True for the face at the upper end of the axis (for example z = Lz),
+    /// false for the face at 0.
     pub upper: bool,
+    /// Wall velocity [u, v, w] in m/s, finite; the component along `axis`
+    /// must be zero.
     pub velocity_m_s: [f64; 3],
 }
+/// A passive gas: transported and diffused by the flow without affecting it.
+/// Concentrations are in kg/m3.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Constituent {
+    /// Unique nonempty ID (CFD-E015), referenced by sources and initial
+    /// conditions and used in the result.
     pub id: String,
+    /// Molecular diffusivity in m2/s, finite and nonnegative (CFD-E015).
+    /// With `neutral_rans` the turbulent diffusivity nu_t/Sc_t is added.
     pub diffusivity_m2_s: f64,
 }
+/// A continuous emission into one constituent, selected by `kind`. Rates are
+/// finite and nonnegative (CFD-E016); the support is nondegenerate and inside
+/// the domain (CFD-E017). The integrated rate is distributed over the cells
+/// the support covers. Support touching a solid cell is rejected (CFD-E040),
+/// as is a steady source in a fluid region without an outlet (CFD-E043, and
+/// CFD-E020 when no boundary is open).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Source {
+    /// A point emission, deposited in the cell that contains the point.
     Point {
+        /// Unique nonempty source ID (CFD-E016).
         id: String,
+        /// ID of the emitted constituent (CFD-E016).
         constituent: String,
+        /// Position [x, y, z] in meters, inside the domain (each coordinate
+        /// at least 0 and below the domain length).
         point_m: [f64; 3],
+        /// Emission rate in kg/s.
         rate_kg_s: f64,
     },
+    /// A straight line emission. The integrated rate is `rate_kg_s_m` times
+    /// the line length, distributed over the cells the segment crosses in
+    /// proportion to its length in each.
     Line {
+        /// Unique nonempty source ID (CFD-E016).
         id: String,
+        /// ID of the emitted constituent (CFD-E016).
         constituent: String,
+        /// Start point [x, y, z] in meters, inside the domain.
         from_m: [f64; 3],
+        /// End point [x, y, z] in meters, inside the domain and different
+        /// from `from_m`.
         to_m: [f64; 3],
+        /// Emission rate per meter of line, kg/(s m).
         rate_kg_s_m: f64,
     },
+    /// A uniform emission over a box. The integrated rate is `rate_kg_s_m3`
+    /// times the box volume, distributed over the cells by their exact overlap
+    /// with the box.
     Volume {
+        /// Unique nonempty source ID (CFD-E016).
         id: String,
+        /// ID of the emitted constituent (CFD-E016).
         constituent: String,
+        /// Lower corner [x, y, z] in meters.
         min_m: [f64; 3],
+        /// Upper corner [x, y, z] in meters; every bound above `min_m` and
+        /// inside the domain.
         max_m: [f64; 3],
+        /// Emission rate per cubic meter, kg/(s m3).
         rate_kg_s_m3: f64,
     },
 }
 impl Source {
+    /// The source ID.
     pub fn id(&self) -> &str {
         match self {
             Self::Point { id, .. } | Self::Line { id, .. } | Self::Volume { id, .. } => id,
         }
     }
+    /// ID of the constituent the source emits.
     pub fn constituent(&self) -> &str {
         match self {
             Self::Point { constituent, .. }
@@ -214,6 +515,22 @@ impl Source {
             Self::Volume { rate_kg_s_m3, .. } => ("rate_kg_s_m3", *rate_kg_s_m3),
         }
     }
+    /// Integrated emission rate in kg/s: `rate_kg_s`, `rate_kg_s_m` times the
+    /// line length, or `rate_kg_s_m3` times the box volume. The represented
+    /// source fields emit exactly this rate.
+    ///
+    /// ```
+    /// use cfd_craft::case::Source;
+    ///
+    /// let line: Source = serde_json::from_str(
+    ///     r#"{"kind": "line", "id": "road", "constituent": "tracer",
+    ///         "from_m": [1.0, 1.0, 2.0], "to_m": [1.0, 6.0, 2.0], "rate_kg_s_m": 2e-8}"#,
+    /// )
+    /// .unwrap();
+    /// // 2e-8 kg/s per meter over 5 m.
+    /// assert!((line.rate() - 1e-7).abs() < 1e-20);
+    /// assert_eq!(line.declared_rate(), ("rate_kg_s_m", 2e-8));
+    /// ```
     pub fn rate(&self) -> f64 {
         match self {
             Self::Point { rate_kg_s, .. } => *rate_kg_s,
@@ -238,21 +555,37 @@ impl Source {
         }
     }
 }
+/// Initial concentration of one constituent, selected by `kind`. Each
+/// constituent has at most one (CFD-E018); without one it starts at zero.
+/// Solid cells always hold zero.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Initial {
+    /// The same concentration in every fluid cell.
     Uniform {
+        /// ID of the initialized constituent.
         constituent: String,
+        /// Concentration in kg/m3, finite and nonnegative (CFD-E025).
         concentration_kg_m3: f64,
     },
+    /// A Gaussian puff, periodized over the domain, integrated per cell and
+    /// scaled to exactly `total_mass_kg` of fluid mass. Needs periodic
+    /// boundaries on all three axes (CFD-E026); used by the transport
+    /// verification fixtures.
     PeriodicGaussian {
+        /// ID of the initialized constituent.
         constituent: String,
+        /// Center [x, y, z] in meters, inside the domain.
         center_m: [f64; 3],
+        /// Standard deviations along x, y and z in meters, each positive and
+        /// at most twice the domain length.
         sigma_m: [f64; 3],
+        /// Mass of the puff in kg, positive.
         total_mass_kg: f64,
     },
 }
 impl Initial {
+    /// ID of the constituent this condition initializes.
     pub fn constituent(&self) -> &str {
         match self {
             Self::Uniform { constituent, .. } | Self::PeriodicGaussian { constituent, .. } => {
@@ -261,37 +594,83 @@ impl Initial {
         }
     }
 }
+/// A named concentration sample, selected by `kind` and reported in kg/m3 for
+/// every constituent (`receptors_kg_m3` of the result, probes.csv). IDs are
+/// unique and nonempty (CFD-E019); the support is nondegenerate and inside the
+/// domain (CFD-E027) and may not sample a solid cell (CFD-E042).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Receptor {
+    /// Trilinear interpolation between the eight surrounding cell centers,
+    /// clamped at the domain boundary.
     Point {
+        /// Unique nonempty receptor ID (CFD-E019).
         id: String,
+        /// Position [x, y, z] in meters, inside the domain.
         point_m: [f64; 3],
     },
+    /// The average over a box, weighted by the exact overlap of each cell
+    /// with the box. Not a point sample or a peak bound.
     VolumeAverage {
+        /// Unique nonempty receptor ID (CFD-E019).
         id: String,
+        /// Lower corner [x, y, z] in meters.
         min_m: [f64; 3],
+        /// Upper corner [x, y, z] in meters; every bound above `min_m` and
+        /// inside the domain.
         max_m: [f64; 3],
     },
 }
 impl Receptor {
+    /// The receptor ID.
     pub fn id(&self) -> &str {
         match self {
             Self::Point { id, .. } | Self::VolumeAverage { id, .. } => id,
         }
     }
 }
+/// Advection scheme of the constituents. `linear_upwind` is first-order
+/// upwind; it is linear in the concentrations, so responses to sources
+/// superpose exactly in a fixed flow. `muscl` adds a second-order slope with
+/// the bounded monotonized-central limiter; it is nonlinear, so superposition
+/// is not exact.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Advection {
+    #[cfg_attr(
+        doc,
+        doc = "First-order upwind, linear in the concentrations: exact source superposition in a fixed flow."
+    )]
+    #[allow(missing_docs)]
     LinearUpwind,
+    #[cfg_attr(
+        doc,
+        doc = "MUSCL with the monotonized-central limiter: second order in smooth regions and bounded, but nonlinear."
+    )]
+    #[allow(missing_docs)]
     Muscl,
 }
+/// Preconditioner of the pressure PCG solve. `ic0` (the default) is an
+/// incomplete Cholesky factor built once per grid and works on every grid.
+/// `multigrid` is a fixed symmetric geometric multigrid cycle for unmasked
+/// grids only (CFD-E034); strongly anisotropic spacings select line or plane
+/// smoothing and draw warning CFD-W004. Both solve the same equation to the
+/// same tolerance and recomputed residual.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PressurePreconditioner {
+    #[cfg_attr(
+        doc,
+        doc = "Incomplete Cholesky IC(0) of a slightly shifted operator, built on the first pressure solve and cached in the grid (default)."
+    )]
+    #[allow(missing_docs)]
     #[default]
     Ic0,
+    #[cfg_attr(
+        doc,
+        doc = "Fixed symmetric geometric multigrid cycle; unmasked grids only (CFD-E034). See the [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PRESSURE_MULTIGRID.md)."
+    )]
+    #[allow(missing_docs)]
     Multigrid,
 }
 impl PressurePreconditioner {
@@ -305,6 +684,7 @@ impl PressurePreconditioner {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MomentumAdvection {
+    /// First-order donor-cell upwind in advective form (default).
     #[default]
     DonorCell,
     /// Unlimited second-order upwind: face value 1.5 phi_U - 0.5 phi_UU. Not bounded.
@@ -323,6 +703,8 @@ impl MomentumAdvection {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SteadyAlgorithm {
+    /// SSPRK2 pseudo-time steps with a projection per stage, limited by
+    /// advection and diffusion together (default).
     #[default]
     Explicit,
     /// SSPRK2 stages with an implicit viscous term: (I − Δτ L_ν) δ = Δτ R.
@@ -337,78 +719,226 @@ impl SteadyAlgorithm {
         *self == Self::Explicit
     }
 }
+/// Limiter of `limited_upwind` momentum advection, in Sweby's notation
+/// s(a, b) with a and b the upwind and downwind differences: `van_albada`
+/// s = ab(a + b)/(a^2 + b^2), `van_leer` s = 2ab/(a + b), or
+/// `monotonized_central` s = sign(b) min(2|a|, |a + b|/2, 2|b|). Each is zero
+/// where a and b differ in sign.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MomentumLimiter {
+    #[cfg_attr(doc, doc = "van Albada: s = ab(a + b)/(a² + b²).")]
+    #[allow(missing_docs)]
     VanAlbada,
+    #[cfg_attr(doc, doc = "van Leer: s = 2ab/(a + b).")]
+    #[allow(missing_docs)]
     VanLeer,
+    #[cfg_attr(
+        doc,
+        doc = "Monotonized central: s = sign(b) min(2|a|, |a + b|/2, 2|b|)."
+    )]
+    #[allow(missing_docs)]
     MonotonizedCentral,
 }
+/// Discretization choices, tolerances and the steady monitor window. The
+/// optional selections `pressure_preconditioner`, `momentum_advection`,
+/// `momentum_limiter` and `steady_algorithm` are left out of the normalized
+/// case when they have their default, so cases written before they existed
+/// keep their case and physics hashes.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Numerics {
+    #[cfg_attr(doc, doc = "Advection scheme of the constituents; see [`Advection`].")]
+    #[allow(missing_docs)]
     pub transport: Advection,
+    /// Upper bound of the time step in seconds, finite and positive
+    /// (CFD-E009). The step is the smaller of this and the stability limit;
+    /// in transient mode the last step is clipped to end at `run.end_time_s`.
     pub max_time_step_s: f64,
+    /// Stability factor of explicit steps, 0 < CFL <= 0.45 (CFD-E010): with
+    /// the explicit algorithm and for constituent sub-steps, dt = CFL / (sum
+    /// of max|u|/dx + 2 D sum of 1/dx^2), D the largest viscosity or
+    /// diffusivity. `implicit_viscous` applies it to advection only;
+    /// `implicit_projection` uses its own CFL ramp for the flow.
     pub advective_cfl_max: f64,
+    /// Relative residual target of each pressure solve, finite and positive
+    /// (CFD-E009). A solve is accepted when the recomputed residual is within
+    /// 10 times this plus 1e-12. A loose value changes the path to a steady
+    /// state, not the steady checks.
     pub pressure_relative_tolerance: f64,
+    /// PCG iteration limit of each pressure solve, nonzero (CFD-E008).
+    /// Reaching it fails the step with CFD-E033.
     pub pressure_max_iterations: usize,
-    /// Omitted/default IC(0) preserves existing normalized case/checkpoint hashes.
+    /// Preconditioner of the pressure solve: `ic0` (default) or `multigrid`.
+    /// Omitted from the normalized case when `ic0`, which keeps existing case
+    /// and checkpoint hashes.
     #[serde(default, skip_serializing_if = "PressurePreconditioner::is_default")]
     pub pressure_preconditioner: PressurePreconditioner,
-    /// Omitted/default donor-cell preserves existing case and checkpoint hashes.
+    /// Momentum advection: `donor_cell` (default), `second_order_upwind` or
+    /// `limited_upwind`. Omitted from the normalized case when `donor_cell`,
+    /// which keeps existing case and checkpoint hashes.
     #[serde(default, skip_serializing_if = "MomentumAdvection::is_default")]
     pub momentum_advection: MomentumAdvection,
-    /// Required with `limited_upwind`, rejected otherwise.
+    /// Limiter of `limited_upwind`: required with it and rejected otherwise
+    /// (CFD-E037). Omitted when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub momentum_limiter: Option<MomentumLimiter>,
-    /// Omitted/default explicit pseudo-time preserves existing hashes.
+    /// Pseudo-time algorithm of steady runs: `explicit` (default),
+    /// `implicit_viscous` (laminar only) or `implicit_projection` (laminar or
+    /// `neutral_rans`). The implicit options need `run.mode = steady`
+    /// (CFD-E045) and a solved flow (CFD-E047). Omitted from the normalized
+    /// case when `explicit`, which keeps existing hashes.
     #[serde(default, skip_serializing_if = "SteadyAlgorithm::is_default")]
     pub steady_algorithm: SteadyAlgorithm,
+    /// Threshold of the normalized steady equation residuals (momentum,
+    /// turbulence and each constituent), finite and positive (CFD-E009).
+    /// Steady mode only.
     pub steady_residual_tolerance: f64,
+    /// Threshold of `monitor_stability`, the largest relative change between
+    /// the means of three successive monitor windows; finite and positive
+    /// (CFD-E009). Steady mode only.
     pub steady_monitor_tolerance: f64,
+    /// Steps per monitor window, 2..100000 (CFD-E008). A steady run assesses
+    /// its checks every `monitor_window` steps and needs three full windows
+    /// before `monitor_stability` can pass.
     pub monitor_window: usize,
 }
+/// Run mode. `steady` iterates in pseudo-time until every steady check passes;
+/// `run.end_time_s` does not bound it. `transient` integrates the physical
+/// interval up to `run.end_time_s`.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
+    #[cfg_attr(
+        doc,
+        doc = "Pseudo-time iteration until every steady check passes; success is `completed` / `steady_discrete_solution`."
+    )]
+    #[allow(missing_docs)]
     Steady,
+    #[cfg_attr(
+        doc,
+        doc = "Time-accurate integration up to `run.end_time_s`; success is `completed` / `transient_interval_completed`."
+    )]
+    #[allow(missing_docs)]
     Transient,
 }
+/// Mode, endpoint and execution budgets. The whole group is excluded from the
+/// physics hash, so budgets can change between a run and its restart.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Run {
+    #[cfg_attr(doc, doc = "Steady or transient; see [`Mode`].")]
+    #[allow(missing_docs)]
     pub mode: Mode,
+    /// Physical end time of a transient run in seconds: finite, positive and
+    /// at most 1e12 (CFD-E009, CFD-E022). It does not bound a steady run.
     pub end_time_s: f64,
+    /// Maximum number of retained steps (outer iterations with an implicit
+    /// steady algorithm), counted from the cold start including the steps of
+    /// a restart checkpoint; nonzero (CFD-E008). Reaching it ends the run as
+    /// `iteration_limit`.
     pub max_steps: usize,
+    /// Wall-time allowance in seconds: finite, positive and at most seven
+    /// days (CFD-E009, CFD-E022). The CLI and the Python binding enforce it;
+    /// a Rust caller passes it, or its own limit, to `Control::new`.
     pub wall_time_limit_s: f64,
+    /// Worker threads, 1..64 (CFD-E008). The CLI and the Python binding solve
+    /// on a pool of this size; the Rust library does not create one.
     pub threads: usize,
+    /// Memory budget in MiB for the preflight estimate (CFD-E006); a restart
+    /// checkpoint may be at most half of it (CFD-E065). An estimate check, not
+    /// an enforced process limit.
     pub memory_limit_mib: usize,
 }
+/// Which optional artifacts a run archive keeps, and its output budget.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Output {
+    /// Write fields.json, the full final state including the native face
+    /// velocities.
     pub fields: bool,
+    /// Write checkpoint.json, a checksummed restart state.
     pub checkpoint: bool,
+    /// Budget for all artifacts in MiB. The preflight estimate must fit
+    /// (CFD-E007); at publication, fields and checkpoint are omitted and
+    /// listed in the manifest when they would exceed it (CFD-E061).
     pub max_total_mib: usize,
 }
+/// One finding of a check: a stable code, its severity, the path of the
+/// offending field and a message.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Diagnostic {
+    /// Stable code such as `CFD-E010` (error) or `CFD-W001` (warning), listed
+    /// in docs/diagnostics.md.
     pub code: String,
+    /// `error`, which makes the case invalid, or `warning`.
     pub severity: String,
+    /// Path of the offending field, for example `numerics.advective_cfl_max`
+    /// or `sources[0].rate_kg_s`; empty for a document-level parse error.
     pub path: String,
+    /// Explanation for people. Programs should match `code` and `path`, not
+    /// this text.
     pub message: String,
 }
+/// Result of a case check (schema `cfd-craft.check/0.1`), as `cfd-craft
+/// check` prints it: validity, the size and resource estimates, and every
+/// diagnostic.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 pub struct CheckReport {
+    /// Always `cfd-craft.check/0.1`.
     pub schema_version: String,
+    /// True when no diagnostic has severity `error`.
     pub valid: bool,
+    /// Total cell count (saturating at `usize::MAX`); 0 in the report of an
+    /// unparsable case.
     pub cells: usize,
+    /// Conservative estimate of the solver's peak memory in MiB, checked
+    /// against `run.memory_limit_mib`; not measured process memory.
     pub estimated_peak_mib: f64,
+    /// Estimated size of all archive artifacts in MiB, checked against
+    /// `output.max_total_mib`.
     pub estimated_output_mib: f64,
+    /// Every error and warning, in check order.
     pub diagnostics: Vec<Diagnostic>,
 }
 impl Case {
+    /// SHA-256 (lowercase hex) of the case's compact JSON without `name`,
+    /// `run` and `output`: the identity of the physical and numerical
+    /// problem. A checkpoint restarts only a case with the same physics hash
+    /// (CFD-E060), so budgets, the endpoint and the output policy may change
+    /// between a run and its restart, while grid, physics, sources, receptors
+    /// and numerics may not.
+    ///
+    /// ```
+    /// # let json = r#"{"schema_version": "cfd-craft.case/0.1", "name": "tiny",
+    /// #   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+    /// #   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+    /// #   "flow": {"kind": "prescribed_uniform", "velocity_m_s": [1.0, 0.0, 0.0]},
+    /// #   "constituents": [{"id": "tracer", "diffusivity_m2_s": 0.01}],
+    /// #   "sources": [{"kind": "point", "id": "S0", "constituent": "tracer",
+    /// #                "point_m": [0.5, 0.5, 0.5], "rate_kg_s": 1e-6}],
+    /// #   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+    /// #     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+    /// #     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+    /// #     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+    /// #   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 1000,
+    /// #     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+    /// #   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}}"#;
+    /// use cfd_craft::case::{Case, Source};
+    ///
+    /// let case: Case = serde_json::from_str(json).unwrap();
+    /// let mut longer = case.clone();
+    /// longer.name = "tiny, longer budget".into();
+    /// longer.run.max_steps *= 10;
+    /// assert_eq!(case.physics_hash(), longer.physics_hash());
+    ///
+    /// let mut weaker = case.clone();
+    /// if let Source::Point { rate_kg_s, .. } = &mut weaker.sources[0] {
+    ///     *rate_kg_s *= 0.5;
+    /// }
+    /// assert_ne!(case.physics_hash(), weaker.physics_hash());
+    /// ```
     pub fn physics_hash(&self) -> String {
         let mut v = serde_json::to_value(self).expect("serializable case");
         for k in ["run", "output", "name"] {
@@ -416,6 +946,47 @@ impl Case {
         }
         hash_bytes(&serde_json::to_vec(&v).unwrap())
     }
+    /// The semantic checks that need no grid: schema version, ranges and
+    /// units, budgets, physical combinations, IDs, and that geometry, sources,
+    /// receptors and initial conditions lie inside the domain. It also
+    /// estimates peak memory and output size and checks them against
+    /// `run.memory_limit_mib` (CFD-E006) and `output.max_total_mib`
+    /// (CFD-E007).
+    ///
+    /// Every problem is reported at once; the report is invalid when any
+    /// diagnostic is an error. It never fails or allocates the grid. The
+    /// checks that need the built grid are in
+    /// [`input::full_check`](crate::input::full_check), which the CLI and
+    /// the Python binding run, and are repeated by
+    /// [`solver::run`](crate::solver::run).
+    ///
+    /// ```
+    /// # let json = r#"{"schema_version": "cfd-craft.case/0.1", "name": "tiny",
+    /// #   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+    /// #   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+    /// #   "flow": {"kind": "prescribed_uniform", "velocity_m_s": [1.0, 0.0, 0.0]},
+    /// #   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+    /// #     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+    /// #     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+    /// #     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+    /// #   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 1000,
+    /// #     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+    /// #   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}}"#;
+    /// use cfd_craft::case::Case;
+    ///
+    /// let mut case: Case = serde_json::from_str(json).unwrap();
+    /// case.numerics.advective_cfl_max = 0.9;
+    /// case.run.threads = 0;
+    /// let report = case.check();
+    /// assert!(!report.valid);
+    /// let found: Vec<_> = report
+    ///     .diagnostics
+    ///     .iter()
+    ///     .map(|d| (d.code.as_str(), d.path.as_str()))
+    ///     .collect();
+    /// assert!(found.contains(&("CFD-E010", "numerics.advective_cfl_max")));
+    /// assert!(found.contains(&("CFD-E008", "run.threads")));
+    /// ```
     pub fn check(&self) -> CheckReport {
         let cells = self
             .grid
@@ -1169,6 +1740,33 @@ impl Case {
             );
         }
     }
+    /// [`check`](Self::check) as a `Result`: the report when the case is
+    /// valid (it may still carry warnings), otherwise an error whose text is
+    /// the report serialized as JSON, so its codes and paths can be parsed
+    /// back.
+    ///
+    /// ```
+    /// # let json = r#"{"schema_version": "cfd-craft.case/0.1", "name": "tiny",
+    /// #   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+    /// #   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+    /// #   "flow": {"kind": "prescribed_uniform", "velocity_m_s": [1.0, 0.0, 0.0]},
+    /// #   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+    /// #     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+    /// #     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+    /// #     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+    /// #   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 1000,
+    /// #     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+    /// #   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}}"#;
+    /// use cfd_craft::case::{Case, CheckReport};
+    ///
+    /// let mut case: Case = serde_json::from_str(json).unwrap();
+    /// assert!(case.validate().is_ok());
+    /// case.schema_version = "cfd-craft.case/9".into();
+    /// let error = case.validate().unwrap_err();
+    /// let report: CheckReport = serde_json::from_str(&error).unwrap();
+    /// assert_eq!(report.diagnostics[0].code, "CFD-E001");
+    /// assert_eq!(report.diagnostics[0].path, "schema_version");
+    /// ```
     pub fn validate(&self) -> Result<CheckReport> {
         let r = self.check();
         if r.valid {
@@ -1178,6 +1776,8 @@ impl Case {
         }
     }
 }
+/// Lowercase hex SHA-256 of `bytes`: the digest behind the case, physics,
+/// state, mask, checkpoint and archive identities.
 pub fn hash_bytes(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }

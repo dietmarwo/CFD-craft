@@ -1,5 +1,17 @@
 //! Fixed symmetric geometric multigrid for the unmasked pressure equation.
 //! This is an original implementation; no external CFD implementation is used.
+//!
+//! Selected with `numerics.pressure_preconditioner = multigrid`, it
+//! preconditions the same PCG solve as IC(0), with the same fine equation and
+//! acceptance gates. It requires one connected fluid component without
+//! masks (CFD-E034). Coarse levels are Galerkin products of linear
+//! interpolation; strongly anisotropic spacings select exact line or small
+//! plane block smoothing and semicoarsening. The hierarchy is cached in the
+//! grid and rebuilt when the face coefficients change. The public types
+//! report its storage ([`MultigridStats`], from
+//! [`pressure::multigrid_stats`](crate::pressure::multigrid_stats)) and its
+//! work in a phase profile ([`MultigridWork`]). See the
+//! [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PRESSURE_MULTIGRID.md).
 use crate::{
     Result,
     grid::{FaceKind, Grid},
@@ -40,11 +52,20 @@ fn zero(value: &u64) -> bool {
 /// grid, outer PCG vectors and temporary hierarchy-construction storage.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MultigridStats {
+    /// Unknowns per level, finest first; their sum relative to the first
+    /// entry is the grid complexity.
     pub level_cells: Vec<usize>,
+    /// Cell dimensions per level, finest first; shows semicoarsening.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub level_dimensions: Vec<[usize; 3]>,
+    /// Stored matrix entries per level, including diagonals and duplicate
+    /// fine entries; their sum relative to the first is the operator
+    /// complexity.
     pub level_nonzeros: Vec<usize>,
+    /// Retained numeric and index storage in bytes, excluding allocator
+    /// overhead, the grid and the outer PCG vectors.
     pub allocated_bytes: usize,
+    /// The block smoothers of anisotropic levels; empty for point smoothing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub block_smoothers: Vec<BlockSmootherStats>,
 }
@@ -54,21 +75,39 @@ pub struct MultigridStats {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MultigridWork {
+    /// Hierarchy constructions (0 when a cached hierarchy was reused).
     pub hierarchy_builds: u64,
+    /// Number of levels (maximum over the merged solves).
     pub hierarchy_levels: u64,
+    /// Unknowns over all levels (maximum over the merged solves).
     pub hierarchy_cells: u64,
+    /// Stored matrix entries over all levels (maximum over the merged
+    /// solves).
     pub hierarchy_nonzeros: u64,
+    /// Retained hierarchy storage in bytes (maximum over the merged solves).
     pub hierarchy_bytes: u64,
+    /// V-cycles applied, one per preconditioner application.
     pub cycles: u64,
+    /// Cell updates of all smoothing sweeps, point and block.
     pub smoothing_cell_updates: u64,
+    /// Cell updates of residual evaluations, one per cell and nonterminal
+    /// level visit.
     pub residual_cell_updates: u64,
+    /// Cell updates of restrictions; equal to the residual updates.
     pub restriction_cell_updates: u64,
+    /// Cell updates of prolongations; equal to the residual updates.
     pub prolongation_cell_updates: u64,
+    /// Dense direct solves on the coarsest level, one per cycle.
     pub coarse_solves: u64,
+    /// Cell updates of block sweeps; omitted when zero. Twice the block
+    /// level visits.
     #[serde(default, skip_serializing_if = "zero")]
     pub block_smoothing_cell_updates: u64,
+    /// Exact line or plane block solves; omitted when zero.
     #[serde(default, skip_serializing_if = "zero")]
     pub block_solves: u64,
+    /// Cells of the block-smoothed levels per visit; omitted when zero. Then
+    /// smoothing = 4 x residual - 2 x block visits.
     #[serde(default, skip_serializing_if = "zero")]
     pub block_level_cell_visits: u64,
 }

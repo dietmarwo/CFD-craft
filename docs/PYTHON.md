@@ -19,20 +19,37 @@ python -m pip install dist/*.whl
 
 ## Check and simulate
 
+An installed package has no repository checkout, so this example downloads the
+manual's [point-source case](../examples/manual/point-source.json) (prescribed
+flow, one tracer, one downstream volume receptor) from GitHub:
+
 ```python
 import json
+import urllib.request
 from pathlib import Path
 import cfd_craft as cfd
 
-case = json.loads(Path("cases/verification/periodic-tracer.json").read_text())
-case["run"]["threads"] = 1
+URL = (
+    "https://raw.githubusercontent.com/dietmarwo/CFD-craft/main/"
+    "examples/manual/point-source.json"
+)
+local = Path("point-source.json")
+if not local.exists():
+    with urllib.request.urlopen(URL, timeout=30) as response:
+        local.write_bytes(response.read())
+case = json.loads(local.read_text())
 report = cfd.check(case)
 if not report["valid"]:
     raise ValueError(report["diagnostics"])
 result = cfd.simulate(case)
 print(result["termination"], result["assessment"])
-print(result["constituents"][0]["receptors_kg_m3"])
+tracer = next(c for c in result["constituents"] if c["id"] == "tracer")
+print(tracer["receptors_kg_m3"]["R_down"] * 1e9, "micrograms/m3")
 ```
+
+The downloaded copy is reused on later runs; edit it, or a copy of it, to
+change the case. In a checkout, load `examples/manual/point-source.json` or any
+case under `cases/` directly.
 
 Inputs may be dictionaries, JSON strings or bytes. Raw bytes preserve duplicate
 keys for native rejection. Unknown fields, trailing JSON and invalid budgets are

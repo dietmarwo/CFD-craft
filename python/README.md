@@ -8,19 +8,36 @@ subprocess is needed.
 pip install cfd-craft
 ```
 
+The example loads the small
+[point-source case](https://github.com/dietmarwo/CFD-craft/blob/main/examples/manual/point-source.json)
+of the user manual (prescribed flow, one tracer, one downstream receptor)
+directly from GitHub:
+
 ```python
 import json
-from pathlib import Path
+import urllib.request
 import cfd_craft as cfd
 
-case = json.loads(Path("case.json").read_text())
+URL = (
+    "https://raw.githubusercontent.com/dietmarwo/CFD-craft/main/"
+    "examples/manual/point-source.json"
+)
+with urllib.request.urlopen(URL, timeout=30) as response:
+    case = json.load(response)
 report = cfd.check(case)
 if not report["valid"]:
     raise ValueError(report["diagnostics"])
 result = cfd.simulate(case)
 print(result["termination"], result["assessment"])
-print(result["constituents"])
+tracer = result["constituents"][0]
+print(tracer["receptors_kg_m3"]["R_down"] * 1e9, "micrograms/m3")
 ```
+
+To keep a local copy, download it once (for example
+`curl -O https://raw.githubusercontent.com/dietmarwo/CFD-craft/main/examples/manual/point-source.json`)
+and load it with `case = json.loads(Path("point-source.json").read_text())`
+after `from pathlib import Path`. `check` and `simulate` also accept a JSON
+string or bytes.
 
 `check` runs the native CLI's strict parsing and preflight and returns coded
 diagnostics with JSON paths. `simulate` releases the GIL, enforces the case's

@@ -9,6 +9,7 @@ include = ["src/**", "Cargo.toml", "Cargo.lock", "build.rs", "README.md", "LICEN
 build = "build.rs"
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Command-line interface of CFD-craft: check, run, report and verify flow and dispersion cases with checksummed archives"

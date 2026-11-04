@@ -1,0 +1,43 @@
+[build-system]
+requires = ["maturin==1.9.6"]
+build-backend = "maturin"
+
+[project]
+name = "cfd-craft"
+version = "0.1.0"
+description = "Native Cartesian flow and passive-gas dispersion research solver"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "python/README.md"
+keywords = ["CFD", "computational fluid dynamics", "dispersion", "air quality", "simulation", "Rust"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+
+[project.urls]
+Documentation = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md"
+Issues = "https://github.com/dietmarwo/CFD-craft/issues"
+Changelog = "https://github.com/dietmarwo/CFD-craft/blob/main/CHANGELOG.md"
+"Optimization ecosystem" = "https://dietmarwo.github.io/optimization-jobs/"
+"AI agent guide" = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/ai-context.md"
+Repository = "https://github.com/dietmarwo/CFD-craft"
+
+[project.scripts]
+cfd-craft-python = "cfd_craft.__main__:main"
+
+[tool.maturin]
+manifest-path = "bindings/python/Cargo.toml"
+python-source = "python"
+module-name = "cfd_craft._native"
+include = [
+    { path = "Cargo.toml", format = "sdist" },
+    { path = "Cargo.lock", format = "sdist" },
+    { path = "LICENSE", format = "sdist" },
+    { path = "crates/**/*", format = "sdist" },
+]

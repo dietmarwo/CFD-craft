@@ -1035,8 +1035,8 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         momentum_residual,
         turbulence_residual,
         receptor_relative_change: monitor_change(c, &state),
-        source_sha256: String::new(),
-        build_version: env!("CARGO_PKG_VERSION").into(),
+        source_sha256: crate::SOURCE_SHA256.into(),
+        build_version: format!("{}; {}", env!("CARGO_PKG_VERSION"), crate::RUSTC_VERSION),
         threads: c.run.threads,
     };
     Ok(RunResult {

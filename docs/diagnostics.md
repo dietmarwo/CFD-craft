@@ -18,6 +18,17 @@ field whose length does not match the grid's faces. These are lesson checks,
 not new solver tolerances; F3's fidelity gate is reported per design, not as a
 diagnostic.
 
+The Python package reports `CFD-P001 python.<field>`: `python.case` for a
+dictionary that strict JSON cannot represent (NaN, infinity, unsupported
+types), `python.worker` when the solver thread panicked or ended without a
+result (the panic message is included), and `python.<command>` for
+console-script failures outside the native report. Native rejections keep their
+own codes and paths. The release scripts (`scripts/package_version.py`,
+`scripts/check_release.py`) and the installed-package acceptance
+(`validation/check_installed.py`) report `CFD-R001 release.<field>`:
+inconsistent versions, crate metadata or lockfiles, and failed installed
+checks. Neither family is a solver tolerance.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that

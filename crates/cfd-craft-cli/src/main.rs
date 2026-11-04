@@ -24,6 +24,8 @@ enum Outcome {
     Incomplete,
 }
 
+use cfd_craft::input::{available_mib, full_check, refuse_host_memory};
+
 fn diagnostic(code: &str, path: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic {
         code: code.into(),
@@ -33,130 +35,20 @@ fn diagnostic(code: &str, path: &str, message: impl Into<String>) -> Diagnostic 
     }
 }
 
-/// Splits "CFD-E040: message" into its code and message.
-fn coded(e: &str, default: &str) -> (String, String) {
-    match e.split_once(": ") {
-        Some((code, rest)) if code.starts_with("CFD-") => (code.into(), rest.into()),
-        _ => (default.into(), e.into()),
-    }
-}
-
-fn invalid_report(diagnostics: Vec<Diagnostic>) -> CheckReport {
-    CheckReport {
-        schema_version: "cfd-craft.check/0.1".into(),
-        valid: false,
-        cells: 0,
-        estimated_peak_mib: 0.0,
-        estimated_output_mib: 0.0,
-        diagnostics,
-    }
-}
-
-/// Reads a case. A parse failure becomes a CFD-E000 diagnostic with the JSON path
-/// of the offending element.
 fn read_case(p: &str) -> Result<std::result::Result<(Vec<u8>, Case), CheckReport>> {
     let bytes = fs::read(p).map_err(|e| format!("cannot read case {p}: {e}"))?;
-    let mut de = serde_json::Deserializer::from_slice(&bytes);
-    match serde_path_to_error::deserialize::<_, Case>(&mut de) {
-        Ok(c) => match de.end() {
-            Ok(()) => Ok(Ok((bytes, c))),
-            Err(e) => Ok(Err(invalid_report(vec![diagnostic(
-                "CFD-E000",
-                "",
-                e.to_string(),
-            )]))),
-        },
-        Err(e) => {
-            let path = e.path().to_string();
-            Ok(Err(invalid_report(vec![diagnostic(
-                "CFD-E000",
-                if path == "." { "" } else { &path },
-                e.into_inner().to_string(),
-            )])))
-        }
-    }
+    Ok(cfd_craft::input::parse_case(&bytes).map(|case| (bytes, case)))
 }
 
-/// Available host memory in MiB, where the platform reports it.
-fn available_mib() -> Option<f64> {
-    let info = fs::read_to_string("/proc/meminfo").ok()?;
-    info.lines().find_map(|line| {
-        line.strip_prefix("MemAvailable:")
-            .and_then(|s| s.split_whitespace().next())
-            .and_then(|s| s.parse::<f64>().ok())
-            .map(|kib| kib / 1024.0)
-    })
-}
-
-/// Case checks plus the grid, source and receptor checks that need the built grid.
-/// Every source and receptor is checked, so all problems are reported at once. When the
-/// estimated peak does not fit this host (CFD-W070), the grid is not built and its checks
-/// are skipped, so a check never allocates what the host cannot hold.
-fn full_check(c: &Case) -> (CheckReport, Option<GeometryEvidence>) {
-    let mut report = c.check();
-    if let Some(mib) = available_mib()
-        && report.estimated_peak_mib > 0.8 * mib
-    {
-        report.diagnostics.push(Diagnostic {
-            code: "CFD-W070".into(),
-            severity: "warning".into(),
-            path: "run.memory_limit_mib".into(),
-            message: format!(
-                "The estimated peak of {:.0} MiB exceeds 80 % of the {mib:.0} MiB this host has available; run refuses it here. The grid, source and receptor checks were skipped.",
-                report.estimated_peak_mib
-            ),
-        });
-        return (report, None);
-    }
-    if !report.valid {
-        return (report, None);
-    }
-    let g = match Grid::build(c) {
-        Ok(g) => g,
-        Err(e) => {
-            let (code, message) = coded(&e, "CFD-E030");
-            // Box errors start with the element path, for example "geometry[3] (box b) ...".
-            let path = message
-                .split_once(' ')
-                .map(|(p, _)| p)
-                .filter(|p| p.starts_with("geometry["))
-                .unwrap_or("geometry")
-                .to_string();
-            report.valid = false;
-            report.diagnostics.push(diagnostic(&code, &path, message));
-            return (report, None);
-        }
-    };
-    for (i, s) in c.sources.iter().enumerate() {
-        let mut one = c.clone();
-        one.sources = vec![s.clone()];
-        if let Err(e) = cfd_craft::transport::source_fields(&one, &g) {
-            let (code, message) = coded(&e, "CFD-E040");
-            report.valid = false;
-            report
-                .diagnostics
-                .push(diagnostic(&code, &format!("sources[{i}]"), message));
-        }
-    }
-    for (i, r) in c.receptors.iter().enumerate() {
-        if let Err(e) = cfd_craft::transport::receptor_weights(&g, r) {
-            let (code, message) = coded(&e, "CFD-E042");
-            report.valid = false;
-            report
-                .diagnostics
-                .push(diagnostic(&code, &format!("receptors[{i}]"), message));
-        }
-    }
-    (report, Some(g.evidence()))
-}
-
-/// `run` refuses what `check` only warns about: a peak that does not fit this host.
-fn refuse_host_memory(report: &mut CheckReport) {
-    if let Some(w) = report.diagnostics.iter_mut().find(|d| d.code == "CFD-W070") {
-        w.code = "CFD-E070".into();
-        w.severity = "error".into();
-        report.valid = false;
-    }
+fn source_sha256() -> String {
+    hash_bytes(
+        format!(
+            "core:{};cli:{}",
+            cfd_craft::SOURCE_SHA256,
+            env!("CFD_SOURCE_SHA")
+        )
+        .as_bytes(),
+    )
 }
 
 /// Prints JSON to stdout. A closed stdout (for example `| head`) is not an error.
@@ -171,7 +63,7 @@ fn print(v: &impl serde::Serialize) -> Result<()> {
 fn describe() -> Result<()> {
     print(&serde_json::json!({
         "name":"CFD-craft","version":env!("CARGO_PKG_VERSION"),
-        "source_sha256":env!("CFD_SOURCE_SHA"),"compiler":env!("CFD_RUSTC"),
+        "source_sha256":source_sha256(),"compiler":env!("CFD_RUSTC"),
         "physics":["prescribed_uniform","laminar","neutral_rans"],
         "scalar_advection":["linear_upwind","muscl"],"pressure":"matrix_free_ic0_pcg",
         "pressure_preconditioners":["ic0","multigrid"],"default_pressure_preconditioner":"ic0",
@@ -362,7 +254,7 @@ fn solve_with_control(
         .build()
         .map_err(|e| e.to_string())?;
     let mut result = pool.install(|| cfd_craft::solver::run(c, control, state))?;
-    result.summary.source_sha256 = env!("CFD_SOURCE_SHA").into();
+    result.summary.source_sha256 = source_sha256();
     result.summary.build_version = format!("{}; {}", env!("CARGO_PKG_VERSION"), env!("CFD_RUSTC"));
     Ok(result)
 }
@@ -416,7 +308,7 @@ fn profile_case(
         "schema_version":"cfd-craft.native-profile/0.1",
         "passed":success,"error":error,"omitted":omitted,
         "input_sha256":input_sha,"case_sha256":hash_bytes(&serde_json::to_vec(c).map_err(|e|e.to_string())?),
-        "source_sha256":env!("CFD_SOURCE_SHA"),"compiler":env!("CFD_RUSTC"),
+        "source_sha256":source_sha256(),"compiler":env!("CFD_RUSTC"),
         "threads":c.run.threads,"archive_directory":"run",
         "archive_manifest_sha256":fs::read(archive.join("manifest.json")).ok().map(|b|hash_bytes(&b)),
         "state_sha256":state_sha,"summary":summary,"timing":control.profile()?,

@@ -31,6 +31,43 @@ name: CFD checks
 permissions:
   contents: read
 jobs:
+  python-binding:
+    # The binding's declared MSRV (1.88) and stable; the wheel and the
+    # installed-package acceptance run once, on stable.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        toolchain: ["1.88.0", stable]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+      - if: matrix.toolchain != 'stable'
+        run: cargo check --manifest-path bindings/python/Cargo.toml --locked
+      - if: matrix.toolchain == 'stable'
+        run: cargo fmt --manifest-path bindings/python/Cargo.toml -- --check
+      - if: matrix.toolchain == 'stable'
+        run: cargo clippy --manifest-path bindings/python/Cargo.toml --locked -- -D warnings
+      - if: matrix.toolchain == 'stable'
+        run: cargo build --release --workspace --locked
+      - if: matrix.toolchain == 'stable'
+        run: python -m pip install maturin==1.9.6
+      - if: matrix.toolchain == 'stable'
+        run: maturin build --release --locked --out dist
+      - if: matrix.toolchain == 'stable'
+        run: python -m pip install dist/*.whl
+      - if: matrix.toolchain == 'stable'
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -I "$GITHUB_WORKSPACE/validation/check_installed.py" --binary "$GITHUB_WORKSPACE/target/release/cfd-craft" --output installed.json
+          python -I -O "$GITHUB_WORKSPACE/validation/check_installed.py" --binary "$GITHUB_WORKSPACE/target/release/cfd-craft" --output installed-optimized.json
+          diff installed.json installed-optimized.json
   external-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -497,6 +534,9 @@ jobs:
         run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --release --workspace --locked
+      # Both crates must build from their own archives (crates.io releases).
+      - if: matrix.toolchain == 'stable'
+        run: cargo package --workspace --locked
   python-lint:
     runs-on: ubuntu-latest
     steps:

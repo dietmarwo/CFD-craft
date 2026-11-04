@@ -1,6 +1,6 @@
 [workspace]
 members = ["crates/cfd-craft", "crates/cfd-craft-cli"]
-exclude = ["integrations/fcmaes-cfd-worker"]
+exclude = ["integrations/fcmaes-cfd-worker", "bindings/python"]
 resolver = "2"
 
 [workspace.package]
@@ -9,6 +9,9 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 repository = "https://github.com/dietmarwo/CFD-craft"
+homepage = "https://github.com/dietmarwo/CFD-craft"
+keywords = ["cfd", "fluid-dynamics", "dispersion", "simulation", "air-quality"]
+categories = ["science", "simulation"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

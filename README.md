@@ -12,7 +12,26 @@ Rust/Python integration, optimizer jobs and troubleshooting. The
 [runnable examples](examples/manual/README.md) include four compiled Rust
 programs and a complete CLI/Python cookbook.
 
-Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These are recorded release gates, rather than a claim of general urban-model validation. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
+Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These remain physical-qualification gates. They do not prevent distribution of an explicitly experimental research package. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
+
+## Install
+
+Releases are on PyPI (`cfd-craft`, the Python binding) and crates.io
+(`cfd-craft`, the library, and `cfd-craft-cli`, the `cfd-craft` command):
+
+```sh
+python -m pip install cfd-craft
+cargo install cfd-craft-cli --locked
+```
+
+Building from this checkout is described under [Start](#start); see
+[RELEASING.md](RELEASING.md) for how releases are made.
+
+The optional [Python binding](docs/PYTHON.md) calls Rust in-process and returns
+native summaries, including receptor values, checks and termination. It has no
+NumPy dependency. `python -m cfd_craft describe` discovers its schemas. The native
+CLI remains the interface for fields, verified archives, restart and profiling.
+OpenFOAM adapters, optimizer workers and analysis tools remain optional.
 
 ## Start
 
@@ -169,4 +188,4 @@ The [three optimization lessons](tutorials/optimization/README.md) derive a sour
 
 [optimization-jobs](https://github.com/dietmarwo/optimization-jobs) runs the CLI through a trusted command; CFD evidence stays in a separate CFD result artifact. The optional [fcmaes adapter](integrations/README.md) uses fallible, cancellable scalar simulations with hashed case inputs and existing evaluate/retry/surrogate profiles. [experiment-craft](https://github.com/dietmarwo/experiment-craft) can schedule those same command or optimizer envelopes.
 
-Agents should start with [ai-context](docs/ai-context.md). The [tutorial guide](tutorials/README.md) supplies concrete tasks, budgets and interpretation rules. No release tag or package publication is implied by this source version.
+Agents should start with [ai-context](docs/ai-context.md). The [tutorial guide](tutorials/README.md) supplies concrete tasks, budgets and interpretation rules.

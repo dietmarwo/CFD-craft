@@ -1,3 +1,34 @@
+//! The native solve: bounded execution of a [`Case`], its state, and the
+//! result contract `cfd-craft.result/0.1`.
+//!
+//! [`run`] is the entry point. It validates the case, builds the grid and the
+//! source and receptor weights, starts from the initial state or a restart
+//! [`State`], and advances transactional steps until the steady checks pass,
+//! the transient interval is complete, or a budget, cancellation or failed
+//! step stops it. A [`Control`] supplies the wall-time allowance,
+//! cancellation, an optional external poll and optional profiling. The
+//! returned [`RunResult`] holds the [`Summary`] (the JSON result), the final
+//! state and the geometry evidence.
+//!
+//! Keep the questions of the result separate:
+//!
+//! - [`Summary::termination`] says why execution stopped: `completed`,
+//!   `iteration_limit`, `wall_time_limit`, `cancelled` or `diverged`.
+//! - [`Summary::assessment`] says what the recomputed [`Check`]s support:
+//!   `steady_discrete_solution`, `transient_interval_completed`,
+//!   `failed_checks` or `incomplete`.
+//! - [`Summary::experimental_validation`] is always `not_validated`: a
+//!   numerically accepted run is not a validated urban flow.
+//!
+//! A failed step never commits its candidate: the returned state is the last
+//! accepted one, and [`Summary::error`] records the failure. The result types
+//! derive `JsonSchema`; their doc comments are the `description` entries of
+//! the `result_schema` that `cfd-craft describe` prints. See the
+//! [result contract](https://github.com/dietmarwo/CFD-craft/blob/main/docs/result-contract.md).
+//!
+//! The lower-level functions ([`step`], [`assess`], [`timestep`],
+//! [`monitor`]) are research interfaces; they expect a grid built from the
+//! same case and state vectors of its dimensions.
 use crate::{
     Result,
     case::*,
@@ -18,7 +49,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Cooperative execution control of one solve: a wall-time allowance, a
+/// cancellation flag, an optional external poll and optional phase
+/// profiling.
+///
+/// The solver calls [`check`](Self::check) before every step and every eight
+/// iterations of the pressure and implicit inner solves, so cancellation is
+/// prompt but not instantaneous. The clock starts when the control is
+/// created. A stop between steps ends the run as `cancelled` or
+/// `wall_time_limit` with the last accepted state.
+///
+/// ```
+/// use cfd_craft::solver::Control;
+/// use std::sync::atomic::Ordering;
+///
+/// let control = Control::new(60.0);
+/// assert!(control.check().is_ok());
+/// control.cancelled.store(true, Ordering::Relaxed);
+/// assert_eq!(control.check().unwrap_err(), "cancelled");
+///
+/// // An external poll: any error stops the run as `cancelled`.
+/// let polled = Control::with_poll(60.0, || Err("job deadline".to_string()));
+/// assert_eq!(polled.check().unwrap_err(), "cancelled");
+/// ```
 pub struct Control {
+    /// Set to `true`, from any thread, to request cancellation. Clone the
+    /// `Arc` before starting the solve; the CLI sets it from its SIGINT and
+    /// SIGTERM handlers.
     pub cancelled: Arc<AtomicBool>,
     start: Instant,
     limit: Duration,
@@ -26,6 +83,15 @@ pub struct Control {
     profiling: Option<Collector>,
 }
 impl Control {
+    /// A control with a wall-time allowance of `seconds`, counted from now,
+    /// and no poll or profiling. Pass the case's `run.wall_time_limit_s` to
+    /// reproduce the CLI's limit.
+    ///
+    /// # Panics
+    ///
+    /// If `seconds` is negative, not finite or too large for a
+    /// [`Duration`]; validate user input first ([`Case::check`] requires a
+    /// finite positive `run.wall_time_limit_s` of at most seven days).
     pub fn new(seconds: f64) -> Self {
         Self {
             cancelled: Arc::new(AtomicBool::new(false)),
@@ -40,11 +106,19 @@ impl Control {
     /// A poll error stops the run as `cancelled`, or as `wall_time_limit` when the
     /// poll returns exactly that text. Its own message is not kept, so a run is
     /// never reported as diverged because an external caller stopped it.
+    ///
+    /// # Panics
+    ///
+    /// As [`new`](Self::new), for an invalid `seconds`.
     pub fn with_poll(seconds: f64, poll: impl Fn() -> Result<()> + Send + Sync + 'static) -> Self {
         let mut c = Self::new(seconds);
         c.external = Some(Box::new(poll));
         c
     }
+    /// `Ok` while the solve may continue. Otherwise the error is exactly
+    /// `"cancelled"` (a poll error other than `"wall_time_limit"`, or the
+    /// [`cancelled`](Self::cancelled) flag) or `"wall_time_limit"` (the poll
+    /// returned that text, or the allowance is used up). The poll runs first.
     pub fn check(&self) -> Result<()> {
         if let Some(poll) = &self.external {
             poll().map_err(|e| {
@@ -63,20 +137,43 @@ impl Control {
             Ok(())
         }
     }
+    /// Wall seconds since the control was created; reported as the summary's
+    /// `elapsed_s`.
     pub fn elapsed(&self) -> f64 {
         self.start.elapsed().as_secs_f64()
     }
     /// Enable phase measurements without changing case or result schemas.
+    /// Read them with [`profile`](Self::profile) after the solve; see the
+    /// [`profiling`](crate::profiling) module.
     pub fn with_profiling(mut self) -> Self {
         self.profiling = Some(Collector::default());
         self
     }
+    /// Start timing `phase` until the returned [`Span`] is dropped. Spans
+    /// must finish in nested order on the thread that started them. Without
+    /// [`with_profiling`](Self::with_profiling) the span is disabled and
+    /// costs neither a clock read nor a lock.
     pub fn span(&self, phase: Phase) -> Span {
         self.profiling
             .as_ref()
             .map_or_else(Span::disabled, |p| p.span(phase))
     }
     /// Snapshot after every span has finished; work includes failed attempts.
+    ///
+    /// `Ok(None)` without [`with_profiling`](Self::with_profiling). An
+    /// active or out-of-order span is an error, `CFD-B003 profile.active` or
+    /// `CFD-B003 profile.nesting`.
+    ///
+    /// ```
+    /// use cfd_craft::{profiling::Phase, solver::Control};
+    ///
+    /// assert!(Control::new(10.0).profile().unwrap().is_none());
+    /// let control = Control::new(10.0).with_profiling();
+    /// drop(control.span(Phase::Monitor));
+    /// let profile = control.profile().unwrap().expect("profiling enabled");
+    /// assert_eq!(profile.schema_version, "cfd-craft.phase-profile/0.1");
+    /// assert_eq!(profile.phases["monitor"].calls, 1);
+    /// ```
     pub fn profile(&self) -> Result<Option<Profile>> {
         self.profiling
             .as_ref()
@@ -84,26 +181,57 @@ impl Control {
             .transpose()
     }
 }
+/// Cumulative mass budget of one constituent, in kg. At any accepted state
+/// the mass in the domain should equal `initial_kg + emitted_kg + inflow_kg -
+/// outflow_kg`; the `mass_budget` check bounds the relative defect. Every
+/// entry is finite and nonnegative.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Budget {
+    /// Mass at the cold start of the calculation; restarts keep it.
     pub initial_kg: f64,
+    /// Mass emitted by the sources so far.
     pub emitted_kg: f64,
+    /// Mass that entered through boundary faces so far.
     pub inflow_kg: f64,
+    /// Mass that left through boundary faces so far.
     pub outflow_kg: f64,
 }
+/// The complete solver state: what fields.json archives and a checkpoint
+/// restores. Vectors follow the grid layout of [`Grid`]: one value per face
+/// (in `Grid::faces` order) or per cell (x fastest), with solid cells
+/// included. Counters are cumulative from the cold start, across restarts.
+///
+/// [`validate_state`] checks a state against a case before it is used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct State {
+    /// Accepted steps, or outer iterations with an implicit steady algorithm.
     pub steps: usize,
+    /// Time covered in seconds: physical time in transient mode, pseudo-time
+    /// in steady mode.
     pub time_s: f64,
+    /// Face-normal velocity of every face in m/s, the native staggered field.
     pub velocity: Vec<f64>,
+    /// Kinematic pressure of every cell in m2/s2, with a mean-zero gauge in
+    /// each fluid component without an outlet.
     pub pressure: Vec<f64>,
+    /// Turbulent kinetic energy of every cell in m2/s2; zero without
+    /// `neutral_rans` and in solid cells.
     pub k: Vec<f64>,
+    /// Dissipation rate of every cell in m2/s3; zero without `neutral_rans`
+    /// and in solid cells.
     pub epsilon: Vec<f64>,
+    /// Concentration fields in kg/m3, one per constituent in case order, one
+    /// value per cell (always zero in solid cells).
     pub concentrations: Vec<Vec<f64>>,
+    /// Mass budget of each constituent, in case order.
     pub budgets: Vec<Budget>,
+    /// Turbulence updates that hit the 1e-14 floor of k or epsilon; any
+    /// event fails the `turbulence_floor_events` check.
     pub floor_events: usize,
+    /// Pressure PCG iterations of the retained steps, including the initial
+    /// projection.
     pub pressure_iterations: usize,
     /// Inner iterations of implicit momentum-correction solves; omitted when
     /// zero, so explicit checkpoints keep their bytes.
@@ -116,75 +244,181 @@ pub struct State {
     /// `time_s`) for explicit runs, so their checkpoints keep their bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scalar_time_s: Option<f64>,
+    /// The last monitor rows, at most three monitor windows, one per step:
+    /// see [`monitor`] for the columns. They feed the `monitor_stability`
+    /// check of steady runs.
     pub monitor_history: Vec<Vec<f64>>,
 }
 fn is_zero(v: &usize) -> bool {
     *v == 0
 }
+/// One numerical check, recomputed by the solver from the current fields. A
+/// check passes when its value is finite and at most its threshold.
+/// Continuity and residual values are normalized with the case's velocity and
+/// length scales (`neutral_rans`: `speed_m_s` and `reference_height_m`;
+/// otherwise the reference speed, at least 1 m/s, and the shortest domain
+/// side).
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Check {
+    /// What is checked: `local_continuity`, `boundary_volume_balance`,
+    /// `steady_momentum_equations`, `steady_turbulence_equations`,
+    /// `turbulence_floor_events`, `monitor_stability`, or per constituent
+    /// `<id>.mass_budget`, `<id>.negative_mass`, `<id>.steady_equation` and
+    /// `<id>.steady_mass_balance`. The steady checks appear in steady mode
+    /// only, the turbulence checks with `neutral_rans` only.
     pub name: String,
+    /// The measured value, or null when it is not finite or not available,
+    /// such as `monitor_stability` before three full monitor windows. A null
+    /// value fails.
     pub value: Option<f64>,
+    /// Largest accepted value, a fixed gate or the tolerance from the case.
     pub threshold: f64,
+    /// Whether the value is finite and at most the threshold.
     pub passed: bool,
+    /// How the value was obtained, for example `application recomputation
+    /// from current fields`.
     pub method: String,
 }
+/// Evidence for one constituent at the returned state: mass budget,
+/// extrema, the steady residual, instantaneous rates and receptor values.
+/// Cumulative quantities are in kg, rates in kg/s, concentrations in kg/m3.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ScalarEvidence {
+    /// The constituent ID.
     pub id: String,
+    /// Mass in the domain, the sum of concentration times cell volume.
     pub mass_kg: f64,
+    /// Cumulative mass emitted by the sources.
     pub emitted_kg: f64,
+    /// Cumulative mass that entered through boundary faces.
     pub inflow_kg: f64,
+    /// Cumulative mass that left through boundary faces.
     pub outflow_kg: f64,
+    /// `mass_kg` minus initial, emitted and inflow mass plus outflow mass.
     pub budget_defect_kg: f64,
+    /// Absolute budget defect over the sum of initial, emitted, inflow and
+    /// outflow mass; the `mass_budget` check requires at most 1e-9.
     pub relative_budget_defect: f64,
+    /// Smallest concentration over the fluid cells.
     pub minimum_kg_m3: f64,
+    /// Largest concentration over all cells, at least 0.
     pub maximum_kg_m3: f64,
+    /// Mass of the negative concentrations, as a positive number; never
+    /// clipped.
     pub negative_mass_kg: f64,
+    /// Largest steady-equation residual |dc/dt| over the cells, normalized by
+    /// the velocity scale, the length scale and `maximum_kg_m3`.
     pub steady_residual: f64,
+    /// Emission rate of the represented sources.
     pub source_rate_kg_s: f64,
+    /// Current rate of mass entering through boundary faces.
     pub boundary_inflow_rate_kg_s: f64,
+    /// Current rate of mass leaving through boundary faces.
     pub boundary_outflow_rate_kg_s: f64,
+    /// Concentration at each receptor, keyed by receptor ID. JSON maps are
+    /// sorted lexically (`R10` before `R2`), so look values up by ID.
     pub receptors_kg_m3: BTreeMap<String, f64>,
 }
+/// The result of one native run (schema `cfd-craft.result/0.1`), written as
+/// summary.json: identities, the stopping reason and numerical verdict, work
+/// counters, geometry, the recomputed checks and per-constituent evidence.
+/// `termination` says why execution stopped; `assessment` says what the
+/// checks support; experimental validation is a separate question. Null
+/// means unavailable in the stated context, not zero.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Summary {
+    /// Always `cfd-craft.result/0.1`.
     pub schema_version: String,
+    /// The case name.
     pub name: String,
+    /// SHA-256 of the consumed, normalized case as compact JSON.
     pub case_sha256: String,
+    /// Physics hash of the case: the case without `name`, `run` and
+    /// `output`. Checkpoints are compatible across cases with the same value.
     pub physics_sha256: String,
+    /// SHA-256 of the starting state (cold or restored), so restarts from
+    /// different states stay distinguishable.
     pub initial_state_sha256: String,
+    /// Why execution stopped: `completed`, `iteration_limit` (step budget),
+    /// `wall_time_limit`, `cancelled` or `diverged` (a failed step, recorded
+    /// in `error`).
     pub termination: String,
+    /// Numerical verdict: `steady_discrete_solution` or
+    /// `transient_interval_completed` (completed with every check passed),
+    /// `failed_checks` (completed, some check failed) or `incomplete` (any
+    /// other termination). Never upgraded because the last state looks
+    /// reasonable.
     pub assessment: String,
+    /// The failure that stopped the run, usually with its code (for example
+    /// `CFD-E033: pressure iteration limit 100`), or `cancelled` /
+    /// `wall_time_limit` when the stop came inside a step; null otherwise.
     pub error: Option<String>,
+    /// Model label: `incompressible_laminar`,
+    /// `prescribed_flow_passive_transport` or `neutral_k_epsilon_rough_wall`;
+    /// the CLI prefixes `preview: ` for a coarsened preview.
     pub model_scope: String,
+    /// Always `not_validated; see validation/data-inventory.json`: numerical
+    /// acceptance is not experimental validation.
     pub experimental_validation: String,
+    /// Retained steps (outer iterations with an implicit steady algorithm),
+    /// cumulative across restarts.
     pub steps: usize,
+    /// Time covered in seconds; pseudo-time in steady mode.
     pub physical_time_s: f64,
+    /// Wall seconds of this invocation, from the creation of its control.
     pub elapsed_s: f64,
+    /// Cumulative pressure PCG iterations of the retained steps.
     pub pressure_iterations: usize,
     /// Inner iterations of implicit momentum-correction solves, when selected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub momentum_solver_iterations: Option<usize>,
+    /// Turbulence updates that hit the k or epsilon floor; any event fails
+    /// the turbulence checks.
     pub turbulent_floor_events: usize,
+    /// Number of fluid cells.
     pub fluid_cells: usize,
+    /// Number of solid cells.
     pub solid_cells: usize,
+    /// Number of face-connected fluid regions, each with its own pressure
+    /// gauge unless it touches an outlet.
     pub fluid_components: usize,
+    /// SHA-256 of the cell mask, one byte per cell (1 fluid, 0 solid) in
+    /// cell order; also in geometry.json.
     pub mask_sha256: String,
+    /// The preflight memory estimate of the case check, in MiB.
     pub estimated_peak_mib: f64,
+    /// Every recomputed check of the returned state.
     pub checks: Vec<Check>,
+    /// Evidence for each constituent, in case order.
     pub constituents: Vec<ScalarEvidence>,
+    /// Largest absolute face velocity in m/s.
     pub velocity_max_m_s: f64,
+    /// Largest normalized momentum residual, null for prescribed flow.
     pub momentum_residual: Option<f64>,
+    /// Largest normalized k or epsilon residual, `neutral_rans` only.
     pub turbulence_residual: Option<f64>,
+    /// Largest relative change between the means of three successive monitor
+    /// windows over all monitor columns (flow norm, constituent masses,
+    /// receptor values and, with `neutral_rans`, mean k and epsilon); null
+    /// before three full windows. The `monitor_stability` value of steady
+    /// runs.
     pub receptor_relative_change: Option<f64>,
+    /// Source fingerprint of the producing build. A library run reports the
+    /// core crate's; the CLI and the Python binding combine it with their own.
     pub source_sha256: String,
+    /// Package version and compiler of the producing build, as
+    /// `<version>; <rustc version>`.
     pub build_version: String,
+    /// The case's declared `run.threads`, not a measurement of the pool.
     pub threads: usize,
 }
+/// The cold-start state of a case: face velocities from
+/// [`Flow::vector`], zero pressure, the `neutral_rans` equilibrium k and
+/// epsilon in fluid cells, the initial concentrations and their initial
+/// masses, and zero counters.
 pub fn initial_state(c: &Case, g: &Grid) -> State {
     let concentrations = transport::initial_fields(c, g);
     let budgets = concentrations
@@ -230,6 +464,12 @@ pub fn initial_state(c: &Case, g: &Grid) -> State {
         monitor_history: vec![],
     }
 }
+/// Checks that a state fits the case and grid before it is used, for example
+/// a restart: vector dimensions (`CFD-E050`), finite values, nonnegative k,
+/// epsilon and budgets, a `scalar_time_s` within `time_s`, a finite monitor
+/// history, and zero concentration in solid cells (all `CFD-E051`). It does
+/// not check the physics identity; [`output::read_checkpoint`](crate::output::read_checkpoint)
+/// does that.
 pub fn validate_state(c: &Case, g: &Grid, s: &State) -> Result<()> {
     validate_with_history(c, g, s, &s.monitor_history)
 }
@@ -287,6 +527,14 @@ fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
         .map(|n| c.constituents[s].diffusivity_m2_s + n / sc)
         .collect()
 }
+/// The next stable time step in seconds for the case's steady algorithm,
+/// capped by `numerics.max_time_step_s`. `explicit` limits advection and
+/// diffusion together with `numerics.advective_cfl_max` (at most 0.45),
+/// `implicit_viscous` limits advection only, and `implicit_projection`
+/// follows the CFL ramp of
+/// [`momentum_solve::ramp_cfl`](crate::momentum_solve::ramp_cfl). `nut` is
+/// the eddy viscosity per cell ([`flow::eddy_viscosity`]). [`run`] clips the
+/// step to the end time of a transient run.
 pub fn timestep(c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
     timestep_for(c.numerics.steady_algorithm, c, g, s, nut)
 }
@@ -490,6 +738,20 @@ fn advance_scalar(
     budget.outflow_kg += 0.5 * dt * (outflow1 + outflow2);
 }
 
+/// Advances `s` by one step (one outer iteration with an implicit steady
+/// algorithm) of size `dt`, transactionally.
+///
+/// The candidate state is built beside `s`: flow (SSPRK2 with a projection
+/// per stage, or one implicit correction and projection), turbulence and the
+/// constituents with their budgets. It replaces `s` only when every gate
+/// passes, so on `Err` the state is unchanged. `sources` are the source
+/// densities of [`transport::source_fields`], one per constituent; a shorter
+/// slice leaves the remaining constituents unchanged. Errors are the
+/// control's `"cancelled"` / `"wall_time_limit"`, or a coded failure such as
+/// `CFD-E033` (pressure limit), `CFD-E051` (nonfinite state), `CFD-E052`
+/// (velocity divergence) or `CFD-E053` (negative concentration).
+///
+/// The monitor history is not updated; [`run`] appends [`monitor`] rows.
 pub fn step(
     c: &Case,
     g: &Grid,
@@ -634,6 +896,11 @@ pub fn step(
     *s = next;
     Ok(())
 }
+/// One monitor row of the state: the RMS face velocity, then for each
+/// constituent its mass (kg) followed by its receptor values (kg/m3, in
+/// receptor order), then with `neutral_rans` the mean k and the mean
+/// epsilon over all cells. `weights` are the receptor weights of
+/// [`transport::receptor_weights`], in receptor order.
 pub fn monitor(c: &Case, g: &Grid, s: &State, weights: &[transport::Weights]) -> Vec<f64> {
     let mut v =
         vec![s.velocity.iter().map(|v| v * v).sum::<f64>().sqrt() / (g.faces.len() as f64).sqrt()];
@@ -649,6 +916,11 @@ pub fn monitor(c: &Case, g: &Grid, s: &State, weights: &[transport::Weights]) ->
     }
     v
 }
+/// Largest relative change between the column means of three successive
+/// windows of `numerics.monitor_window` rows, each change relative to the
+/// largest absolute mean of its column (at least 1e-30). The windows are the
+/// first three of the monitor history, which [`run`] keeps at the last three
+/// windows. `None` until the history holds three full windows.
 pub fn monitor_change(c: &Case, s: &State) -> Option<f64> {
     let w = c.numerics.monitor_window;
     if s.monitor_history.len() < 3 * w {
@@ -671,6 +943,13 @@ pub fn monitor_change(c: &Case, s: &State) -> Option<f64> {
     }
     Some(delta)
 }
+/// Recomputes the numerical checks of a state from its fields.
+///
+/// Returns the [`Check`]s, the [`ScalarEvidence`] of each constituent, the
+/// normalized momentum residual (`None` for prescribed flow) and the
+/// normalized turbulence residual (`None` without `neutral_rans`). Steady
+/// checks are included in steady mode only. `sources` and `weights` are the
+/// source densities and receptor weights of the case on grid `g`.
 pub fn assess(
     c: &Case,
     g: &Grid,
@@ -859,11 +1138,70 @@ pub fn assess(
     }
     (checks, scalars, momentum, turbulence)
 }
+/// Everything a solve returns: the JSON summary, the final accepted state
+/// and the geometry evidence. [`output::write_run`](crate::output::write_run)
+/// publishes it as a run archive.
 pub struct RunResult {
+    /// The result record (summary.json).
     pub summary: Summary,
+    /// The last accepted state (fields.json, or a checkpoint for a restart).
     pub state: State,
+    /// Cell counts, fluid components and mask hash (geometry.json).
     pub geometry: GeometryEvidence,
 }
+/// Solves a case within the limits of `control`, from the cold-start state or
+/// from a `restart` state, and returns the inspectable outcome.
+///
+/// `Err` means the solve could not start: an invalid case (the error is the
+/// serialized [`CheckReport`], as from [`Case::validate`]) or a grid, source,
+/// receptor or restart-state failure with its code (`CFD-E028` to
+/// `CFD-E044`, `CFD-E050`, `CFD-E051`). Once stepping has begun the result is
+/// `Ok`, also when the run was cancelled, ran out of budget or diverged:
+/// always read [`Summary::termination`] and [`Summary::assessment`].
+///
+/// A restart state should come from
+/// [`output::read_checkpoint`](crate::output::read_checkpoint), which also
+/// checks its physics identity; `run` checks only its dimensions and values.
+/// The library does not create a Rayon pool from `run.threads`; run inside
+/// `pool.install` when thread accounting matters. Steady runs assess their
+/// checks every `numerics.monitor_window` steps and stop when all pass.
+///
+/// ```
+/// use cfd_craft::{case::Case, solver::{self, Control}};
+///
+/// let case: Case = serde_json::from_str(r#"{
+///   "schema_version": "cfd-craft.case/0.1", "name": "tiny",
+///   "domain": {"size_m": [4.0, 1.0, 1.0]}, "grid": {"cells": [8, 2, 2]},
+///   "boundaries": {"x": "open", "y": "periodic", "z": "periodic"},
+///   "flow": {"kind": "prescribed_uniform", "velocity_m_s": [1.0, 0.0, 0.0]},
+///   "constituents": [{"id": "tracer", "diffusivity_m2_s": 0.01}],
+///   "sources": [{"kind": "point", "id": "S0", "constituent": "tracer",
+///                "point_m": [0.5, 0.5, 0.5], "rate_kg_s": 1e-6}],
+///   "numerics": {"transport": "linear_upwind", "max_time_step_s": 1.0,
+///     "advective_cfl_max": 0.4, "pressure_relative_tolerance": 1e-10,
+///     "pressure_max_iterations": 100, "steady_residual_tolerance": 1e-5,
+///     "steady_monitor_tolerance": 1e-3, "monitor_window": 10},
+///   "run": {"mode": "steady", "end_time_s": 1.0, "max_steps": 5,
+///     "wall_time_limit_s": 30.0, "threads": 1, "memory_limit_mib": 64},
+///   "output": {"fields": false, "checkpoint": false, "max_total_mib": 4}
+/// }"#).unwrap();
+///
+/// // Five steps cannot reach a steady state: the result is still `Ok`.
+/// let result = solver::run(&case, &Control::new(case.run.wall_time_limit_s), None)?;
+/// assert_eq!(result.summary.termination, "iteration_limit");
+/// assert_eq!(result.summary.assessment, "incomplete");
+/// assert_eq!(result.state.steps, 5);
+///
+/// // Continue from the returned state with a larger step budget.
+/// let mut more = case.clone();
+/// more.run.max_steps = 2000;
+/// let control = Control::new(more.run.wall_time_limit_s);
+/// let resumed = solver::run(&more, &control, Some(result.state))?;
+/// assert_eq!(resumed.summary.termination, "completed");
+/// assert_eq!(resumed.summary.assessment, "steady_discrete_solution");
+/// assert!(resumed.summary.checks.iter().all(|c| c.passed));
+/// # Ok::<(), String>(())
+/// ```
 pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunResult> {
     let _run = control.span(Phase::SolverRun);
     {

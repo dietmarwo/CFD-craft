@@ -1,3 +1,14 @@
+//! Momentum and turbulence terms of the flow model: the steady momentum
+//! right-hand side, wall treatment, momentum advection schemes and the
+//! neutral k-epsilon package.
+//!
+//! Velocities are the face-normal components of the staggered grid; k,
+//! epsilon and the eddy viscosity are cell values. Walls and solids enter
+//! through ghost values: no-slip (or moving-wall) reflection for laminar
+//! flow, rough-wall functions with `neutral_rans`, and the equilibrium shear
+//! stress at the top of `ground_open_top`. The coefficients, the wall and
+//! inflow treatment and their limits are documented in the
+//! [flow model card](https://github.com/dietmarwo/CFD-craft/blob/main/docs/model-cards/flow.md).
 // Explicit tensor indices keep the stencil equations readable.
 #![allow(clippy::needless_range_loop)]
 use crate::{
@@ -7,10 +18,18 @@ use crate::{
 };
 use rayon::prelude::*;
 
+/// k-epsilon closure coefficient C_mu in nu_t = C_mu k^2 / epsilon.
 pub const C_MU: f64 = 0.09;
+/// Production coefficient C_epsilon1 of the epsilon equation.
 pub const C1: f64 = 1.44;
+/// Destruction coefficient C_epsilon2 of the epsilon equation.
 pub const C2: f64 = 1.92;
+/// Turbulent Prandtl number of epsilon, kappa^2 / ((C2 - C1) sqrt(C_mu)) =
+/// 1.111..., chosen so the inflow log layer is an equilibrium (kappa = 0.4).
 pub const SIGMA_EPSILON: f64 = 0.4 * 0.4 / ((C2 - C1) * 0.3);
+/// Eddy viscosity C_mu k^2 / epsilon in m2/s, per cell; zero in solid cells
+/// and where epsilon is not positive (always without `neutral_rans`, whose
+/// k and epsilon are zero).
 pub fn eddy_viscosity(g: &Grid, k: &[f64], eps: &[f64]) -> Vec<f64> {
     (0..g.count())
         .map(|i| {
@@ -178,11 +197,16 @@ pub enum Reconstruction {
     FirstOrder,
     /// s = a: unlimited second-order upwind.
     SecondOrder,
+    /// s = ab(a + b)/(a^2 + b^2) where ab > 0, else 0.
     VanAlbada,
+    /// s = 2ab/(a + b) where ab > 0, else 0.
     VanLeer,
+    /// s = sign(b) min(2|a|, |a + b|/2, 2|b|) where ab > 0, else 0.
     MonotonizedCentral,
 }
 impl Reconstruction {
+    /// The flux-form reconstruction selected by the case numerics, or `None`
+    /// for the default donor-cell scheme, which uses the advective form.
     pub fn of(numerics: &Numerics) -> Option<Self> {
         match (numerics.momentum_advection, numerics.momentum_limiter) {
             (MomentumAdvection::DonorCell, _) => None,
@@ -200,6 +224,8 @@ impl Reconstruction {
             (MomentumAdvection::LimitedUpwind, None) => Some(Self::FirstOrder),
         }
     }
+    /// The limited slope s(a, b) of the reconstruction phi_f = phi_U +
+    /// s(a, b)/2, with a = phi_U - phi_UU and b = phi_D - phi_U.
     pub fn slope(self, a: f64, b: f64) -> f64 {
         match self {
             Self::FirstOrder => 0.0,
@@ -487,6 +513,13 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
         })
         .collect()
 }
+/// Turbulence production per cell in m2/s3, `2 nu_t S:S` from the cell
+/// velocity gradients, and the algebraic wall epsilon of wall-adjacent cells.
+///
+/// With `neutral_rans`, a cell with wall faces takes the mean wall-function
+/// production and dissipation over those faces instead (the second vector is
+/// `Some(epsilon)` there and `None` elsewhere). `u` are face velocities,
+/// `nut` the eddy viscosity and `k` the turbulent kinetic energy.
 pub fn production(
     c: &Case,
     g: &Grid,
@@ -625,6 +658,14 @@ pub(crate) fn turbulence_terms(
         e_top,
     }
 }
+/// One explicit k-epsilon update of size `dt` on the face velocities `u`, in
+/// place, with implicit destruction terms and the algebraic wall epsilon.
+///
+/// Returns the number of fluid cells whose new k or epsilon fell below the
+/// 1e-14 floor and were raised to it; any such event fails the numerical
+/// checks. A nonfinite update stores NaN, which the state check then
+/// rejects. With `dt = 0`, as after the initial projection, k and epsilon
+/// change only by the wall epsilon and the floor.
 pub fn turbulence_step(
     c: &Case,
     g: &Grid,

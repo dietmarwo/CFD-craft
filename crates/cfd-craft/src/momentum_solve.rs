@@ -1,5 +1,6 @@
 //! Matrix-free linear operators on the face-velocity unknowns, for implicit
-//! steady pseudo-time (stages P4 and P5a of docs/ACCURACY_STEADY_PLAN.md).
+//! steady pseudo-time (stages P4 and P5a of the
+//! [accuracy and steady-solver plan](https://github.com/dietmarwo/CFD-craft/blob/main/docs/ACCURACY_STEADY_PLAN.md)).
 //!
 //! The unknowns are the corrections δ on faces that carry a momentum equation
 //! (interior and outlet faces). All other faces keep their prescribed velocity,
@@ -28,12 +29,17 @@ pub enum Neighbor {
     Ghost(f64),
 }
 
-/// Neighbors of every face in the order [direction][side], as `momentum_rhs`
+/// Neighbors of every face in the order `[direction][side]`, as `momentum_rhs`
 /// samples them, plus the unknown flags.
 #[derive(Clone, Debug)]
 pub struct Stencil {
+    /// Per face, whether its correction is an unknown (interior and outlet
+    /// faces); the corrections of all other faces are zero.
     pub unknown: Vec<bool>,
+    /// Per face, the same-axis neighbor in each direction (0..3) and side
+    /// (0 lower, 1 upper), as the momentum right-hand side samples it.
     pub neighbors: Vec<[[Neighbor; 2]; 3]>,
+    /// The grid's cell sizes in meters.
     pub spacing: [f64; 3],
     /// For each unknown face, direction and side of its momentum control
     /// volume: the two face velocities whose mean advects through that
@@ -57,6 +63,9 @@ fn ghost_coefficient(
 }
 
 impl Stencil {
+    /// Builds the stencil of grid `g` for case `c`, with the ghost
+    /// coefficients of zero eddy viscosity. The solver caches it in the grid
+    /// on first use.
     pub fn build(c: &Case, g: &Grid) -> Self {
         let unknown: Vec<_> = g
             .faces
@@ -188,12 +197,17 @@ impl Stencil {
 /// Work of one inexact implicit solve.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SolveInfo {
+    /// Inner iterations performed; counted in the summary's
+    /// `momentum_solver_iterations`.
     pub iterations: usize,
+    /// Final residual relative to the right-hand side. It is reported, not
+    /// gated: an inexact correction changes only the path to the fixed point.
     pub relative_residual: f64,
 }
 
 /// Predeclared inner tolerance and iteration cap of the P4 viscous solves.
 pub const VISCOUS_RELATIVE_TOLERANCE: f64 = 1e-3;
+/// Iteration cap of each P4 viscous CG solve.
 pub const VISCOUS_MAX_ITERATIONS: usize = 50;
 
 /// Solves (I − Δτ·ν·L) δ = b on the unknowns with Jacobi-preconditioned CG,
@@ -283,10 +297,15 @@ pub fn solve_viscous(
 }
 
 /// A diagonally dominant correction matrix on the unknowns: one diagonal and
-/// one coefficient per stencil neighbor ([direction][side]).
+/// one coefficient per stencil neighbor (`[direction][side]`).
 #[derive(Clone, Debug)]
 pub struct Matrix {
+    /// Diagonal entry per face, including the ghost contributions. A
+    /// nonpositive or nonfinite entry on an unknown is rejected by
+    /// [`solve_implicit`] (CFD-E056).
     pub diagonal: Vec<f64>,
+    /// Coefficient of each stencil neighbor, `[direction][side]`; used only
+    /// where the neighbor is an unknown.
     pub off: Vec<[[f64; 2]; 3]>,
 }
 
@@ -379,6 +398,7 @@ impl Stencil {
 }
 
 impl Matrix {
+    /// `y = A x` on the unknowns of `stencil`; zero on the other faces.
     pub fn apply(&self, stencil: &Stencil, x: &[f64], y: &mut [f64]) {
         for (fi, out) in y.iter_mut().enumerate() {
             if !stencil.unknown[fi] {
@@ -414,7 +434,10 @@ impl Matrix {
 /// preconditioned BiCGStab (van der Vorst, 1992) from δ = 0, to this relative
 /// residual or cap. One iteration is two operator applications.
 pub const BICGSTAB_RELATIVE_TOLERANCE: f64 = 0.1;
+/// Iteration cap of each BiCGStab correction solve.
 pub const BICGSTAB_MAX_ITERATIONS: usize = 50;
+/// The pilot's selection: `true` uses BiCGStab for the implicit correction,
+/// `false` would use [`PROJECTION_SWEEPS`] symmetric Gauss–Seidel sweeps.
 pub const USE_BICGSTAB: bool = true;
 /// The pilot's other candidate: symmetric Gauss–Seidel sweeps, each a forward
 /// and a backward pass, counted as one inner iteration.
@@ -580,9 +603,14 @@ pub fn solve_implicit(
 /// non-binding `max_time_step_s`, caps of 5–50 all reach the canyon's gates in
 /// 400 outer iterations, and 5 gives the cavities the fewest (180 and 300).
 pub const CFL_START: f64 = 1.0;
+/// Growth factor of the CFL ramp per outer iteration.
 pub const CFL_GROWTH: f64 = 1.2;
+/// Largest CFL number of the ramp.
 pub const CFL_MAX: f64 = 5.0;
 
+/// CFL number of outer iteration `steps`: min(CFL_MAX, CFL_START *
+/// CFL_GROWTH^steps). It depends only on the step count, so a restart
+/// continues the ramp without extra state.
 pub fn ramp_cfl(steps: usize) -> f64 {
     CFL_START
         * CFL_GROWTH

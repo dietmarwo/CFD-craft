@@ -34,6 +34,21 @@ fn invalid_report(diagnostics: Vec<Diagnostic>) -> CheckReport {
 
 /// Reads a case. A parse failure becomes a CFD-E000 diagnostic with the JSON path
 /// of the offending element.
+///
+/// Unknown fields, unknown variants, duplicate fields and trailing data are
+/// all rejected. Only the types are checked here; run [`full_check`] (or
+/// [`Case::check`](crate::case::Case::check)) for the semantic checks.
+///
+/// ```
+/// use cfd_craft::input;
+///
+/// let report = input::parse_case(br#"{"schema_version": "cfd-craft.case/0.1",
+///     "name": "typo", "domain": {"size_m": [1.0, 1.0, 1.0], "origin_m": [0, 0, 0]}}"#)
+///     .unwrap_err();
+/// assert!(!report.valid);
+/// assert_eq!(report.diagnostics[0].code, "CFD-E000");
+/// assert_eq!(report.diagnostics[0].path, "domain.origin_m");
+/// ```
 pub fn parse_case(bytes: &[u8]) -> std::result::Result<Case, CheckReport> {
     let mut de = serde_json::Deserializer::from_slice(bytes);
     match serde_path_to_error::deserialize::<_, Case>(&mut de) {

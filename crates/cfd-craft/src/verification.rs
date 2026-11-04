@@ -1,4 +1,16 @@
+//! Numerical verification fixtures that run on a case's own grid, used by
+//! `cfd-craft verify`.
 use crate::{Result, case::*, grid::Grid, pressure, solver::Control};
+/// Discrete pressure recovery on the case's grid: builds the field
+/// sin(2 pi x / Lx), removes its gauge, applies the pressure operator and
+/// solves for it again to a relative tolerance of 1e-11 (at most 5000
+/// iterations, 60 s).
+///
+/// Returns a `cfd-craft.verification/0.1` JSON record with the RMS error,
+/// the relative residual, the iterations and `passed` (RMS error below
+/// 1e-9). This checks the pressure solve on that grid, not the flow solution
+/// of the case. Errors are those of [`Grid::build`] and
+/// [`pressure::solve`].
 pub fn pressure_fixture(c: &Case) -> Result<serde_json::Value> {
     let g = Grid::build(c)?;
     let mut exact: Vec<_> = (0..g.count())

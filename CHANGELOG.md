@@ -2,12 +2,13 @@
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-03
+## [0.1.0] - 2026-11-04
 
 First version, 0.1.0, a research prototype, released on crates.io (`cfd-craft`, `cfd-craft-cli`) and PyPI (`cfd-craft`). Experimental canyon validation and a successful fine-grid resolution study remain open gates; a package release is not physical qualification.
 
 ### Added
 
+- API documentation of the `cfd-craft` library for docs.rs: every public item is documented (coverage 15.1% to 100%, `#![warn(missing_docs)]` keeps it there) with units, valid ranges, invariants and diagnostic codes, a landing page with the prototype status, entry points and a quickstart, module overviews and 14 doctests. The doc comments of the case, result and phase-profile types also fill the `description` entries of the schemas that `describe` prints; the schemas' shape is unchanged. The `cfd-craft-cli` crate links its user manual as documentation, and the Python examples load the manual's point-source case from GitHub, so they run from an installed package.
 - Releases (from the contributed release-preparation bundle, reviewed): publishable crates with versioned path dependencies, per-crate README and LICENSE; an optional PyO3 binding and Python package (`cfd_craft`: `check`, `simulate` with the GIL released, a bounded per-call Rayon pool, cancel file and Ctrl-C; console script `cfd-craft-python`) whose preflight is the CLI's, moved into the library as `cfd_craft::input`; `python-release.yml` (abi3 wheels for Linux, Windows and macOS plus the sdist, each checked by `validation/check_installed.py` on CPython 3.10 and 3.14) and `publish-crates.yml`, both publishing on a `v*` tag; `scripts/package_version.py` and `scripts/check_release.py`; CI builds the binding on Rust 1.88 and stable and packages both crates. Release-script failures are `CFD-R001 release.<field>`, Python binding failures `CFD-P001 python.<field>` (docs/diagnostics.md).
 - Source fingerprints are package-safe: each crate hashes its own sources, manifest and build script plus the root workspace manifest and lockfile in a checkout, or its packaged lockfile; the CLI and binding combine theirs with the core's. Library results now carry the core fingerprint and compiler instead of an empty identity. Fingerprints recorded before 0.1.0 (for example in validation/RESULTS.md) used the earlier definition.
 - [F1–F3 optimization tutorials](tutorials/optimization/README.md) (contributed by Astra): native LP versus BiteOpt and GP source allocation with fresh superposition replay, a finite sensor-coverage MIP with exhaustive and greedy checks, every coverage-optimal subset's rank and conditioning and held-out inversion, and coupled cavity design with frozen acceptance and two-grid fidelity gates (zero supported designs in both presets). F3's mean squared speed is the trapezoid volume mean of the staggered face velocities, the GP arm's seed and settings are explicit, and lesson failures report `CFD-T001 optimization.<field>`.

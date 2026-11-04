@@ -1,5 +1,6 @@
 //! Implicit k–ε pseudo-time steps in delta form for the implicit steady
-//! iteration with RANS (stage P5c of docs/ACCURACY_STEADY_PLAN.md).
+//! iteration with RANS (stage P5c of the
+//! [accuracy and steady-solver plan](https://github.com/dietmarwo/CFD-craft/blob/main/docs/ACCURACY_STEADY_PLAN.md)).
 //!
 //! Each outer iteration solves, after the momentum–pressure update,
 //!
@@ -27,6 +28,7 @@ use crate::{
 /// Predeclared inner tolerance and cap of each k and ε solve, the same as
 /// the momentum correction's (momentum_solve::BICGSTAB_*).
 pub const TURBULENCE_RELATIVE_TOLERANCE: f64 = 0.1;
+/// Iteration cap of each k and ε BiCGStab solve.
 pub const TURBULENCE_MAX_ITERATIONS: usize = 50;
 /// Floor of k and ε, as in `flow::turbulence_step`.
 const FLOOR: f64 = 1e-14;
@@ -198,11 +200,19 @@ fn solve(
 /// Work of one implicit k–ε step.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StepInfo {
+    /// Fluid cells whose k or ε hit the 1e-14 floor, one event per cell, as
+    /// in `flow::turbulence_step`.
     pub floor_events: usize,
+    /// Inner BiCGStab iterations of the k and the ε solve together.
     pub iterations: usize,
 }
 
 /// One implicit k–ε pseudo-time step of size `dt` on the velocity `u`.
+///
+/// Updates `k` and `eps` in place: first the k correction, then the ε
+/// correction with the new k. A nonfinite cell value is stored as NaN for the
+/// state check to reject. Errors are `CFD-E057` (a nonfinite or singular
+/// correction system) and the control's `cancelled` / `wall_time_limit`.
 pub fn implicit_step(
     c: &Case,
     g: &Grid,

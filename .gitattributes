@@ -1,0 +1,3 @@
+# Keep the Python validation suite out of GitHub language statistics,
+# so the repository is reported by its Rust solver code.
+validation/** linguist-detectable=false

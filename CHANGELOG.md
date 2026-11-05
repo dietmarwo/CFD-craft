@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `.gitattributes` excludes the Python validation suite (`validation/`) from GitHub language statistics, so GitHub reports the repository as Rust.
+
 ## [0.1.0] - 2026-11-04
 
 First version, 0.1.0, a research prototype, released on crates.io (`cfd-craft`, `cfd-craft-cli`) and PyPI (`cfd-craft`). Experimental canyon validation and a successful fine-grid resolution study remain open gates; a package release is not physical qualification.

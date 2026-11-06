@@ -1,0 +1,78 @@
+# Retry jobs that GitHub never started for lack of a hosted runner.
+#
+# macOS arm64 runners are sometimes unavailable: such a job waits, is
+# cancelled after about 15 minutes without running a single step, and the run
+# fails. A failed release run means nothing is uploaded until someone reruns
+# it. This workflow reruns the failed jobs of a run, and with them the jobs
+# that were skipped because of them (such as "Publish to PyPI"), but only when
+# every job that did not succeed was cancelled before any runner picked it up.
+# Real failures, user cancellations and jobs that ran at least one step are
+# left alone. It retries at most twice per run (three attempts in total),
+# waiting for each rerun to finish, because a rerun requested with the
+# workflow token does not trigger this workflow again.
+name: Retry jobs without a runner
+
+on:
+  workflow_run:
+    workflows:
+      - "Build and publish cfd-craft for Python"
+      - "Publish crates to crates.io"
+      - "CFD checks"
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: retry-runner-shortage-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    # A run cancelled by a user ends "cancelled"; a run whose job found no
+    # runner ends "failure".
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      MAX_ATTEMPTS: "3"
+    steps:
+      - name: Rerun jobs that never got a runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          while true; do
+            run=$(gh api "repos/$REPO/actions/runs/$RUN_ID")
+            status=$(jq -r .status <<<"$run")
+            conclusion=$(jq -r .conclusion <<<"$run")
+            attempt=$(jq -r .run_attempt <<<"$run")
+            if [ "$status" != completed ]; then
+              sleep 60
+              continue
+            fi
+            if [ "$conclusion" != failure ]; then
+              echo "Run $RUN_ID attempt $attempt ended $conclusion; nothing to do."
+              exit 0
+            fi
+            jobs=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/attempts/$attempt/jobs?per_page=100" --jq '.jobs[]' | jq -s .)
+            # Jobs that did not succeed, ignoring skipped dependents.
+            bad=$(jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")]' <<<"$jobs")
+            count=$(jq length <<<"$bad")
+            unstarted=$(jq '[.[] | select(.conclusion == "cancelled" and (.steps | length) == 0 and ((.runner_name // "") == ""))] | length' <<<"$bad")
+            jq -r '.[] | "  \(.name): \(.conclusion), \(.steps | length) steps, runner \"\(.runner_name // "")\""' <<<"$bad"
+            if [ "$count" -eq 0 ] || [ "$unstarted" -ne "$count" ]; then
+              echo "Attempt $attempt failed for another reason; not retrying."
+              exit 0
+            fi
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "::warning::Attempt $attempt of run $RUN_ID still found no runner; giving up after $MAX_ATTEMPTS attempts."
+              exit 0
+            fi
+            echo "Attempt $attempt: $count job(s) never got a runner; rerunning the failed jobs."
+            gh api -X POST "repos/$REPO/actions/runs/$RUN_ID/rerun-failed-jobs"
+            sleep 60
+          done

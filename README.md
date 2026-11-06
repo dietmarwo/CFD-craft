@@ -4,6 +4,8 @@
 
 # CFD-craft
 
+> **One of 18 related repositories.** The [repository overview](https://github.com/dietmarwo/fcmaes-rust/blob/main/docs/repositories.md) shows what each one does and how they connect.
+
 CFD experiment and validation workbench, with a Rust CPU research solver for incompressible flow and conservative passive-gas dispersion and a bounded OpenFOAM Foundation 13 backend. Cases are data; runs report numerical checks, stopping reason, model scope and reproducible input/build identity.
 
 **[Read the detailed user manual](docs/USER_MANUAL.md)** for architecture,

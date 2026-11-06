@@ -4,6 +4,7 @@
 
 ### Changed
 
+- CI: `retry-runner-shortage.yml` reruns the failed jobs of a release or CI run when every job that did not succeed was cancelled before a runner picked it up (hosted macOS arm64 shortage), up to three attempts. A release is no longer held back until someone reruns it by hand.
 - `.gitattributes` excludes the Python validation suite (`validation/`) from GitHub language statistics, so GitHub reports the repository as Rust.
 
 ## [0.1.0] - 2026-11-04

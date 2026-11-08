@@ -66,7 +66,7 @@ The steady canyon cases on 18x16x12 take 17–63 s of wall time each when the se
 
 ## Optimizer integration
 
-`python integrations/run_jobs.py --runner optimization-run` with optimization-run built from optimization-jobs cc6b03d. Evaluate, BiteOpt retry and the experimental GP surrogate completed through the application worker. Retry and GP each used 24 new CFD evaluations and one recheck, with no failed or cancelled evaluations.
+`python integrations/run_jobs.py --runner optimization-run` with optimization-run built from optimization-jobs cc6b03d. A rerun after the adapter's pins moved to fcmaes-rust f764a75 and optimization-jobs 12f9d57, with optimization-run built at 12f9d57, gave the same objective values. Evaluate, BiteOpt retry and the experimental GP surrogate completed through the application worker. Retry and GP each used 24 new CFD evaluations and one recheck, with no failed or cancelled evaluations.
 
 The baseline objective was 1.8682465; the selected BiteOpt and GP values were 1.8657713 and 1.6799143. Values are the maximum receptor concentration divided by 1e-8 kg/m³. One small deterministic experiment does not rank optimizers.
 

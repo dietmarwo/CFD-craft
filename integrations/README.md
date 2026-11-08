@@ -22,10 +22,10 @@ python integrations/run_jobs.py --runner /absolute/path/optimization-run --outpu
 
 The optional crate has its own lockfile and exact source pins:
 
-- fcmaes-rust 583f33a9a815ede0e1115c8ddd69029a874593f9.
-- optimization-jobs job API 602d31afacf8bd2ecb0b0e941d18bd8e2821c1e3, matching that worker's dependency identity.
+- fcmaes-rust f764a7516f41bf2d88009b156daa70bf0a5445c1.
+- optimization-jobs job API 12f9d573ade24f57c282dcf9eb7ad7025cfe51bf, matching that worker's dependency identity.
 
-run_jobs.py is tested against optimization-run built from optimization-jobs cc6b03d (0.4.0 plus later documentation and tutorials); CI builds that revision. The adapter does not change either repository or the job/result protocols.
+run_jobs.py is tested against optimization-run built from the same optimization-jobs revision 12f9d57 (0.4.0 plus later documentation and tutorials); CI builds that revision. The adapter does not change either repository or the job/result protocols.
 
 The model app.cfd.source-allocation consumes a hashed case, requires prescribed flow, three sources, one constituent and receptors, and exposes two box-bounded source multipliers. It uses Scalar::simulation for evaluate, retry and surrogate. Each call propagates the SimContext deadline/cancellation into CFD Control. Prescribed transport is serial per evaluation; the SDK controls concurrent evaluations.
 

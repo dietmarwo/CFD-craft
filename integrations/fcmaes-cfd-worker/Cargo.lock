@@ -247,7 +247,7 @@ dependencies = [
 [[package]]
 name = "fcmaes-core"
 version = "0.2.1"
-source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=583f33a9a815ede0e1115c8ddd69029a874593f9#583f33a9a815ede0e1115c8ddd69029a874593f9"
+source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=f764a7516f41bf2d88009b156daa70bf0a5445c1#f764a7516f41bf2d88009b156daa70bf0a5445c1"
 dependencies = [
  "libm",
  "nalgebra",
@@ -260,12 +260,12 @@ dependencies = [
 [[package]]
 name = "fcmaes-gtop"
 version = "0.2.1"
-source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=583f33a9a815ede0e1115c8ddd69029a874593f9#583f33a9a815ede0e1115c8ddd69029a874593f9"
+source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=f764a7516f41bf2d88009b156daa70bf0a5445c1#f764a7516f41bf2d88009b156daa70bf0a5445c1"
 
 [[package]]
 name = "fcmaes-job-worker"
 version = "0.2.1"
-source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=583f33a9a815ede0e1115c8ddd69029a874593f9#583f33a9a815ede0e1115c8ddd69029a874593f9"
+source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=f764a7516f41bf2d88009b156daa70bf0a5445c1#f764a7516f41bf2d88009b156daa70bf0a5445c1"
 dependencies = [
  "fcmaes-core",
  "fcmaes-native-worker",
@@ -280,7 +280,7 @@ dependencies = [
 [[package]]
 name = "fcmaes-native-worker"
 version = "0.1.0"
-source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=583f33a9a815ede0e1115c8ddd69029a874593f9#583f33a9a815ede0e1115c8ddd69029a874593f9"
+source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=f764a7516f41bf2d88009b156daa70bf0a5445c1#f764a7516f41bf2d88009b156daa70bf0a5445c1"
 dependencies = [
  "fcmaes-core",
  "fcmaes-gtop",
@@ -291,7 +291,7 @@ dependencies = [
 [[package]]
 name = "fcmaes-surrogate"
 version = "0.1.0"
-source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=583f33a9a815ede0e1115c8ddd69029a874593f9#583f33a9a815ede0e1115c8ddd69029a874593f9"
+source = "git+https://github.com/dietmarwo/fcmaes-rust?rev=f764a7516f41bf2d88009b156daa70bf0a5445c1#f764a7516f41bf2d88009b156daa70bf0a5445c1"
 dependencies = [
  "fcmaes-core",
  "libm",
@@ -485,7 +485,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "optimization-job-api"
 version = "0.4.0"
-source = "git+https://github.com/dietmarwo/optimization-jobs?rev=602d31afacf8bd2ecb0b0e941d18bd8e2821c1e3#602d31afacf8bd2ecb0b0e941d18bd8e2821c1e3"
+source = "git+https://github.com/dietmarwo/optimization-jobs?rev=12f9d573ade24f57c282dcf9eb7ad7025cfe51bf#12f9d573ade24f57c282dcf9eb7ad7025cfe51bf"
 dependencies = [
  "fs2",
  "libc",
@@ -497,7 +497,7 @@ dependencies = [
 [[package]]
 name = "optimization-runner"
 version = "0.4.0"
-source = "git+https://github.com/dietmarwo/optimization-jobs?rev=602d31afacf8bd2ecb0b0e941d18bd8e2821c1e3#602d31afacf8bd2ecb0b0e941d18bd8e2821c1e3"
+source = "git+https://github.com/dietmarwo/optimization-jobs?rev=12f9d573ade24f57c282dcf9eb7ad7025cfe51bf#12f9d573ade24f57c282dcf9eb7ad7025cfe51bf"
 dependencies = [
  "clap",
  "fs2",

@@ -6,6 +6,7 @@
 
 - README: links the [overview of the 18 related repositories](https://github.com/dietmarwo/fcmaes-rust/blob/main/docs/repositories.md).
 - CI: `retry-runner-shortage.yml` reruns the failed jobs of a release or CI run when every job that did not succeed was cancelled before a runner picked it up (hosted macOS arm64 shortage), up to three attempts. A release is no longer held back until someone reruns it by hand.
+- The optional `fcmaes-cfd-worker` pins optimization-jobs `12f9d57` (its 0.4.0 release `602d31a` plus documentation-only changes) and fcmaes-rust `f764a75`, whose crates are unchanged since `583f33a` apart from that pin. The `runner-integration` CI job builds `optimization-run` at the same revision (it built `cc6b03d`). `integrations/run_jobs.py` against it reproduces the recorded objectives (baseline 1.8682465, BiteOpt 1.8657713, GP 1.6799143).
 - `.gitattributes` excludes the Python validation suite (`validation/`) from GitHub language statistics, so GitHub reports the repository as Rust.
 
 ## [0.1.0] - 2026-11-04

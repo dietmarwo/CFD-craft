@@ -52,7 +52,7 @@ Lower-wall Cf RMSE is 0.000491 against a target of 0.001; Cf=0 everywhere would 
 
 Levels 2 and 3 reached about 24 % and 9 % of their 6000 iterations; finishing them needs roughly 20 and 55 minutes of serial time. Their final iteration was not written, so they are marked not evaluable rather than given a score. With no two accepted levels there is no mesh sensitivity and no GCI.
 
-Since refinement moves the first cell toward y+ 1–10, a converged series would also cross wall-treatment regimes. A wall-resolved or wall-function-consistent mesh is needed before the series can be interpreted; the [wall-resolved results](RESOLUTION_RESULTS.md) record such a recipe.
+Since refinement moves the first cell toward y+ 1–10, a converged series would also cross wall-treatment regimes. A wall-resolved or wall-function-consistent mesh is needed before the series can be interpreted; the [wall-resolved results](backstep-resolution.md) record such a recipe.
 
 ## Earlier configurations, all failed
 
@@ -69,7 +69,7 @@ Earlier runs of the recorded configuration gave the same level-1 metrics and cav
 
 ## What is needed next
 
-The legacy stall persists with SIMPLEC pressure relaxation 1 as well as 0.2; in that control its largest late changes lie in wall-function cells near the switch point, y+ about 11 ([wall-resolved results](RESOLUTION_RESULTS.md)). A wall-resolved recipe converges at level 1 there. The next steps are:
+The legacy stall persists with SIMPLEC pressure relaxation 1 as well as 0.2; in that control its largest late changes lie in wall-function cells near the switch point, y+ about 11 ([wall-resolved results](backstep-resolution.md)). A wall-resolved recipe converges at level 1 there. The next steps are:
 - an accepted mesh series of the wall-resolved recipe;
 - a continuous wall-function package as a one-change test of the legacy stall;
 - inlet-turbulence, inlet-profile and model sensitivity;
@@ -77,7 +77,7 @@ The legacy stall persists with SIMPLEC pressure relaxation 1 as well as 0.2; in 
 
 The native wall roughness and throughput tasks, measured canyon concentrations and an external passive-scalar comparison are separate work. No general urban-model validation or Rust performance advantage is claimed.
 
-Reproduction: [OPENFOAM.md](../integrations/OPENFOAM.md). Assumptions: [external model card](../docs/model-cards/openfoam-backend.md).
+Reproduction: [OPENFOAM.md](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/OPENFOAM.md). Assumptions: [external model card](../model-cards/openfoam-backend.md).
 
 ## Implementation identities (SHA-256)
 

@@ -86,7 +86,7 @@ is not the cold solve's timer or a cost-at-target sample. Do not repair or
 manually seal the original output directory.
 
 Stage V changes measurement capability, not solver performance. (P3a and the
-later stages are done since; see the [plan status](../ACCURACY_STEADY_PLAN.md#implementation-status).)
+later stages are done since; see the [plan status](accuracy-steady-plan.md#implementation-status).)
 P3a is next:
 opt-in conservative second-order advection; then P4 implicit diffusion, P5a
 implicit steady coupling, conditional P5b local steps, P3b/P5c open/RANS,

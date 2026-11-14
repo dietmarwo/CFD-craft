@@ -83,7 +83,7 @@ higher-order momentum. P4 is a bounded implicit-diffusion go/no-go; P5 is a
 dedicated implicit steady method. P6 measures canyon and optimization-campaign
 payoff, with the physical model and experimental-data gates kept explicit.
 (Status 1 November 2026: P2a, P3, P4 and P5 are done; P2b, P2c and P6 remain;
-see the [gap status](../../validation/PERFORMANCE_GAP_STATUS.md).)
+see the [gap status](../evidence/performance-gap-status.md).)
 
 ## Pilot correction before the formal campaign
 

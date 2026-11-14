@@ -76,4 +76,4 @@ not expected to finish within the 3600 s per-case limit. The first streamwise
 spacing had a 140:1 cell-width jump at the step plane and diverged under every
 profile tried; with only the spacing changed, the same `simple` recipe became
 stable. The legacy-mesh stall is unchanged by the pressure-coupling control.
-See the [resolution results](../../validation/RESOLUTION_RESULTS.md).
+See the [resolution results](../evidence/backstep-resolution.md).

@@ -1,8 +1,8 @@
 # Implicit steady pseudo-time (stages P4 and P5a): results
 
 Date: 1 November 2026. Plan and predeclared gates:
-[accuracy and steady-solver plan](../docs/ACCURACY_STEADY_PLAN.md), stages P4
-and P5a. Method: [flow model card](../docs/model-cards/flow.md), "Steady
+[accuracy and steady-solver plan](../history/accuracy-steady-plan.md), stages P4
+and P5a. Method: [flow model card](../model-cards/flow.md), "Steady
 pseudo-time algorithms". Campaign script: `validation/steady_algorithms.py`
 (its cavity default is `implicit_viscous`; P5a uses `--algorithm implicit_projection`).
 

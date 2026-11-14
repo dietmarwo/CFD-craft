@@ -1,9 +1,9 @@
 # Recorded steady-continuation results
 
 These results cover same-mesh steady field continuation of the OpenFOAM
-backend ([guide](../integrations/STEADY_RESTART.md),
-[plan](../docs/iterations/04-steady-continuation-plan.md)). The
-[resolution results](RESOLUTION_RESULTS.md) record the wall-resolved reference
+backend ([guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/STEADY_RESTART.md),
+[plan](../history/04-steady-continuation-plan.md)). The
+[resolution results](backstep-resolution.md) record the wall-resolved reference
 recipe solved in one run. Rerun the commands and read the reports rather than
 treating these values as targets; wall times depend on the machine.
 
@@ -47,7 +47,7 @@ paths. The audits give max abs(div(phi))*H/U 6.39e-11 for the chain and
 6.38e-11 for the single run.
 
 The single run reproduces the [recorded resolution
-result](RESOLUTION_RESULTS.md) to all digits shown there, apart from the wall
+result](backstep-resolution.md) to all digits shown there, apart from the wall
 time. A development run of the same comparison, on a runner with an AMD EPYC
 7763 and an earlier source check that is not adopted (see below), gave the same
 differences to all digits shown; its stages took 940.7, 969.0, 1002.5 and 70.7 s
@@ -210,9 +210,9 @@ report names.
   (the restarted iteration's residuals differ by about 1e-4 relative); one
   hypothesis is that nut is recomputed from k and omega at start-up.
 - The cause of the extra time directory in the earlier staged study; the
-  [mapping results](MAPPING_RESULTS.md) record a second occurrence.
+  [mapping results](mesh-initialization.md) record a second occurrence.
 - A fine-mesh campaign from a coarse-to-fine start (see the
-  [mapping results](MAPPING_RESULTS.md)); `refinement_campaign.py` now runs one,
-  but no accepted level 2 exists yet ([refinement results](REFINEMENT_RESULTS.md)); then mesh, inlet and model
+  [mapping results](mesh-initialization.md)); `refinement_campaign.py` now runs one,
+  but no accepted level 2 exists yet ([refinement results](refinement-campaign.md)); then mesh, inlet and model
   sensitivity. Nothing here qualifies the native canyon model or passive-gas
   transport.

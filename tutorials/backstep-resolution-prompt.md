@@ -2,14 +2,14 @@
 
 Start from the [external backend guide](../integrations/OPENFOAM.md), the
 [model card](../docs/model-cards/openfoam-backend.md) and the
-[wall-resolution plan](../docs/iterations/03-wall-resolution-plan.md).
+[wall-resolution plan](../docs/history/03-wall-resolution-plan.md).
 
 ## Question and scope
 
 Can a backstep calculation pass the existing numerical gate, an independent
 local face-flux check and a consistent near-wall-resolution check? A plausible
 velocity plot or a small global mass imbalance alone does not answer this.
-The [recorded results](../validation/RESOLUTION_RESULTS.md) say which recipe
+The [recorded results](../docs/evidence/backstep-resolution.md) say which recipe
 has reached which gate.
 
 Use the pinned Foundation-13 runtime, a fresh output directory and the verified

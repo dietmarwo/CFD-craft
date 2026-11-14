@@ -2,8 +2,8 @@
 
 Profiling measures the existing algorithm to establish a baseline for pressure
 multigrid and better momentum discretization. Read the
-[iteration plan](iterations/17-gap-measurement-plan.md) and the
-[baseline results](../validation/GAP_BASELINE.md) for scope and recorded results.
+[iteration plan](../history/17-gap-measurement-plan.md) and the
+[baseline results](../evidence/gap-baseline.md) for scope and recorded results.
 
 ## Profile a real run
 
@@ -60,7 +60,7 @@ independent face-by-face true-residual checks; those checks have their own count
 `preconditioner_applications` counts applications of the selected preconditioner.
 For opt-in multigrid, `pressure_multigrid_setup` and the optional
 `pressure_solve.multigrid` work object distinguish hierarchy construction and
-multilevel work; see the [multigrid guide](PRESSURE_MULTIGRID.md). A factor-setup span occurs
+multilevel work; see the [multigrid guide](pressure-multigrid.md). A factor-setup span occurs
 only when construction runs, including a zero-RHS first projection. Timers and
 locks occur at phase boundaries; inner iterations update local integer counters.
 
@@ -127,7 +127,7 @@ python validation/compare_backends.py --grid-sweep \
   --foam-iterations 3000 --output runs/accuracy-sweep
 ```
 
-Install the pinned runtime through the [backend guide](../integrations/OPENFOAM.md).
+Install the pinned runtime through the [backend guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/OPENFOAM.md).
 The sweep keeps one warmup and the requested timed rows for each configuration,
 alternating native/OpenFOAM order within each grid block. It adds a native 12²
 diagnostic. Supported paired levels 1,2,3 mean 24²,48²,72² in the flow plane.
@@ -161,7 +161,7 @@ error. Native solver time is `elapsed_s`; OpenFOAM solver time is its
 retained. RSS means maximum individual process RSS, including waited descendants,
 rather than simultaneous aggregate memory; it is explicitly unavailable without
 GNU time. Inspect timer scopes before comparing the earlier
-[comparison](../validation/BACKEND_COMPARISON.md).
+[comparison](../evidence/backend-comparison.md).
 
 The old comparator without `--grid-sweep` retains its three-method, balanced
 permutation experiment and fail-on-unaccepted behavior.
@@ -174,7 +174,7 @@ targets. This explicit opt-in is separate from the existing `all` budget.
 
 Transfer evidence with its directory entries. An OpenFOAM archive's progress
 record lists its numbered time directories, and one can hold no files (see the
-[archive investigation](iterations/06-archive-investigation.md)); a file-only
+[archive investigation](../history/06-archive-investigation.md)); a file-only
 copy then fails `openfoam_backend.py report` although the original verifies.
 `python validation/archive_evidence.py TREE NEW.zip` writes a zip with every
 directory entry and checks that each archive in the extracted copy verifies
@@ -190,10 +190,10 @@ diagnostic. The bounded cavity recipe also accepts `--cavity-grid N`; existing
 `--level 1..3` recipes retain their generated numerical inputs. The list and
 all configurations are frozen in the sweep report before execution.
 
-Dispatch `external=momentum` for the full [Stage V protocol](iterations/20-momentum-verification-plan.md):
+Dispatch `external=momentum` for the full [Stage V protocol](../history/20-momentum-verification-plan.md):
 the shifted operator fixture, translating vortex and time refinement,
 1000-step stability baseline, shared-grid paired sweep, separately budgeted
 native 96² self-reference and default byte-identity controls. The 96² reference
 is not a timed cost-at-target configuration. Read the
-[results](../validation/MOMENTUM_VERIFICATION_RESULTS.md) for actual completion,
+[results](../evidence/momentum-verification.md) for actual completion,
 retained failures and hosted status; an unreached target remains a null ratio.

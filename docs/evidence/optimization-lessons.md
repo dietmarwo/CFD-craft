@@ -2,9 +2,9 @@
 
 F1–F3 use the existing numerical solvers, the native LP/MIP API, native
 BiteOpt and the CFD GP worker; no transport, pressure or physical model is
-changed by them. [results/verified.json](results/verified.json) holds the
+changed by them. [results/verified.json](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/results/verified.json) holds the
 numbers below for one complete smoke and one complete study run of the
-committed lessons. [record.py](record.py) writes it from the runs' summaries
+committed lessons. [record.py](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/record.py) writes it from the runs' summaries
 and refuses incomplete or failed runs:
 
 ```bash

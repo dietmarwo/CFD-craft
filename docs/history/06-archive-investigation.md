@@ -79,7 +79,7 @@ reproduction driver and the rejected attempts were retained. This contains the
 observation for that campaign; it does not establish the cause. The hosted
 reproduction of the same protocol on a GitHub runner rejected no row at
 collection and verified 51/51 archives.
-See the [Stage V report](../../validation/MOMENTUM_VERIFICATION_RESULTS.md).
+See the [Stage V report](../evidence/momentum-verification.md).
 
 Keep the changed archive and its first failed checkpoint. Record file-system
 events and processes for the run directory in a separately instrumented

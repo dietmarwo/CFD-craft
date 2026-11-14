@@ -77,7 +77,7 @@ stable Cargo stages the unpublished dependency); CI runs `cargo package
 `Cargo.lock`, so its source fingerprint differs from a checkout build's. Builds
 from crates.io use Cargo's default release profile instead of the workspace's
 thin-LTO profile: numerical results are the same, timings can differ from
-[validation/RESULTS.md](validation/RESULTS.md).
+[validation/RESULTS.md](docs/evidence/native-verification.md).
 
 `publish-crates.yml` runs the Rust checks and the dry run on pull requests that
 touch the crates and on every tag. `python-release.yml` builds the four wheels

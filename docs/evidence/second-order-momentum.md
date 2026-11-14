@@ -1,7 +1,7 @@
 # Second-order momentum advection (stage P3a): results
 
 Date: 1 November 2026. Plan and predeclared gates:
-[accuracy and steady-solver plan](../docs/ACCURACY_STEADY_PLAN.md), stage P3a.
+[accuracy and steady-solver plan](../history/accuracy-steady-plan.md), stage P3a.
 Base: `main` at `6d33850` (merged PR #15).
 
 ## What changed
@@ -10,7 +10,7 @@ Base: `main` at `6d33850` (merged PR #15).
 momentum advection on the staggered grid with an upwind-biased reconstruction
 (`second_order_upwind`, or `limited_upwind` with `numerics.momentum_limiter` =
 `van_albada`, `van_leer` or `monotonized_central`). Donor-cell stays the default.
-The method and its sources are in the [flow model card](../docs/model-cards/flow.md).
+The method and its sources are in the [flow model card](../model-cards/flow.md).
 Stage P3b, at the end of this document, adds the open-boundary closure and
 allows `neutral_rans`.
 
@@ -111,7 +111,7 @@ Steady Re=100 lid-driven cavity, native only, opt-in multigrid pressure, one
 thread, this host (2-vCPU Intel Xeon VM), budgets 20,000 steps and 600 s. Every
 row reached the unchanged steady gates. Donor-cell's hosted errors on the same
 grids are 0.0380, 0.0276, 0.0235 and 0.0170
-([Stage V](MOMENTUM_VERIFICATION_RESULTS.md)).
+([Stage V](momentum-verification.md)).
 
 | Grid | Scheme | Steps | Solver s | Ghia error |
 |---|---|---:|---:|---:|

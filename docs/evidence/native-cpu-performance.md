@@ -1,7 +1,7 @@
 # Native CPU performance: results
 
 Measured against merged main `402a15036636d8f48591a2d9b5f4ed203cb5ab91`, as
-declared in the [plan](07-14-performance-plan.md). The changes reduce the cost
+declared in the [plan](../history/07-14-performance-plan.md). The changes reduce the cost
 of the native pressure solve, the RANS and momentum stencils and the step's
 state handling. Equations, tolerances, initial fields, stopping rules and
 acceptance gates are unchanged, and the results are bit-identical to the
@@ -238,7 +238,7 @@ At the time of this record, the pressure solve ran serial PCG at every
 projection; a verified multigrid preconditioner was the larger algorithmic
 opportunity, and explicit diffusion and advection limited the time step. (Opt-in
 multigrid and implicit steady algorithms followed; see the
-[gap status](../../validation/PERFORMANCE_GAP_STATUS.md).) These results do not
+[gap status](performance-gap-status.md).) These results do not
 establish accepted fine canyon throughput, asymptotic grid convergence, a
 mesh-independent building-wall law, experimental urban validation or calibrated
 uncertainty. The external fine-backstep acceptance gate and the source-flux

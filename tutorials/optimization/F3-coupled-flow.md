@@ -89,4 +89,4 @@ quality. For masked geometries use supported IC(0); do not assume masked
 multigrid is available. Canyon/RANS qualification and the older room-ventilation
 LBM model remain separate questions. See the
 [refinement campaign](../refinement-campaign-prompt.md) and
-[implicit RANS evidence](../../validation/IMPLICIT_RANS_RESULTS.md).
+[implicit RANS evidence](../../docs/evidence/implicit-rans.md).

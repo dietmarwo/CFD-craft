@@ -3,9 +3,9 @@
 Measured 1 November 2026 against main `f358be6` (merged PR #14).
 Stage V changes verification and measurement only. Production Rust numerics,
 default serialization, physical models and acceptance thresholds are unchanged.
-See the [protocol](../docs/iterations/20-momentum-verification-plan.md),
-[full accuracy/steady plan](../docs/ACCURACY_STEADY_PLAN.md) and
-[machine-readable reduced evidence](data/stage-v-donor-cell-baseline.json).
+See the [protocol](../history/20-momentum-verification-plan.md),
+[full accuracy/steady plan](../history/accuracy-steady-plan.md) and
+[machine-readable reduced evidence](https://github.com/dietmarwo/CFD-craft/blob/main/validation/data/stage-v-donor-cell-baseline.json).
 
 ## Analytic verification
 
@@ -134,7 +134,7 @@ changed manifests and late archive rejection; the final accuracy-sweep suite
 and comparator suites cover them in both Python modes. The subsequent
 sequential reproduction still failed (two rows at collection, further changes
 at packaging), and remains failed. The older
-[cloud archive investigation](../docs/iterations/06-archive-investigation.md)
+[cloud archive investigation](../history/06-archive-investigation.md)
 already describes this anomaly; its underlying cause remains unknown.
 
 The recorded campaign used the identical numerical and timing protocol in a
@@ -190,7 +190,7 @@ Stage V provides verification fixtures and a baseline; it delivers no
 numerical speedup. Each following stage may require more than one PR.
 Done since (1 November 2026): P3a, P3b, P4, P5a, P5c, P5d and M; P5b was not
 needed; P2b and P2c remain open
-([gap status](PERFORMANCE_GAP_STATUS.md)). The table is the plan as recorded.
+([gap status](performance-gap-status.md)). The table is the plan as recorded.
 
 | Stage | Remaining implementation and exit evidence |
 |---|---|

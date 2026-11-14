@@ -118,7 +118,7 @@ save.
 ## Consequences
 
 1. There is no measured native speed advantage over OpenFOAM on this shared
-   case. The [native performance results](../docs/iterations/07-14-performance-results.md)
+   case. The [native performance results](native-cpu-performance.md)
    compare the native solver with its own previous version, not with OpenFOAM.
 2. The native cost is dominated by the number of explicit pseudo-time steps and
    by the pressure solve in each. A steady algorithm and a multigrid pressure
@@ -135,7 +135,7 @@ save.
 
 ## Reproduce
 
-With the pinned runtime installed as in [OPENFOAM.md](../integrations/OPENFOAM.md)
+With the pinned runtime installed as in [OPENFOAM.md](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/OPENFOAM.md)
 and a release build:
 
 ```sh

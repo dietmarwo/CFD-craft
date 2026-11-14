@@ -1,10 +1,10 @@
 # Agent entry point
 
 For native accuracy and steady-solver work, start with the
-[plan](ACCURACY_STEADY_PLAN.md), the
-[Stage V protocol](iterations/20-momentum-verification-plan.md),
-[measured donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md)
-and the [second-order momentum results](../validation/SECOND_ORDER_MOMENTUM_RESULTS.md).
+[plan](history/accuracy-steady-plan.md), the
+[Stage V protocol](history/20-momentum-verification-plan.md),
+[measured donor-cell baseline](evidence/momentum-verification.md)
+and the [second-order momentum results](evidence/second-order-momentum.md).
 Use `compare_backends.py --grid-sweep --grids 16 24 32 48` to test both backends
 on the same list; `--native-numerics JSON` selects opt-in native numerics.
 Opt-in conservative second-order momentum advection (P3a,
@@ -12,14 +12,14 @@ Opt-in conservative second-order momentum advection (P3a,
 donor-cell needed 96². Opt-in `numerics.steady_algorithm = implicit_projection`
 (P5a, a SIMPLEC-type implicit correction with a projection per outer iteration)
 reaches the unchanged steady gates 18–40× faster than the explicit march; see
-the [implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md). With
+the [implicit steady results](evidence/implicit-steady.md). With
 both, the hosted paired sweep had native at 0.74× OpenFOAM's solver time at the
 0.01 target, and 0.111× with the implicit recipe below and one span cell
-([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)).
+([matched accuracy](evidence/matched-accuracy.md)).
 `implicit_projection` also runs `neutral_rans` and constituents (P5c, P5d); for
 implicit runs use `"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`
 and, for a two-dimensional problem, one cell on its periodic axis
-([performance](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)). Keep the
+([performance](evidence/performance-iterations.md)). Keep the
 default donor-cell/explicit path, acceptance thresholds and failed measurements.
 
 CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.
@@ -38,14 +38,14 @@ distinct. The native canyon validation gate is unchanged.
 
 For the backstep resolution workflow, read the
 [prompt](../tutorials/backstep-resolution-prompt.md) and the
-[resolution results](../validation/RESOLUTION_RESULTS.md). Legacy remains the
+[resolution results](evidence/backstep-resolution.md). Legacy remains the
 default recipe; the wall-resolved reference is `wall-resolved`/`simplec`, accepted
 at level 1 only. Its measurement screen additionally requires the independent
 local-flux and all-wall y+ audit. Never turn a saved pre-failure snapshot into
 a final result.
 
 For long steady solves use [verified continuation](../integrations/STEADY_RESTART.md)
-and its [results](../validation/RESTART_RESULTS.md). `prepare-restart` accepts a
+and its [results](evidence/steady-continuation.md). `prepare-restart` accepts a
 completed run with finite final fields whose stored face flux passes the
 independent local gate; unconverged completed stages are eligible,
 failed/timeout/cancelled ones are not. It preserves physics and mesh, resets local pseudo-time and records source
@@ -53,7 +53,7 @@ fields, runtime and mesh. `--max-stages` defaults to 1. These are steady field
 initializations, not transient-history restarts or cross-mesh mappings.
 
 For one-level refinement use [mesh initialization](../integrations/MESH_INITIALIZATION.md)
-and its [plan](iterations/05-mesh-initialization-plan.md). It is a different
+and its [plan](history/05-mesh-initialization-plan.md). It is a different
 operation: accepted, independently audited cold-generated source only; target
 BCs preserved, internal volume fields mapped, coarse phi never copied, and the
 mapping replayed independently. Fine-grid work starts at zero and needs the
@@ -62,7 +62,7 @@ run can later supply an ordinary continuation.
 
 For an acceptance-aware mapped/continued chain use the
 [refinement campaign](../integrations/REFINEMENT_CAMPAIGN.md) and
-[results](../validation/REFINEMENT_RESULTS.md). It freezes limits and producer
+[results](evidence/refinement-campaign.md). It freezes limits and producer
 identities, snapshots a complete accepted cold source, maps once and retains
 every fine stage. Cumulative fine work excludes coarse work. Repeated parent
 and archive checks reject added or changed files without repair. Only
@@ -113,23 +113,23 @@ compare fixed work between two builds, with input and producer hashes, exact
 work counts and field comparisons. Kernel, step and CLI timings and numerical or
 physical acceptance are separate observations. Record slower controls and memory
 costs; keep the scientific gates unchanged. See the
-[performance results](iterations/07-14-performance-results.md). To compare the
+[performance results](evidence/native-cpu-performance.md). To compare the
 native solver with OpenFOAM, use `validation/compare_backends.py` (same host,
 one thread, every run accepted); its ratios describe configured workflows, not
 equal work. With the default explicit donor-cell numerics OpenFOAM is faster
-on the cavity ([backend comparison](../validation/BACKEND_COMPARISON.md)); with
+on the cavity ([backend comparison](evidence/backend-comparison.md)); with
 `limited_upwind`, `implicit_projection` and the implicit recipe native reaches
 the 0.01 target in about a tenth of OpenFOAM's solver time
-([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)).
+([matched accuracy](evidence/matched-accuracy.md)).
 
-For actual phase attribution use [`profile`](PROFILING.md); its envelope keeps
+For actual phase attribution use [`profile`](developer/profiling.md); its envelope keeps
 the ordinary archive in `run/` and a separate versioned timing report. Read
 attempted versus retained work and add exclusive times only. The comparator's
 `--grid-sweep` mode retains incomplete rows and reports cost at an accuracy
 target only for repeated accepted qualifying configurations. An unreached
-target has no finite ratio. See the [baseline](../validation/GAP_BASELINE.md).
+target has no finite ratio. See the [baseline](evidence/gap-baseline.md).
 
-For unmasked pressure acceleration see [symmetric multigrid](PRESSURE_MULTIGRID.md).
+For unmasked pressure acceleration see [symmetric multigrid](developer/pressure-multigrid.md).
 IC(0) remains the default; `numerics.pressure_preconditioner=multigrid` is an
 explicit, checkpoint-hashed selection. Masks are rejected, without fallback.
 Keep the fine operator, true residual and numerical gates unchanged. Use
@@ -142,8 +142,8 @@ Cache identity compares spacing bits as well as faces; statistics keep their
 separate mutex. `benchmark_anisotropy.py` compares IC(0), merged point MG and
 the candidate on rough fields, including failures. `benchmark_anisotropic_flow.py`
 distinguishes steady acceptance from transient interval completion. See
-[results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md) and the
-[remaining P2b–P6 work](../validation/PERFORMANCE_GAP_STATUS.md).
+[results](evidence/anisotropic-pressure.md) and the
+[remaining P2b–P6 work](evidence/performance-gap-status.md).
 The accuracy sweep supports an explicitly recorded native preconditioner;
 do not confuse a same-grid ratio with cost at matched accuracy.
 

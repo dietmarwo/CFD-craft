@@ -1,11 +1,11 @@
 # Roadmap
 
-This page maps the development plan (version 2, which replaces the initial plan) to what 0.1.0 contains, and lists the next steps. The plan's proposed case file is a draft; the schemas from `cfd-craft describe` are authoritative. [RESULTS](../validation/RESULTS.md) holds the numbers.
+This page maps the development plan (version 2, which replaces the initial plan) to what 0.1.0 contains, and lists the next steps. The plan's proposed case file is a draft; the schemas from `cfd-craft describe` are authoritative. [RESULTS](../evidence/native-verification.md) holds the numbers.
 
-An [external-backend workstream](iterations/02-external-validation-plan.md) runs
+An [external-backend workstream](../history/02-external-validation-plan.md) runs
 OpenFOAM Foundation 13 next to the native solver: a same-Re cavity cross-check
 and a preliminary comparison against public backstep measurements.
-[EXTERNAL_RESULTS](../validation/EXTERNAL_RESULTS.md) records the runs and the
+[EXTERNAL_RESULTS](../evidence/external-backend.md) records the runs and the
 remaining gates. This gives the optimization ecosystem a path to an established
 solver while native numerical development continues. It does not close M3b: an
 external backstep is not a measured native street-canyon comparison. The native
@@ -15,9 +15,9 @@ wall and throughput tasks below remain.
 
 | Milestone | Exit gate in the plan | State in 0.1.0 |
 |---|---|---|
-| M0 Contracts and evidence skeleton | Case/result schemas, diagnostics, resource estimator, data inventory, proposed protocols | Done. Diagnostics carry codes and field paths ([catalog](diagnostics.md)). The memory and output estimates bound the measured peak and the written artifacts. `validation/data-inventory.json` lists each dataset's access status. The CODASC protocol is `blocked_data` |
+| M0 Contracts and evidence skeleton | Case/result schemas, diagnostics, resource estimator, data inventory, proposed protocols | Done. Diagnostics carry codes and field paths ([catalog](../diagnostics.md)). The memory and output estimates bound the measured peak and the written artifacts. `validation/data-inventory.json` lists each dataset's access status. The CODASC protocol is `blocked_data` |
 | M1a Grid and elliptic operators | Uniform staggered grid, mask topology, pressure reference, projection identities, manufactured Poisson | Done. The matrix-free operator matches an independently assembled reference on a masked grid with an outlet, a sealed pocket and a periodic axis (products to 1e-12, solutions to 1e-10). One gauge per closed component; projection and adjoint identities; second-order Poisson convergence |
-| M1b Verified laminar flow | Documented time scheme, channel/cavity/manufactured flow, bounded execution, CPU profile | Mostly. Periodic shear has spatial and temporal order 2.00 and 2.01, with Poiseuille, Couette and the Re=100 cavity ([decisions](decisions/numerics.md)). Diffusion is explicit by default and in transient runs, where it limits the time step; the opt-in implicit steady algorithms treat viscosity implicitly. Measured CPU time and memory are in RESULTS |
+| M1b Verified laminar flow | Documented time scheme, channel/cavity/manufactured flow, bounded execution, CPU profile | Mostly. Periodic shear has spatial and temporal order 2.00 and 2.01, with Poiseuille, Couette and the Re=100 cavity ([decisions](decisions.md)). Diffusion is explicit by default and in transient runs, where it limits the time step; the opt-in implicit steady algorithms treat viscosity implicitly. Measured CPU time and memory are in RESULTS |
 | M2 Passive transport and response matrices | Sources/receptors, analytic transport, superposition, synthetic inverse tutorial, small command job | Done, without area sources. Point, line and volume sources; the Gaussian order is 2.32; superposition holds to 2.2e-16; there is a SciPy reference, the source-inference tutorial and the command launcher. The discrete adjoint is a later extension |
 | M3a Neutral ABL package | k-ε with consistent wall, inlet and top; empty-domain profiles pass | Partly. The empty ABL drifts 0.23 % (U), 0.94 % (k) and 2.68 % (ε) in H..5H, under gates of 2 % and 5 %. Below H, ε drifts up to 16 %. There is one top configuration, the open atmosphere. The building-wall roughness is tied to the cell width, which the plan rules out (§5.3) |
 | M3b Finite canyon evaluation | Grid and domain studies, development and held-out cases, external comparison, experimental verdict | Not passed. The development case (W/H = 1, 270°) and the held-out analogs (W/H = 2; 225°) are steady on 18x16x12. The resolution series does not finish, there is no external comparison, and the experimental verdict is `blocked_data` |
@@ -27,21 +27,21 @@ wall and throughput tasks below remain.
 | M6 Mitigation optimization | Budget-matched baseline, held-out scenarios, fine-grid replay | Not started; needs M4 and validated physics |
 | M7 Neighborhood and climatology | City geometry, conditional scenario maps, separate annual gate | Not started |
 | M8 Time-resolved turbulence | LES with spin-up and averaging studies | Not started |
-| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](iterations/07-14-performance-results.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in unmasked [symmetric multigrid](PRESSURE_MULTIGRID.md) and opt-in implicit steady pseudo-time (P4/P5) are implemented; masked multigrid and semi-implicit transient diffusion remain open |
+| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](../evidence/native-cpu-performance.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in unmasked [symmetric multigrid](pressure-multigrid.md) and opt-in implicit steady pseudo-time (P4/P5) are implemented; masked multigrid and semi-implicit transient diffusion remain open |
 
-The [performance results](iterations/07-14-performance-results.md) give paired
+The [performance results](../evidence/native-cpu-performance.md) give paired
 CPU and memory measurements of the current implementation against the previous
 one. Their hardware differs from that of the resource measurements in RESULTS.
-The [backend comparison](../validation/BACKEND_COMPARISON.md) times the cavity
+The [backend comparison](../evidence/backend-comparison.md) times the cavity
 with both backends on one machine: OpenFOAM is 4.7–5.5 times faster than native
 steady mode, mostly because the native method needs about three times as many
 explicit pseudo-time steps, each with a PCG pressure solve. The opt-in
-implicit steady algorithms ([results](../validation/IMPLICIT_STEADY_RESULTS.md))
+implicit steady algorithms ([results](../evidence/implicit-steady.md))
 have since reversed that on the cavity at matched accuracy; masked extensions
 of the optional multigrid preconditioner (P2b) and its setup cost (P2c) remain
 the next pressure candidates. The anisotropic line/semicoarsening substep is implemented;
-its [results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md) and a fresh
-[gap status and iteration list](../validation/PERFORMANCE_GAP_STATUS.md)
+its [results](../evidence/anisotropic-pressure.md) and a fresh
+[gap status and iteration list](../evidence/performance-gap-status.md)
 separate throughput from accuracy. Accepted
 fine-grid and experimental-validation gates remain open.
 
@@ -49,20 +49,20 @@ fine-grid and experimental-validation gates remain open.
 
 | Requirement | State |
 |---|---|
-| One documented neutral RANS, wall and inflow combination | Yes ([flow card](model-cards/flow.md)), with the below-H drift and the wall-roughness caveat |
+| One documented neutral RANS, wall and inflow combination | Yes ([flow card](../model-cards/flow.md)), with the below-H drift and the wall-roughness caveat |
 | Conservative passive transport with explicit source units | Yes, for point, line and volume sources |
 | A finite 3D canyon with end effects | Yes: 10 m buildings in a 16 m wide domain |
 | A development case and held-out geometry and wind cases | Yes, on a coarse grid |
 | Grid, domain and parameter sensitivity | Domain (extended outlet) and parameter (Sc_t 0.5 and 0.9) yes; grid no |
 | Measured-data comparison with a frozen protocol | Blocked: no data |
-| Prompt-driven tutorial with smoke and study presets | Yes ([tutorials](../tutorials/README.md)) |
+| Prompt-driven tutorial with smoke and study presets | Yes ([tutorials](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/README.md)) |
 | Runner integration that keeps CFD evidence | Yes (`integrations/`) |
 | Measured CPU time, peak memory and output size on named hardware | Yes (RESULTS) |
 
 0.1.0 is therefore a research prototype with the verification evidence recorded above.
 The experimental package release is independent of physical qualification; a
 physically qualified canyon release still requires the grid study and measured data.
-See [RELEASING.md](../RELEASING.md).
+See [RELEASING.md](https://github.com/dietmarwo/CFD-craft/blob/main/RELEASING.md).
 
 ## Numeric targets of the plan
 
@@ -107,27 +107,27 @@ See [RELEASING.md](../RELEASING.md).
 
 Throughput is the limit; memory is not. One million cells peak at 851 MiB, against an estimate of 1064 MiB, which meets the plan's M1/M2 memory gate. A three-step run at that size, including the grid construction, takes two minutes.
 
-With the explicit default the steady canyon cost grows roughly with the sixth power of the refinement ratio: explicit diffusion and advection bound the pseudo-time step, and every step solves the pressure equation twice with about 50 CG iterations each, so the 36x32x24 and 54x48x36 canyon grids do not converge within 300 seconds. The opt-in implicit recipe accepts them with the tracer in 57.6 s and 615 s on one thread ([P5c/P5d results](../validation/IMPLICIT_RANS_RESULTS.md)), but the tutorial's study preset still runs the explicit algorithm and the canyon is not grid-converged at 93k cells, so the resolution study, and with it any physical canyon claim, is still open.
+With the explicit default the steady canyon cost grows roughly with the sixth power of the refinement ratio: explicit diffusion and advection bound the pseudo-time step, and every step solves the pressure equation twice with about 50 CG iterations each, so the 36x32x24 and 54x48x36 canyon grids do not converge within 300 seconds. The opt-in implicit recipe accepts them with the tracer in 57.6 s and 615 s on one thread ([P5c/P5d results](../evidence/implicit-rans.md)), but the tutorial's study preset still runs the explicit algorithm and the canyon is not grid-converged at 93k cells, so the resolution study, and with it any physical canyon claim, is still open.
 
 ## Next steps, in order
 
 The native accuracy track now starts with the
-[Stage V verification protocol](iterations/20-momentum-verification-plan.md)
-and its [donor-cell baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md).
+[Stage V verification protocol](../history/20-momentum-verification-plan.md)
+and its [donor-cell baseline](../evidence/momentum-verification.md).
 Stages P3a (conservative second-order momentum), P4 (implicit viscous
 correction), P5a (implicit steady projection), P3b/P5c (open boundaries/RANS),
 P5d (scalar transport) and the matched-accuracy measurement M are implemented
 as opt-in choices with unchanged defaults; the conditional P5b was not needed
-([matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md),
-[performance iterations](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
+([matched accuracy](../evidence/matched-accuracy.md),
+[performance iterations](../evidence/performance-iterations.md)).
 Open: a decision on defaults, masked multigrid P2b and setup costs P2c.
 
-The [mesh-initialization plan](iterations/05-mesh-initialization-plan.md)
+The [mesh-initialization plan](../history/05-mesh-initialization-plan.md)
 provides an explicit accepted-coarse-to-new-fine start, verified against a cold
-fine cavity ([results](../validation/MAPPING_RESULTS.md)). A bounded
-[refinement campaign](../integrations/REFINEMENT_CAMPAIGN.md) maps once and
+fine cavity ([results](../evidence/mesh-initialization.md)). A bounded
+[refinement campaign](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/REFINEMENT_CAMPAIGN.md) maps once and
 chains eligible fine stages, with complete retained parents and work and
-archive checks; its [results](../validation/REFINEMENT_RESULTS.md) record
+archive checks; its [results](../evidence/refinement-campaign.md) record
 the declared level-2 backstep campaign: three 4000-iteration stages, each
 passing the audit. It ended at the stage limit with the Uy and k residuals still
 above the gate. An accepted fine backstep is still missing; another declared
@@ -135,19 +135,19 @@ trial would need more fine work. Mesh independence, inlet and model uncertainty
 and physical qualification remain separate open gates.
 
 The external-backend track has a separate
-[wall-resolution plan](iterations/03-wall-resolution-plan.md). Its wall-resolved
+[wall-resolution plan](../history/03-wall-resolution-plan.md). Its wall-resolved
 SST reference converges and passes the independent audit at level 1; a mesh
 pair needs a larger per-case budget or a coarse-to-fine start, and inlet and
-model sensitivity remain open ([results](../validation/RESOLUTION_RESULTS.md)).
+model sensitivity remain open ([results](../evidence/backstep-resolution.md)).
 This does not advance the native canyon's physical-validation gate.
 
-The [continuation plan](iterations/04-steady-continuation-plan.md) provides
+The [continuation plan](../history/04-steady-continuation-plan.md) provides
 verified same-mesh field continuation in bounded stages, which lets a solve
 exceed one run's 3600 s limit; staged, the coarse reference reaches the same
 converged solution as one run. A level-2 mesh still needs several stages of
 roughly an hour each, whose sources must pass the source flux gate as
 preregistered; whether that gate suits continuation is an open decision in the
-[continuation results](../validation/RESTART_RESULTS.md). Nearest-cell
+[continuation results](../evidence/steady-continuation.md). Nearest-cell
 coarse-to-fine initialization exists for accepted cold sources; conservative
 interpolation, chained sources and an accepted fine/coarse turbulent pair
 remain work.

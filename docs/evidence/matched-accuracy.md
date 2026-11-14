@@ -1,7 +1,7 @@
 # Matched-accuracy measurement against OpenFOAM (stage M)
 
 Date: 1 November 2026. Protocol: stage M of the
-[accuracy and steady-solver plan](../docs/ACCURACY_STEADY_PLAN.md), run through the
+[accuracy and steady-solver plan](../history/accuracy-steady-plan.md), run through the
 `external=momentum` CI selection, which was declared for Stage V and extended
 with the `native_numerics` and `momentum_scheme` inputs.
 
@@ -63,7 +63,7 @@ explicit pseudo-time on it.
 [Run 41361132558](https://github.com/dietmarwo/CFD-craft/actions/runs/41361132558)
 repeats the protocol with the final implicit recipe (pressure tolerance 0.1,
 non-binding `max_time_step_s`, one span cell; see the
-[performance iterations](PERFORMANCE_ITERATIONS_RESULTS.md)) on an AMD EPYC
+[performance iterations](performance-iterations.md)) on an AMD EPYC
 9V74 runner. All rows were accepted. At 24² native takes **0.0698 s against
 OpenFOAM's 0.628 s (0.111×)**, workflow 0.119×, with Ghia error 0.00543
 against 0.00897; 0.092×, 0.101× and 0.081× at 16², 32² and 48². The 96²
@@ -91,6 +91,6 @@ and OpenFOAM one (in run 41361132558 both compute one), and the two stopping
 rules differ (native: the unchanged `assess` gates with three stable monitor
 windows; OpenFOAM: `residualControl` 1e-7). It does not transfer to the RANS
 canyon: `implicit_projection` now runs it
-([results](IMPLICIT_RANS_RESULTS.md)), but there is no OpenFOAM canyon recipe
+([results](implicit-rans.md)), but there is no OpenFOAM canyon recipe
 to compare with. Defaults are unchanged: donor-cell and the explicit mode remain the
 default numerics until a separate, announced decision.

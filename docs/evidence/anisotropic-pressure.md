@@ -9,8 +9,8 @@ has only two measurement overlays: the identical shared `pressure_probe.rs`
 and an unused empty `multigrid/line.rs` source-fingerprint marker; its algorithm
 is unchanged. The candidate adds symmetric line/small-plane relaxation and
 semicoarsening; IC(0) remains default. See the
-[plan](../docs/iterations/19-anisotropic-pressure-plan.md) and
-[algorithm and API](../docs/PRESSURE_MULTIGRID.md).
+[plan](../history/19-anisotropic-pressure-plan.md) and
+[algorithm and API](../developer/pressure-multigrid.md).
 
 Rough exact pressure is `sin(0.73*i) + 0.3*cos(0.17*i)`, centered in closed
 domains; the fine operator generates its RHS. NumPy independently checks the
@@ -209,7 +209,7 @@ The opt-in multigrid cavity accuracy sweep (`external=accuracy` with
 [run 41267955525](https://github.com/dietmarwo/CFD-craft/actions/runs/41267955525))
 accepted all 20 records with unchanged Ghia errors. Native/OpenFOAM solver
 time was 6.85× at 24² and 10.99× at 48² (workflow 3.60× and 9.79×), close to
-the [same-host comparison](PERFORMANCE_GAP_STATUS.md#same-host-comparison-31-october-2026).
+the [same-host comparison](performance-gap-status.md#same-host-comparison-31-october-2026).
 Native still misses the 0.01 target through 48², so no equal-accuracy ratio
 exists.
 
@@ -223,7 +223,7 @@ Shared-probe source fingerprints (different scope from the CLI build SHA):
 The raw evidence records executable/input/producer SHA-256 values, compiler,
 host limits, every child, returned pressure vectors, hierarchy dimensions,
 block bandwidth/storage, work, RSS, repeated profiles and complete native flow
-archives. The [guide](../docs/PRESSURE_MULTIGRID.md#reproduce-comparisons) gives
+archives. The [guide](../developer/pressure-multigrid.md#reproduce-comparisons) gives
 local and opt-in CI commands. The tables above come from the recording host;
 the [hosted reproduction](#hosted-reproduction) above ran on a GitHub runner.
 
@@ -240,5 +240,5 @@ Mask support, component-preserving transfers, narrow passages and the 27k/93k
 canyon gate are still open. Anisotropy selection is a fixed spacing heuristic,
 not a guarantee for every aspect ratio or arbitrary modified face matrix.
 No OpenFOAM code is copied. No flow/transport/turbulence model or scientific
-tolerance changes. The [fresh overall gap and remaining stages](PERFORMANCE_GAP_STATUS.md)
+tolerance changes. The [fresh overall gap and remaining stages](performance-gap-status.md)
 keep pressure throughput, accuracy and physical qualification distinct.

@@ -72,7 +72,7 @@ coordinate conventions, exit codes and implemented model choices. These
 schemas are generated from the actual Rust types; use them when building a
 client. `cfd-craft help` prints the short CLI usage as JSON. `profile CASE
 --output NEW_DIR` runs a case like `run` and adds a phase profile beside the
-archive; see [profiling](PROFILING.md).
+archive; see [profiling](developer/profiling.md).
 
 Install analysis tools separately when using Python workflows or field audits:
 
@@ -230,7 +230,7 @@ rejected explicitly. The fine equation and acceptance gates are unchanged.
 Strong unequal uniform spacings select exact symmetric line/small-plane blocks
 and semicoarsening; isotropic levels keep the original point cycle. This has
 extra setup/memory cost, so compare complete repeated workloads with IC(0).
-See the [algorithm, API and examples](PRESSURE_MULTIGRID.md). Momentum advection is donor-cell first order by default;
+See the [algorithm, API and examples](developer/pressure-multigrid.md). Momentum advection is donor-cell first order by default;
 selecting scalar MUSCL does not make momentum second order. Opt-in
 `numerics.momentum_advection` selects a conservative second-order flux form:
 `second_order_upwind` (unlimited) or `limited_upwind` with
@@ -255,12 +255,12 @@ pseudo-time as `scalar_time_s`, and their steady state is unchanged.
 Acceptance is unchanged.
 `implicit_projection` with `limited_upwind`/`van_leer` reached the cavity's
 gates about 18–40× faster than the explicit mode in the
-[implicit steady results](../validation/IMPLICIT_STEADY_RESULTS.md), and the
+[implicit steady results](evidence/implicit-steady.md), and the
 canyon with its tracer 21–52× faster with the recipe
 `"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`, which changes
 the path to the steady state, not the state
-([P5c/P5d](../validation/IMPLICIT_RANS_RESULTS.md),
-[performance](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)). `transient` completes a
+([P5c/P5d](evidence/implicit-rans.md),
+[performance](evidence/performance-iterations.md)). `transient` completes a
 physical interval and has its own acceptance meaning. Pressure iteration work,
 actual face-flux continuity and boundary balance are separate recorded checks.
 
@@ -944,14 +944,14 @@ input hashes. Workflow time and named solver time are different measurements:
 OpenFOAM's workflow includes meshing, sampling, runtime hashing and process
 polling. The native solver's own timer is not the Python helper's full time.
 
-The [recorded two-host comparison](../validation/BACKEND_COMPARISON.md) finds
+The [recorded two-host comparison](evidence/backend-comparison.md) finds
 OpenFOAM's cavity workflow about 4.7–5.5 times faster than native steady, and
 its named solver timer about 8.9 times faster, with the default numerics.
 Native used two span layers, OpenFOAM one empty layer (native can now use one
 with `--native-span 1` in the grid sweep); numerical schemes and norms differ. This does not
 supply a canyon ranking, memory comparison or multi-core scaling result.
 
-The [native performance runner](../docs/iterations/07-14-performance-results.md)
+The [native performance runner](evidence/native-cpu-performance.md)
 compares two native builds at fixed work and checked fields. Its kernel/step/CLI
 speedups are not OpenFOAM comparisons. The separate backend runner measures
 configured workflows. Neither measures experimental validity. Multigrid
@@ -1003,10 +1003,10 @@ refinement are opt-in workflows with separate recorded evidence.
 
 Continue with the [result/provenance contract](result-contract.md),
 [model cards](model-cards/README.md), [tutorial catalog](../tutorials/README.md),
-[agent context](ai-context.md), [roadmap](roadmap.md),
-[native results](../validation/RESULTS.md),
-[external results](../validation/EXTERNAL_RESULTS.md) and
-[refinement results](../validation/REFINEMENT_RESULTS.md).
+[agent context](ai-context.md), [roadmap](developer/roadmap.md),
+[native results](evidence/native-verification.md),
+[external results](evidence/external-backend.md) and
+[refinement results](evidence/refinement-campaign.md).
 
 The [README banner](images/cfd-craft.jpg) is conceptual artwork, not a stored
 simulation field or evidence of physical qualification.

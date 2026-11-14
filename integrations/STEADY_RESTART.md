@@ -41,7 +41,7 @@ pressure solve's relative tolerance and tightens like H/dx with refinement: the
 reference SIMPLEC recipe fails it at iteration 500 (0.0048) and passes at 6000
 (2.7e-9), while the cold start every run begins from scores 5.6. Use stages of
 thousands of iterations; see the open question in the
-[results](../validation/RESTART_RESULTS.md). The receipt also records the
+[results](../docs/evidence/steady-continuation.md). The receipt also records the
 auditor's scale-free measures, which decide nothing.
 
 Fresh output paths are required; occupied paths are preserved, and a failed
@@ -66,7 +66,7 @@ split stage's first-iteration residuals match the uninterrupted run's next
 iteration to about 1e-12 relative in the laminar cavity, but only to about
 1e-4 in the SST backstep, where some turbulence-model state is not carried by
 the copied fields; the difference then decays (see the
-[results](../validation/RESTART_RESULTS.md)). `numerical.iterations` counts the
+[results](../docs/evidence/steady-continuation.md)). `numerical.iterations` counts the
 new stage; the receipt's `source_completed_iterations` plus it counts solver
 work along the chain, not physical time.
 
@@ -128,6 +128,6 @@ runs, including their work, audits and measurement metrics. Both exit 0 when the
 bounds hold, 2 when they do not and 1 for invalid input (CFD-X013
 `comparison.*`). Run `validation/test_restart.py` normally and under
 `python -O`; set `CFD_OPENFOAM_ROOT` to include the actual cavity tests. The
-[plan](../docs/iterations/04-steady-continuation-plan.md) and
-[results](../validation/RESTART_RESULTS.md) keep software equivalence,
+[plan](../docs/history/04-steady-continuation-plan.md) and
+[results](../docs/evidence/steady-continuation.md) keep software equivalence,
 nonlinear convergence, measurement screening and physical qualification apart.

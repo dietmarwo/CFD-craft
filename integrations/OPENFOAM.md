@@ -7,8 +7,8 @@ translate arbitrary native canyon JSON, run scalar dispersion in OpenFOAM,
 or provide a new fcmaes worker profile. The existing native worker is unchanged.
 
 Read the [external model card](../docs/model-cards/openfoam-backend.md),
-[plan](../docs/iterations/02-external-validation-plan.md) and
-[results](../validation/EXTERNAL_RESULTS.md). A measured velocity comparison
+[plan](../docs/history/02-external-validation-plan.md) and
+[results](../docs/evidence/external-backend.md). A measured velocity comparison
 cannot qualify the native canyon's concentration predictions.
 
 ## Reproduce
@@ -82,7 +82,7 @@ mesh/local-flux/wall-distance audit. Select a recipe explicitly, for example
 `prepare --mesh-family wall-resolved --solver-profile simplec`; the legacy
 recipe remains the default. The `backstep_resolution.py` study preset skips
 finer meshes when a coarse case is not accepted. Read the
-[resolution results](../validation/RESOLUTION_RESULTS.md) before allocating a
+[resolution results](../docs/evidence/backstep-resolution.md) before allocating a
 larger run.
 
 ~~~sh
@@ -183,7 +183,7 @@ upload the reports. A recorded backstep failure keeps a job green; a workflow
 error fails it. `comparison` (not part of `all`) runs only
 `backend-comparison`: the cavity with both backends on one runner
 (`validation/compare_backends.py --repeats 2`, see the
-[backend comparison](../validation/BACKEND_COMPARISON.md)); any failed run
+[backend comparison](../docs/evidence/backend-comparison.md)); any failed run
 fails the job.
 
 ## Frozen protocol

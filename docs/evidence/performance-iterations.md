@@ -45,7 +45,7 @@ axis of a two-dimensional problem) and plain kernel work.
 ¹ van Leer, `implicit_projection`, multigrid, 3 alternating rounds on a loaded
 host. Rejected on the way: a compact face-kind array (slightly more
 instructions); scalar sub-step caps other than 16 and CFL caps other than 5
-(see the [P5c/P5d results](IMPLICIT_RANS_RESULTS.md) and the commit messages).
+(see the [P5c/P5d results](implicit-rans.md) and the commit messages).
 
 Iteration 6 found a real defect: for a face that joins a cell to itself, the
 IC(0) factor added a diagonal term and a self off-diagonal entry, so the

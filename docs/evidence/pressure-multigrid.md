@@ -3,8 +3,8 @@
 This is the historical P1 point-smoother/full-coarsening campaign, including
 the shape sweep added in merged PR #13. Its rows are retained unchanged.
 The subsequent line/small-plane and semicoarsening implementation has
-[separate anisotropy results](ANISOTROPIC_PRESSURE_RESULTS.md) and a
-[fresh native/OpenFOAM gap assessment](PERFORMANCE_GAP_STATUS.md).
+[separate anisotropy results](anisotropic-pressure.md) and a
+[fresh native/OpenFOAM gap assessment](performance-gap-status.md).
 
 ## Scope and protocol
 
@@ -166,10 +166,10 @@ post-child enumeration fix. Raw workflow times retain their original observer
 identity. A separate final-observer control validates the complete measurement
 path, without replacing the three-pair headline measurements.
 
-Use [the guide](../docs/PRESSURE_MULTIGRID.md) and
+Use [the guide](../developer/pressure-multigrid.md) and
 `validation/benchmark_pressure.py` to reproduce. The recorded evidence was
 archived with `validation/archive_evidence.py`, which keeps directory entries
-[rather than copying only files](../docs/iterations/06-archive-investigation.md);
+[rather than copying only files](../history/06-archive-investigation.md);
 all 69 sealed archives verify in its extracted copy.
 
 ## Remaining work
@@ -179,6 +179,6 @@ anisotropy, cheaper hierarchy construction and coarse operator complexity are
 next pressure work. Better momentum accuracy and an implicit/steady flow
 algorithm remain separate gap-closing steps. (Since then anisotropic smoothing
 followed in P2a, and P3a and P5a closed the cavity gap at matched accuracy; see
-the [gap status](PERFORMANCE_GAP_STATUS.md). Masked coarsening P2b and the
+the [gap status](performance-gap-status.md). Masked coarsening P2b and the
 hierarchy cost P2c remain.) The canyon experimental-data gate,
 and the native physical-qualification status, are unchanged.

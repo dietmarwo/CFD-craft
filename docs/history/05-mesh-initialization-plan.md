@@ -6,7 +6,7 @@ Date: 30 October 2026. Base: PR #5,
 ## Evidence and decision
 
 Same-mesh continuation reaches the single-run solution of the wall-resolved
-level-1 backstep in stages ([continuation results](../../validation/RESTART_RESULTS.md)).
+level-1 backstep in stages ([continuation results](../evidence/steady-continuation.md)).
 Its source-flux gate stays as preregistered. A fine-grid campaign needs a
 different operation first: initialize a newly generated finer case from
 accepted coarse volume fields. The new mesh has no transferable face flux; the
@@ -64,7 +64,7 @@ physics, GPU and MPI.
 
 ## Outcome
 
-The [results](../../validation/MAPPING_RESULTS.md) record the GitHub runs. The
+The [results](../evidence/mesh-initialization.md) record the GitHub runs. The
 mapped and cold level-2 cavities meet every declared bound (U 5.1e-9). On the
 real backstep meshes, Foundation 13's mapNearest takes a nearby source cell
 other than the nearest for 4.9% of the level-2 cells, so the replay accepts any

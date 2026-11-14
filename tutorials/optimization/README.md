@@ -35,6 +35,6 @@ F3 exercises coupled momentum and pressure with the requested threads. The
 existing source-allocation worker is not a coupled-flow worker; F3 runs through
 a Python callback or an existing trusted command job.
 
-See [validation notes](VALIDATION.md) and the
+See [validation notes](../../docs/evidence/optimization-lessons.md) and the
 [X1 campaign](https://github.com/dietmarwo/experiment-craft/blob/main/examples/campaigns/simulators/README.md)
 for sealed evidence, complete-run accounting and CPU-layout comparisons.

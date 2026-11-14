@@ -14,7 +14,7 @@ Rust/Python integration, optimizer jobs and troubleshooting. The
 [runnable examples](examples/manual/README.md) include four compiled Rust
 programs and a complete CLI/Python cookbook.
 
-Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These remain physical-qualification gates. They do not prevent distribution of an explicitly experimental research package. See [results](validation/RESULTS.md) and [model cards](docs/model-cards/README.md).
+Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These remain physical-qualification gates. They do not prevent distribution of an explicitly experimental research package. See [results](docs/evidence/native-verification.md) and [model cards](docs/model-cards/README.md).
 
 ## Install
 
@@ -73,37 +73,37 @@ Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid c
 - Strict case/result schemas through describe; JSON/CSV evidence; VTK conversion.
 - Synthetic source inversion, finite-canyon wind/Schmidt/domain studies, and a scalar fcmaes application worker.
 
-The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/roadmap.md) maps the development plan's milestones, numeric targets and tutorials to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, masked multigrid and GPU execution are later work.
+The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/developer/roadmap.md) maps the development plan's milestones, numeric targets and tutorials to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, masked multigrid and GPU execution are later work.
 
-The [native CPU performance results](docs/iterations/07-14-performance-results.md)
+The [native CPU performance results](docs/evidence/native-cpu-performance.md)
 give paired pressure, stencil, step and CLI timings at fixed work, with the
 fields compared against the previous implementation and the memory cost. The
 paired runner is `validation/benchmark_native.py`; the frozen cases are in
 `cases/performance/`. On the earlier IC(0) lid-driven cavity workflow, timed
 on one machine with one thread each, OpenFOAM is 4.7–5.5 times faster than
 native steady mode and closer to the reference
-([backend comparison](validation/BACKEND_COMPARISON.md)). Opt-in multigrid
+([backend comparison](docs/evidence/backend-comparison.md)). Opt-in multigrid
 reduces accepted native 48² cavity solver time by 2.44× in the
-[original pressure comparison](validation/PRESSURE_MULTIGRID_RESULTS.md).
+[original pressure comparison](docs/evidence/pressure-multigrid.md).
 Line and plane smoothing for stretched grids is measured in the
-[anisotropic pressure results](validation/ANISOTROPIC_PRESSURE_RESULTS.md).
-The [current performance-gap status](validation/PERFORMANCE_GAP_STATUS.md)
+[anisotropic pressure results](docs/evidence/anisotropic-pressure.md).
+The [current performance-gap status](docs/evidence/performance-gap-status.md)
 reports fresh native/OpenFOAM timings, accuracy and the remaining stages.
-The [momentum verification baseline](validation/MOMENTUM_VERIFICATION_RESULTS.md)
+The [momentum verification baseline](docs/evidence/momentum-verification.md)
 starts the accuracy/steady-solver track: shifted operator and translating-vortex
 tests, conservation/extrema controls, a shared backend grid list and a native
-self-convergence reference. The [accuracy and steady-solver plan](docs/ACCURACY_STEADY_PLAN.md)
+self-convergence reference. The [accuracy and steady-solver plan](docs/history/accuracy-steady-plan.md)
 specifies the methods built on it, their opt-in behavior and acceptance gates:
 conservative second-order momentum and the implicit steady algorithms, now
 implemented as opt-in choices with unchanged defaults. With them and the
 implicit recipe native reaches the cavity's 0.01 Ghia target in 0.111×
 OpenFOAM's solver time on a shared runner
-([performance iterations](validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
-The opt-in [`profile` command and accuracy sweep](docs/PROFILING.md) attribute
+([performance iterations](docs/evidence/performance-iterations.md)).
+The opt-in [`profile` command and accuracy sweep](docs/developer/profiling.md) attribute
 actual solver phases, retain incomplete grid-sweep rows and report cost at a
 declared error only when the target is reached. See the
-[gap-closing baseline](validation/GAP_BASELINE.md) and the opt-in
-[pressure multigrid guide](docs/PRESSURE_MULTIGRID.md).
+[gap-closing baseline](docs/evidence/gap-baseline.md) and the opt-in
+[pressure multigrid guide](docs/developer/pressure-multigrid.md).
 
 ## Verification
 
@@ -143,8 +143,8 @@ tutorial compares actual predictions with public Driver--Seegmiller measurements
 under a frozen protocol. Execution, numerical convergence, measurement screening
 and physical qualification are separate results. See the
 [model card](docs/model-cards/openfoam-backend.md),
-[iteration plan](docs/iterations/02-external-validation-plan.md) and
-[recorded results](validation/EXTERNAL_RESULTS.md). These comparisons do not
+[iteration plan](docs/history/02-external-validation-plan.md) and
+[recorded results](docs/evidence/external-backend.md). These comparisons do not
 qualify the native street-canyon model.
 
 The [backstep resolution tutorial](tutorials/backstep-resolution-prompt.md)
@@ -152,22 +152,22 @@ runs wall-resolved recipes with independent Cartesian mesh, local face-flux and
 wall-y+ audits; refinement stops after a coarse case that is not accepted. On
 its coarse mesh the reference recipe converges, passes the audit and is screened
 against the measurements; no mesh pair or physical qualification is claimed.
-See the [plan](docs/iterations/03-wall-resolution-plan.md) and the
-[resolution results](validation/RESOLUTION_RESULTS.md).
+See the [plan](docs/history/03-wall-resolution-plan.md) and the
+[resolution results](docs/evidence/backstep-resolution.md).
 
 The [continuation workflow](integrations/STEADY_RESTART.md) starts a fresh
 bounded stage from the verified final fields and face flux of a completed
 same-mesh run. Initial-state provenance, runtime and rebuilt mesh are checked;
 staged work counts and final convergence remain distinct, and the numerical
-gates are unchanged. See the [plan](docs/iterations/04-steady-continuation-plan.md)
-and the [continuation results](validation/RESTART_RESULTS.md).
+gates are unchanged. See the [plan](docs/history/04-steady-continuation-plan.md)
+and the [continuation results](docs/evidence/steady-continuation.md).
 
 The separate [coarse-to-fine initializer](integrations/MESH_INITIALIZATION.md)
 uses Foundation-13 mapNearest volume fields from an accepted cold-generated
 source, preserves generated fine-grid boundaries and lets the solver construct
 new face flux. Its receipt, an independent replay of the mapping and the rebuilt
 mesh and runtime are checked. A mapped and a cold level-2 cavity converge to the
-same fields ([mapping results](validation/MAPPING_RESULTS.md)); an accepted fine
+same fields ([mapping results](docs/evidence/mesh-initialization.md)); an accepted fine
 turbulent backstep and physical qualification remain open.
 
 The [bounded refinement campaign](integrations/REFINEMENT_CAMPAIGN.md) retains
@@ -178,9 +178,9 @@ comparison requires accepted fields on both meshes and does not establish a
 GCI. The declared level-2 backstep campaign (three stages of 4000 iterations)
 ended at its stage limit without an accepted fine grid: every stage passed the
 audit, but the Uy and k residuals stayed above the gate. See the
-[plan](docs/iterations/06-refinement-campaign-plan.md),
+[plan](docs/history/06-refinement-campaign-plan.md),
 [tutorial](tutorials/refinement-campaign-prompt.md) and
-[results](validation/REFINEMENT_RESULTS.md).
+[results](docs/evidence/refinement-campaign.md).
 
 ## Optimization tutorials
 

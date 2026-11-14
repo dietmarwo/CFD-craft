@@ -12,7 +12,7 @@ Use the [pinned runtime](OPENFOAM.md) and validation dependencies; the runtime
 provides the Foundation-13 `mapFields` utility. The source is a complete archive
 (case, final fields, mesh, summary, logs and seals) of a cold-generated case:
 a restarted or mapped source is not accepted. The single-run wall-resolved
-`simplec` level-1 backstep of the [resolution results](../validation/RESOLUTION_RESULTS.md)
+`simplec` level-1 backstep of the [resolution results](../docs/evidence/backstep-resolution.md)
 is such a source; a summary alone is not.
 
 ```sh
@@ -106,4 +106,4 @@ unaccepted returned runs and 1 for an input, workflow or archive error.
 limits and reports both; it applies no gate. The actual-runtime tests also map
 nonuniform synthetic SST fields between the real level-1 and level-2 backstep
 meshes and check them with the replay; that is a utility check, not a turbulent
-solve. See the [results](../validation/MAPPING_RESULTS.md).
+solve. See the [results](../docs/evidence/mesh-initialization.md).

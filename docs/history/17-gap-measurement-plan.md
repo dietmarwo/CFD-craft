@@ -50,4 +50,4 @@ The sweep must retain unsuccessful rows and explicitly show whether each
 backend reaches the target on the tested grids. New diagnostics include field
 paths. The next numerical stage is P1, a symmetric PCG-compatible multigrid
 preconditioner; it is not part of the measurement stage. (P1 is done since; see
-the [gap status](../../validation/PERFORMANCE_GAP_STATUS.md).)
+the [gap status](../evidence/performance-gap-status.md).)

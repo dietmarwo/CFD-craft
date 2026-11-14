@@ -1,10 +1,10 @@
 # Recorded coarse-to-fine initialization results
 
 These results cover one-level mesh initialization of the OpenFOAM backend
-([guide](../integrations/MESH_INITIALIZATION.md),
-[plan](../docs/iterations/05-mesh-initialization-plan.md)). The
-[continuation results](RESTART_RESULTS.md) and the
-[resolution results](RESOLUTION_RESULTS.md) record the accepted level-1
+([guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/MESH_INITIALIZATION.md),
+[plan](../history/05-mesh-initialization-plan.md)). The
+[continuation results](steady-continuation.md) and the
+[resolution results](backstep-resolution.md) record the accepted level-1
 backstep that the backstep starts below use as their source. Rerun the commands
 and read the reports rather than treating these values as targets; wall times
 depend on the machine.
@@ -106,7 +106,7 @@ same experiment there was rejected when its archives were verified (CFD-X006
 `archive.progress`): a time directory that the solver had removed was present
 again after the archive was sealed, although the manifests list only the
 initial and final times. No archive was resealed to accept it; the
-[continuation results](RESTART_RESULTS.md) record a similar occurrence on that
+[continuation results](steady-continuation.md) record a similar occurrence on that
 machine. It has not occurred in any GitHub run. The archives are not part of
 the repository.
 
@@ -181,7 +181,7 @@ numbers as notices.
 
 - A level-2 campaign: stage lengths, and whether the source flux gate suits
   continuation, an open decision in the
-  [continuation results](RESTART_RESULTS.md).
+  [continuation results](steady-continuation.md).
 - Sources from a continued or mapped chain, conservative interpolation, and a
   check of the stored templates against the generator at verification (it
   needs the measurement files for the backstep).

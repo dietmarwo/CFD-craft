@@ -1,7 +1,7 @@
 # Bounded mapped refinement: results
 
 The declared level-2 backstep campaign of the
-[plan](../docs/iterations/06-refinement-campaign-plan.md), run on a
+[plan](../history/06-refinement-campaign-plan.md), run on a
 GitHub-hosted runner on 31 October 2026 from commit
 `e7b095277ac1346806984ae4070bc18ac1e9aefe`. The campaign code of that commit is
 the current code; later commits change tests, notices and documentation only.
@@ -177,7 +177,7 @@ These preceded the declared campaign. None supplied a source for it.
 - **Reappearing directory.** On the same cloud machine, a sealed cavity source
   later showed an empty old time directory while every file still matched its
   manifest. The archive checks rejected it; the cause is unproven. See the
-  [investigation](../docs/iterations/06-archive-investigation.md). It has not
+  [investigation](../history/06-archive-investigation.md). It has not
   occurred on GitHub.
 
 ## Tests
@@ -206,6 +206,6 @@ directory; they passed on GitHub in run
 - **Native gates.** Native canyon throughput, building-wall treatment and
   measured canyon and gas qualification are separate and unchanged.
 
-The [guide](../integrations/REFINEMENT_CAMPAIGN.md) and the
-[tutorial prompt](../tutorials/refinement-campaign-prompt.md) describe the
+The [guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/REFINEMENT_CAMPAIGN.md) and the
+[tutorial prompt](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/refinement-campaign-prompt.md) describe the
 workflow and the meaning of its verdicts.

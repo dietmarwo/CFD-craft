@@ -8,8 +8,8 @@ changed. Prescribed-flow runs bypass pressure and gain no acceleration from this
 selection. Strong anisotropy now selects exact principal-line/small-plane
 relaxation and semicoarsening. `check` warns (`CFD-W004`) about its extra setup
 and memory cost; compare total time with IC(0). This extends the original point
-smoother, whose [historical shape sweep](../validation/PRESSURE_MULTIGRID_RESULTS.md#shape-sweep-where-multigrid-is-slower)
-showed poor convergence. Read the [anisotropy results](../validation/ANISOTROPIC_PRESSURE_RESULTS.md)
+smoother, whose [historical shape sweep](../evidence/pressure-multigrid.md#shape-sweep-where-multigrid-is-slower)
+showed poor convergence. Read the [anisotropy results](../evidence/anisotropic-pressure.md)
 for measured coverage and limitations; extreme aspect ratios are not guaranteed.
 
 ## Use it
@@ -229,8 +229,8 @@ times have distinct scopes. The baseline IC(0) probe runner is unchanged.
 
 The opt-in **CFD checks** selector `external=pressure` runs this original campaign
 and packages evidence with directory entries and archive round-trip checks.
-See [recorded results](../validation/PRESSURE_MULTIGRID_RESULTS.md) and the
-[plan](iterations/18-pressure-multigrid-plan.md). No timing threshold is imposed
+See [recorded results](../evidence/pressure-multigrid.md) and the
+[plan](../history/18-pressure-multigrid-plan.md). No timing threshold is imposed
 in ordinary CI. Masked-grid multigrid (P2b) and the hierarchy setup cost (P2c)
 remain separate follow-ups; anisotropic line blocks (P2a), second-order momentum
 and the implicit steady algorithms were added later. This change alone
@@ -252,5 +252,5 @@ convergence from transient interval completion.
 records this selection in its immutable accuracy plan. Its default remains
 `ic0`; the legacy comparison rejects this option outside grid-sweep mode.
 Hosted runs can select `external=accuracy, native_pressure=multigrid`.
-See the [iteration plan](iterations/19-anisotropic-pressure-plan.md) and
-[remaining gap and work](../validation/PERFORMANCE_GAP_STATUS.md).
+See the [iteration plan](../history/19-anisotropic-pressure-plan.md) and
+[remaining gap and work](../evidence/performance-gap-status.md).

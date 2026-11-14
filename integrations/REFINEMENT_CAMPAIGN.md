@@ -3,8 +3,8 @@
 `validation/refinement_campaign.py` connects the existing one-level mapper to
 verified same-mesh continuation and final acceptance. It retains the complete
 coarse source and every returned fine stage. Read the
-[plan](../docs/iterations/06-refinement-campaign-plan.md) and the
-[results](../validation/REFINEMENT_RESULTS.md) before budgeting a larger run.
+[plan](../docs/history/06-refinement-campaign-plan.md) and the
+[results](../docs/evidence/refinement-campaign.md) before budgeting a larger run.
 
 This is a serial CPU workflow using the separately installed, pinned Foundation
 13 runtime; GPUs and MPI are not needed. The native solver, SST recipe,
@@ -137,7 +137,7 @@ make the result pass. The deliberate late-file test demonstrates detection and
 containment. It does not establish the root cause of the anomaly seen on a
 cloud machine, where a source's file hashes were unchanged but an empty old time
 directory reappeared; see the
-[investigation record](../docs/iterations/06-archive-investigation.md). Keep
+[investigation record](../docs/history/06-archive-investigation.md). Keep
 empty directory entries when transferring or zipping a failed archive; a
 file-only copy loses that evidence.
 

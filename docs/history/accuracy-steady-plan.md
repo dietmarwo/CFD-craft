@@ -5,14 +5,14 @@ pressure multigrid).
 
 ## Implementation status
 
-Stage V is implemented. Read the [frozen verification protocol](iterations/20-momentum-verification-plan.md) and [measured baseline](../validation/MOMENTUM_VERIFICATION_RESULTS.md) for its actual evidence, retained failures and hosted-reproduction status.
+Stage V is implemented. Read the [frozen verification protocol](20-momentum-verification-plan.md) and [measured baseline](../evidence/momentum-verification.md) for its actual evidence, retained failures and hosted-reproduction status.
 
 Status on 1 November 2026, after PR #16: stages P3a, P3b, P4, P5a, P5c, P5d and
-M are implemented and recorded ([second-order momentum](../validation/SECOND_ORDER_MOMENTUM_RESULTS.md),
-[implicit steady](../validation/IMPLICIT_STEADY_RESULTS.md),
-[RANS and constituents](../validation/IMPLICIT_RANS_RESULTS.md),
-[matched accuracy](../validation/MATCHED_ACCURACY_RESULTS.md)); ten performance
-iterations followed ([results](../validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
+M are implemented and recorded ([second-order momentum](../evidence/second-order-momentum.md),
+[implicit steady](../evidence/implicit-steady.md),
+[RANS and constituents](../evidence/implicit-rans.md),
+[matched accuracy](../evidence/matched-accuracy.md)); ten performance
+iterations followed ([results](../evidence/performance-iterations.md)).
 P5b was not built, because P5a passed its cost gate. The P4 and P5c fixed-point
 shrink statistics each failed on one decade; both failures are recorded. All
 new numerics are opt-in; the defaults remain donor-cell advection, the explicit

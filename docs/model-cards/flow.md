@@ -39,7 +39,7 @@ the development canyon with zero floor events for all four schemes before
 `neutral_rans` was allowed. Donor-cell remains the default, and default runs
 are byte-identical to the earlier release. Time integration
 (SSPRK2 with a projection per stage) and the CFL cap are unchanged. The
-[second-order momentum results](../../validation/SECOND_ORDER_MOMENTUM_RESULTS.md)
+[second-order momentum results](../evidence/second-order-momentum.md)
 record operator orders of 2.06 (unlimited) and 1.92–1.95 mean L1 (limited),
 translating-vortex orders of 2.0–2.3, momentum conservation to 1e-16, bounded
 limited schemes, and a steady Re=100 cavity Ghia error of 0.005–0.006 at 24²,
@@ -83,7 +83,7 @@ correction is zero (Beam and Warming, 1978; Ferziger, Perić and Street, ch. 8).
   `pressure_relative_tolerance` of 0.1 changes the path, not the steady state.
   The recommended implicit recipe is that tolerance with a non-binding
   `max_time_step_s` (100) so the ramp sets the step
-  ([performance results](../../validation/PERFORMANCE_ITERATIONS_RESULTS.md)).
+  ([performance results](../evidence/performance-iterations.md)).
 
 - `implicit_projection` with `neutral_rans` (stage P5c): A uses the face
   viscosities of the momentum right-hand side (ν + ν_t, averaged with an
@@ -106,16 +106,16 @@ correction system stops the run with CFD-E056 (momentum) or CFD-E057 (k, ε).
 `steps` counts outer iterations, `physical_time_s` accumulates
 pseudo-time, and `momentum_solver_iterations` the inner iterations. Acceptance,
 the monitor window and all thresholds are unchanged. See the
-[implicit steady results](../../validation/IMPLICIT_STEADY_RESULTS.md): on the
+[implicit steady results](../evidence/implicit-steady.md): on the
 Re=100 cavity, `implicit_projection` reaches the unchanged gates in 180–300
 outer iterations, 18–40× faster than the explicit mode at the same accuracy.
-With RANS and a tracer ([P5c/P5d results](../../validation/IMPLICIT_RANS_RESULTS.md))
+With RANS and a tracer ([P5c/P5d results](../evidence/implicit-rans.md))
 it keeps the explicit fixed point (round-off pair to 1.5e-10), the empty-ABL
 check and zero floor events, and accepts the 27k and 93k canyons; the
 predeclared tightening statistic fails for U on one decade, where the
 difference is the explicit run's own convergence error.
 
-Stage V adds [momentum verification](../../validation/MOMENTUM_VERIFICATION_RESULTS.md)
+Stage V adds [momentum verification](../evidence/momentum-verification.md)
 without changing these equations. Eight shifted periodic Taylor–Green operator
 tests and a translating-vortex refinement measure donor-cell's first-order
 advection, with separate time refinement. The periodic vortex also records
@@ -142,15 +142,15 @@ construction and the face list, before its 25% margin.
 
 Projection forms its right-hand side and the per-cell round-off scale in one
 cell pass, in the axis order of the divergence, and applies the correction
-gradient directly to the faces. [Performance results](../iterations/07-14-performance-results.md)
+gradient directly to the faces. [Performance results](../evidence/native-cpu-performance.md)
 give paired timings of these kernels at fixed work.
 
-Projection residuals, actual face-flux continuity and boundary balance are separate checks. An opt-in [symmetric multigrid preconditioner](../PRESSURE_MULTIGRID.md) supports
+Projection residuals, actual face-flux continuity and boundary balance are separate checks. An opt-in [symmetric multigrid preconditioner](../developer/pressure-multigrid.md) supports
 unmasked grids with Galerkin coarse operators and a direct coarse solve. The
 fine equation, projection and residual gates are unchanged; masks still use
 IC(0). Strong unequal spacings select symmetric principal line/small-plane
 blocks and semicoarsening, with a setup/memory warning; see the
-[measured anisotropy coverage](../../validation/ANISOTROPIC_PRESSURE_RESULTS.md).
+[measured anisotropy coverage](../evidence/anisotropic-pressure.md).
 Component-preserving masked multigrid, general sparse direct factorization and
 MPI remain open. Experimental model qualification is unchanged.
 

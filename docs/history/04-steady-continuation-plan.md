@@ -88,7 +88,7 @@ GPU and MPI are outside this plan.
 
 ## Outcome
 
-The [results](../../validation/RESTART_RESULTS.md) record the checks on GitHub
+The [results](../evidence/steady-continuation.md) record the checks on GitHub
 runners. The staged reference solve meets every preregistered bound: four
 stages converge after 18412 cumulative iterations, as the single run does,
 with identical metrics to all digits reported and final fields within 2e-12. The

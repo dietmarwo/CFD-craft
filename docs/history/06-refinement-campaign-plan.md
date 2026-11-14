@@ -67,7 +67,7 @@ unknown. None of these fields was used as a source. A reduced campaign (two
 its limits were frozen in its report before it started, but an earlier version
 of this document was changed to declare it only afterwards. It is a workflow
 check, not the declared campaign, and is recorded as such in the
-[results](../../validation/REFINEMENT_RESULTS.md). The declared campaign above
+[results](../evidence/refinement-campaign.md). The declared campaign above
 then ran on a GitHub runner through the manual `external=refinement` selection.
 
 ## Outcome
@@ -79,4 +79,4 @@ passed the independent audit. At the end the Ux, p and omega residuals met the
 1e-7 gate, while Uy (1.8e-7) and k (1.05e-7) did not; the residuals fell in
 every stage. The two-grid comparison was not assessed, and there is no accepted
 fine backstep. The thresholds were not changed. See the
-[results](../../validation/REFINEMENT_RESULTS.md).
+[results](../evidence/refinement-campaign.md).

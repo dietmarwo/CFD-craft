@@ -3,7 +3,7 @@
 The source fingerprint quoted below uses the definition before 0.1.0, which
 hashed the Rust/TOML files under `crates/` and the root manifest and lockfile;
 0.1.0 fingerprints each package instead (see
-[the result contract](../docs/result-contract.md)), so current builds report a
+[the result contract](../result-contract.md)), so current builds report a
 different value for the same numerical code.
 
 These numbers were produced by the commands given with each table, from the source fingerprint `f2286e5db2c3b5ca627409b85fca94d42e17f4469372abecf08b3794e9606644` (`cfd-craft describe`), built with rustc 1.97.0 on the machine described under Measured resources, Python 3.13, NumPy 2.5.3 and SciPy 1.18.1. Rerun the commands and read the reports rather than treating these values as targets; wall times depend on the machine.
@@ -79,7 +79,7 @@ The baseline objective was 1.8682465; the selected BiteOpt and GP values were 1.
 | 36x32x24 | 27,328 fluid | 1571 | 15.20 | 4.4e-03 |
 | 54x48x36 | 92,232 fluid | 304 | 1.42 | 0.14 |
 
-The coarse grid needed about 120 s of pseudo-time to reach a steady state. The [roadmap](../docs/roadmap.md) lists the throughput work this requires.
+The coarse grid needed about 120 s of pseudo-time to reach a steady state. The [roadmap](../developer/roadmap.md) lists the throughput work this requires.
 
 The building-wall roughness adaptation depends on the cell width, so a refinement series also changes the wall model; an explicit physical wall parameterization is needed before refinement can isolate discretization error.
 

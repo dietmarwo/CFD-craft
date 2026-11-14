@@ -184,3 +184,56 @@ fn declared_building_roughness_leaves_the_empty_abl_terms_identical() {
         c.building_roughness_m = None;
     }
 }
+
+#[test]
+fn declared_building_roughness_enters_building_wall_functions_and_not_the_ground() {
+    use cfd_craft::{flow, solver};
+    // dx = [1, 1, 0.5] and flow.roughness_m = 0.01: the legacy recipe gives
+    // z0 = min(0.01, 0.001 dx) = 0.001 on vertical building walls.
+    let mut c: Case =
+        serde_json::from_str(include_str!("../../../cases/canyon/wh1-wind225.json")).unwrap();
+    let g = Grid::build(&c).unwrap();
+    let s = solver::initial_state(&c, &g);
+    let nut = flow::eddy_viscosity(&g, &s.k, &s.epsilon);
+    // One wall face each: the west side of the west building above the ground
+    // layer, and an open ground cell away from the buildings.
+    let wall = Grid::index(g.n, [4, 8, 1]);
+    let ground = Grid::index(g.n, [1, 1, 0]);
+    let wall_faces = |i: usize| {
+        (0..3)
+            .flat_map(|d| (0..2).map(move |side| (d, side)))
+            .filter(|(d, side)| g.faces[g.cell_faces[i][*d][*side]].kind == FaceKind::Wall)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(wall_faces(wall), vec![(0, 1)]);
+    assert_eq!(wall_faces(ground), vec![(2, 0)]);
+    let (legacy_p, legacy_e) = flow::production(&c, &g, &s.velocity, &nut, &s.k);
+    let legacy_rhs = flow::momentum_rhs(&c, &g, &s.velocity, &nut);
+    assert!(legacy_p[wall] > 0.0);
+    // Declaring the value the legacy recipe uses on this wall changes nothing there.
+    c.building_roughness_m = Some(0.001);
+    let (same_p, same_e) = flow::production(&c, &g, &s.velocity, &nut, &s.k);
+    assert_eq!(same_p[wall].to_bits(), legacy_p[wall].to_bits());
+    assert_eq!(same_e[wall], legacy_e[wall]);
+    // A tenfold roughness follows the logarithmic wall law at the half-cell
+    // distance: u*^2 ~ ln(d/z0)^-2 and both wall terms ~ 1/d, with d = dx/2 + z0.
+    c.building_roughness_m = Some(0.01);
+    let (p, e) = flow::production(&c, &g, &s.velocity, &nut, &s.k);
+    let (old, new) = (0.5 + 0.001_f64, 0.5 + 0.01_f64);
+    let stress = ((old / 0.001).ln() / (new / 0.01).ln()).powi(2);
+    assert!((p[wall] / legacy_p[wall] - stress * old / new).abs() < 1e-12);
+    assert!((e[wall].unwrap() / legacy_e[wall].unwrap() - old / new).abs() < 1e-12);
+    assert_eq!(p[ground].to_bits(), legacy_p[ground].to_bits());
+    assert_eq!(e[ground], legacy_e[ground]);
+    // The same roughness reaches the momentum wall stress of that building face.
+    let rhs = flow::momentum_rhs(&c, &g, &s.velocity, &nut);
+    let changed = g
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| rhs[*i] != legacy_rhs[*i])
+        .count();
+    assert!(changed > 0);
+    let tangential = g.cell_faces[wall][1][0];
+    assert_ne!(rhs[tangential], legacy_rhs[tangential]);
+}

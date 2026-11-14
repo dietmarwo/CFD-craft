@@ -150,14 +150,20 @@ with `output::read_verified`. A Rust service that collects the output of
 `cfd-craft run` jobs does this.
 
 ```bash
-for run in runs/point runs/partial; do
-  target/release/examples/manual_archive "$run" \
-    | python -c "import json, sys; r = json.load(sys.stdin); print(r['archive_consistent'], r['numerically_accepted'], r['termination'], r['assessment'])"
-done
+target/release/examples/manual_archive runs/point \
+  | python -c "import json, sys; r = json.load(sys.stdin); print(r['archive_consistent'], r['numerically_accepted'], r['termination'], r['assessment'])"
 ```
 
 ```text
 True True completed steady_discrete_solution
+```
+
+```bash
+target/release/examples/manual_archive runs/partial \
+  | python -c "import json, sys; r = json.load(sys.stdin); print(r['archive_consistent'], r['numerically_accepted'], r['termination'], r['assessment'])"
+```
+
+```text
 True False iteration_limit incomplete
 ```
 

@@ -4,6 +4,7 @@
 import hashlib
 import json
 from pathlib import Path
+import struct
 import sys
 import math
 
@@ -19,6 +20,18 @@ def sha(p):
 
 def finite(values, name):
     require(all(math.isfinite(v) for v in values), f"nonfinite values in {name}")
+
+
+def flow_state_fingerprint(fields):
+    """SHA-256 of the stored flow arrays: per array a little-endian u64 length,
+    then its little-endian f64 values (velocity, pressure, k, epsilon)."""
+    fingerprint = hashlib.sha256()
+    for name in ("velocity", "pressure", "k", "epsilon"):
+        values = fields[name]
+        fingerprint.update(struct.pack("<Q", len(values)))
+        for value in values:
+            fingerprint.update(struct.pack("<d", value))
+    return fingerprint.hexdigest()
 
 
 def path_samples(receptor):
@@ -398,22 +411,14 @@ def check(path):
             "per-shape volume error",
         )
     if summary.get("frozen_flow") is not None:
-        import struct
-
         evidence = summary["frozen_flow"]
         require(
             evidence["assessment"] == "steady_discrete_solution"
             and evidence["response_flow_updates"] == 0,
             "frozen flow preparation/update evidence",
         )
-        fingerprint = hashlib.sha256()
-        for name in ("velocity", "pressure", "k", "epsilon"):
-            values = s[name]
-            fingerprint.update(struct.pack("<Q", len(values)))
-            for value in values:
-                fingerprint.update(struct.pack("<d", value))
         require(
-            fingerprint.hexdigest() == evidence["flow_state_sha256"],
+            flow_state_fingerprint(s) == evidence["flow_state_sha256"],
             "frozen flow state fingerprint",
         )
     finite(s["velocity"], "velocity")

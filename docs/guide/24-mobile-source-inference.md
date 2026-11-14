@@ -81,7 +81,12 @@ noise assumptions and GR error gates are written before any native solve.
 Between winds, the driver permits only the wind vector/direction/speed and
 case name to differ; source rates, geometry, routes and numerical controls
 stay fixed. The demonstration uses three groups, two winds and two training
-plus two held-out rides. Native archives, independent audits, stdout/stderr,
+plus two held-out rides. For every wind the flow archive, each response
+column and the truth archive must pass the independent audit, and the driver
+recomputes their stored flow fingerprints: all must equal the native frozen
+flow identity, responses must record no flow update, and archived source
+rates must equal the reference rates used to convert multipliers to kg/s.
+Native archives, independent audits, stdout/stderr,
 partial failures, virtual truth, the matrix and CSV remain under the new output
 directory. See [the measured results](../evidence/mobile-measurements.md).
 

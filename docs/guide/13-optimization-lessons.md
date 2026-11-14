@@ -22,7 +22,7 @@ python -m pip install fcmaes-rust==0.2.1 lp-ip-craft==0.29.0
 mkdir -p runs
 ```
 
-Each lesson is one command, `python tutorials/optimization/run.py LESSON --output NEW_DIRECTORY`, with `--preset smoke` (default) or `--preset study`. The output directory must be new. Its `summary.json` keeps every solve, including rejected ones, and two fields that mean different things:
+Each lesson is one command, `python tutorials/optimization/run.py LESSON --output NEW_DIRECTORY`, with `--preset smoke` (default) or `--preset study`. The lessons are implemented in [`allocation.py`](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/allocation.py) (F1), [`sensors.py`](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/sensors.py) (F2) and [`coupled.py`](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/coupled.py) (F3); [`support.py`](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/support.py) holds the bounded CFD runs, the native LP and MIP models and the independent checks of their answers. The output directory must be new. Its `summary.json` keeps every solve, including rejected ones, and two fields that mean different things:
 
 - `passed` is true when the lesson ran to the end and all its checks held. It is a workflow verdict.
 - `supported_at_requested_fidelity` (F3 only, one per design) is the scientific gate: does the design survive a finer grid? A lesson can pass with zero supported designs.

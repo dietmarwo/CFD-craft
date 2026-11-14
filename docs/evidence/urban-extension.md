@@ -14,8 +14,11 @@ Base: `7d8d70a864383e92f431d8afdacd15864e6c1c54` (0.1.1, latest main when
 checked out). An isolated clean build independently confirmed the original
 IC0 producer source fingerprint
 `ce85729bc3564d2658ce6894e232e69da981a07ac36fde4512c5468ba05866fc`.
-The final source-extension CLI fingerprint is
+The U0–U7 evidence producer's source-extension CLI fingerprint is
 `786eb87c9f81b86fd1f8aa8aa947d090524abeedd5d6de3ef0eb2daceba30a72`.
+The later R1–R3 producer and its separate synthetic gate are recorded in
+[mobile evidence](mobile-measurements.md); these earlier experiments were not
+silently relabeled as runs of that implementation.
 Compiler: rustc 1.100.0, x86_64 Linux. Each numerical run requests one thread;
 the district campaign uses two concurrent workers. Timings are one cold run
 per recipe on a shared cloud host, with complete setup/phase profiles. They

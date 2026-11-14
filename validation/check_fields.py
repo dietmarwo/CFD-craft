@@ -21,11 +21,104 @@ def finite(values, name):
     require(all(math.isfinite(v) for v in values), f"nonfinite values in {name}")
 
 
+def path_samples(receptor):
+    """Independent equal-arc-length path positions and trapezoidal coefficients."""
+    vertices = receptor["polyline_m"]
+    spacing = receptor["sample_spacing_m"]
+    height = receptor["height_m"]
+    require(2 <= len(vertices) <= 4097, "path vertex count")
+    require(
+        math.isfinite(spacing) and spacing > 0 and math.isfinite(height),
+        "path spacing/height",
+    )
+    lengths = [
+        math.dist(a, b) for a, b in zip(vertices[:-1], vertices[1:], strict=True)
+    ]
+    require(
+        all(math.isfinite(value) and value > 0 for value in lengths),
+        "path segment lengths",
+    )
+    length = sum(lengths)
+    require(math.isfinite(length / spacing), "path sample count overflow")
+    intervals = max(1, math.ceil(length / spacing))
+    require(intervals < 20001, "path sample budget")
+    cumulative = [0.0]
+    for value in lengths:
+        cumulative.append(cumulative[-1] + value)
+    points, distances, quadrature = [], [], []
+    segment = 0
+    for sample in range(intervals + 1):
+        distance = length if sample == intervals else length * sample / intervals
+        while segment + 2 < len(cumulative) and cumulative[segment + 1] < distance:
+            segment += 1
+        fraction = min(max((distance - cumulative[segment]) / lengths[segment], 0), 1)
+        if sample == intervals:
+            point = [*vertices[-1], height]
+        else:
+            point = [
+                vertices[segment][a]
+                + fraction * (vertices[segment + 1][a] - vertices[segment][a])
+                for a in range(2)
+            ] + [height]
+        points.append(point)
+        distances.append(distance)
+        quadrature.append((0.5 if sample in {0, intervals} else 1.0) / intervals)
+    return points, distances, quadrature
+
+
+def path_weights(receptor, dx, cells, fluid, index):
+    """Check complete segment supports before forming ordinary point weights."""
+    points, distances, quadrature = path_samples(receptor)
+    require(
+        all(
+            all(math.isfinite(p[a]) and 0 <= p[a] < cells[a] * dx[a] for a in range(3))
+            for p in points
+        ),
+        "path outside domain",
+    )
+    height = receptor["height_m"]
+    vertices = receptor["polyline_m"]
+    for start, end in zip(vertices[:-1], vertices[1:], strict=True):
+        cuts = [0.0, 1.0]
+        for axis in range(2):
+            delta = end[axis] - start[axis]
+            if delta:
+                cuts.extend(
+                    t
+                    for k in range(1, cells[axis])
+                    if 0 < (t := (k * dx[axis] - start[axis]) / delta) < 1
+                )
+        cuts.sort()
+        for low, high in zip(cuts[:-1], cuts[1:], strict=True):
+            if low == high:
+                continue
+            t = (low + high) / 2
+            p = [start[a] + t * (end[a] - start[a]) for a in range(2)] + [height]
+            q = [min(math.floor(p[a] / dx[a]), cells[a] - 1) for a in range(3)]
+            require(fluid[index(*q)], "path segment crosses a represented solid")
+    weights = [
+        receptor_weights(
+            {"kind": "point", "id": receptor["id"], "point_m": p},
+            dx,
+            cells,
+            fluid,
+            index,
+        )
+        for p in points
+    ]
+    return points, distances, quadrature, weights
+
+
 def receptor_weights(receptor, dx, cells, fluid, index):
     """Cell weights of a receptor, computed as the solver documents them."""
     nx, ny, nz = cells
     weights = {}
-    if receptor["kind"] == "point":
+    if receptor["kind"] == "path":
+        _, _, quadrature, samples = path_weights(receptor, dx, cells, fluid, index)
+        for coefficient, sample_weights in zip(quadrature, samples, strict=True):
+            for cell, weight in sample_weights.items():
+                weights[cell] = weights.get(cell, 0) + coefficient * weight
+    elif receptor["kind"] == "point":
         point = receptor["point_m"]
         base = [math.floor(point[a] / dx[a] - 0.5) for a in range(3)]
         frac = [point[a] / dx[a] - 0.5 - base[a] for a in range(3)]
@@ -304,6 +397,25 @@ def check(path):
             <= 1e-10 * max(exact, 1.0),
             "per-shape volume error",
         )
+    if summary.get("frozen_flow") is not None:
+        import struct
+
+        evidence = summary["frozen_flow"]
+        require(
+            evidence["assessment"] == "steady_discrete_solution"
+            and evidence["response_flow_updates"] == 0,
+            "frozen flow preparation/update evidence",
+        )
+        fingerprint = hashlib.sha256()
+        for name in ("velocity", "pressure", "k", "epsilon"):
+            values = s[name]
+            fingerprint.update(struct.pack("<Q", len(values)))
+            for value in values:
+                fingerprint.update(struct.pack("<d", value))
+        require(
+            fingerprint.hexdigest() == evidence["flow_state_sha256"],
+            "frozen flow state fingerprint",
+        )
     finite(s["velocity"], "velocity")
     for name in ["pressure", "k", "epsilon"]:
         require(len(s[name]) == n, f"{name} has {len(s[name])} values for {n} cells")
@@ -422,6 +534,69 @@ def check(path):
             require(
                 abs(reported - value) <= 1e-12 * max(abs(value), 1e-300) + 1e-300,
                 f"receptor {rid} of {sp['id']} differs from its field value",
+            )
+        path_receptors = [r for r in c["receptors"] if r["kind"] == "path"]
+        require(
+            set(record.get("paths", {})) == {r["id"] for r in path_receptors},
+            "path result ID set differs from case",
+        )
+        require(
+            sum(len(path_samples(r)[0]) for r in path_receptors) <= 50000,
+            "total path sample budget",
+        )
+        for receptor in path_receptors:
+            points, distances, quadrature, sample_weights = path_weights(
+                receptor, dx, [nx, ny, nz], fluid, index
+            )
+            path_record = record["paths"][receptor["id"]]
+            require(
+                len(path_record["points_m"])
+                == len(path_record["distance_m"])
+                == len(path_record["concentrations_kg_m3"])
+                == len(points),
+                "path result sample count",
+            )
+            for expected, reported in zip(points, path_record["points_m"], strict=True):
+                require(
+                    len(reported) == 3
+                    and all(
+                        abs(a - b) <= 2e-12 * max(1.0, abs(a))
+                        for a, b in zip(expected, reported, strict=True)
+                    ),
+                    "path sample position mismatch",
+                )
+            for expected, reported in zip(
+                distances, path_record["distance_m"], strict=True
+            ):
+                require(
+                    abs(expected - reported) <= 2e-12 * max(1.0, abs(expected)),
+                    "path arc length mismatch",
+                )
+            recomputed = [
+                math.fsum(values[cell] * weight for cell, weight in sample.items())
+                for sample in sample_weights
+            ]
+            for expected, reported in zip(
+                recomputed, path_record["concentrations_kg_m3"], strict=True
+            ):
+                require(
+                    math.isfinite(reported)
+                    and abs(expected - reported)
+                    <= 1e-12 * max(abs(expected), 1e-300) + 1e-300,
+                    "path sample concentration mismatch",
+                )
+            mean = math.fsum(
+                value * coefficient
+                for value, coefficient in zip(recomputed, quadrature, strict=True)
+            )
+            require(
+                abs(mean - path_record["mean_kg_m3"])
+                <= 2e-12 * max(abs(mean), 1e-300) + 1e-300,
+                "path mean mismatch",
+            )
+            require(
+                path_record["mean_kg_m3"] == record["receptors_kg_m3"][receptor["id"]],
+                "path mean differs from receptor map",
             )
         mass = math.fsum(v for v, f in zip(values, fluid, strict=True) if f) * volume
         deposited = budget.get("deposited_kg", {})

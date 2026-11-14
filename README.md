@@ -110,6 +110,12 @@ CFD-craft as an optimization job, and
 [experiment-craft](https://github.com/dietmarwo/experiment-craft) schedules
 campaigns of such jobs.
 
+The unreleased source extension also supports path receptors, idealized virtual
+rides, supplied street emissions and source inference with integer route/wind
+selection. Its guides and evidence are in the documentation index. Synthetic
+recovery is verified; measured urban validation and the earlier performance
+and rotation qualification gates remain open.
+
 ## License
 
 MIT. OpenFOAM is not part of this repository; the backend starts it as separate programs.

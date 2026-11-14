@@ -119,3 +119,42 @@ preflight then requires a represented positive sink in every source-bearing
 fluid component. Connectivity is necessary, not a proof of reachability or
 convergence, and the numerical steady-equation and mass gates still apply.
 A passive gas retains the original outlet requirements (CFD-E020/CFD-E043).
+
+## Path observations and an idealized moving sensor (R1)
+
+`Receptor::Path` adds linear observation weights to the returned concentration
+field; it changes no transport or flow equation. A local x/y polyline at a
+constant height is sampled at equal arc-length intervals, including endpoints.
+Normalized trapezoidal sample weights define the path mean. All individual
+samples and their mean remain linear in the field; source superposition still
+requires the existing fixed-flow, fixed-diffusivity, linear-upwind conditions.
+Complete segments may not enter represented solids, and interpolation may not
+use positive-weight solid cells. No silent clipping/relocation is performed.
+The independent checker rebuilds the geometry and observation weights.
+
+The separate virtual-ride tool interpolates these samples in arc length,
+assumes a constant riding speed, and integrates a declared first-order sensor
+response exactly for that piecewise-linear input. Its output is an idealized
+pass through a steady mean local increment. Temporal turbulence, intermittent
+emissions, a regional background and sensor-specific calibration remain outside
+this observation model. See [the mobile-path guide](../guide/23-mobile-paths-and-virtual-rides.md).
+
+## Frozen-flow source responses (R3)
+
+The opt-in `mobile_response::PreparedFlow` API accepts only completed steady
+flow with matching case/physics/current-source identity and recomputed native
+state gates. It freezes velocity, pressure, k and epsilon, initializes each
+scalar column at zero, and reuses the existing linear-upwind SSPRK2 operator,
+stable step and full transport/flow acceptance gates. No flow updates are
+performed during a column. This is a declared initialization path, not a
+neighboring-wind restart. The summary stores its flow hash and work counts;
+the independent checker recomputes the hash from archived flow arrays.
+Nonlinear MUSCL and nonzero scalar initial conditions are rejected. Species
+diffusivity, particle deposition and leaf sinks remain fixed in each response.
+The implementation rejects any negative returned candidate concentration.
+
+The mobile study verifies native combined truth against separate columns,
+then applies a shared linear virtual-sensor operator with zero initial sensor
+value. Rank, ambiguity and held-out recovery are conditional numerical evidence.
+Noise/scatter and required-pass estimates are assumptions, with no simulated
+atmospheric variability. See [the inference guide](../guide/24-mobile-source-inference.md).

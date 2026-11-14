@@ -177,6 +177,191 @@ pub fn source_fields(c: &Case, g: &Grid) -> Result<Vec<Vec<f64>>> {
     }
     Ok(fields)
 }
+/// Geometry and arc-length quadrature of a path receptor.
+#[derive(Clone, Debug)]
+pub struct PathSamples {
+    /// Ordered three-dimensional positions, in local meters.
+    pub points_m: Vec<[f64; 3]>,
+    /// Distance from the first vertex, in meters, including zero and full length.
+    pub distance_m: Vec<f64>,
+    /// Normalized trapezoidal coefficient of each sample in the path mean.
+    pub mean_weights: Vec<f64>,
+}
+/// A path's geometry and ordinary linear interpolation weights for every sample.
+#[derive(Clone, Debug)]
+pub struct PathWeights {
+    /// Generated sample geometry and path-mean quadrature.
+    pub samples: PathSamples,
+    /// Cell interpolation weights, one sparse vector per generated sample.
+    pub weights: Vec<Weights>,
+}
+/// Generate equally spaced arc-length samples with both endpoints included.
+/// The actual spacing is length/ceil(length/requested_spacing). No flow or
+/// transport equation is changed. Invalid paths/sample counts are CFD-E086/88.
+pub fn path_samples(receptor: &Receptor) -> Result<PathSamples> {
+    let Receptor::Path {
+        polyline_m,
+        height_m,
+        ..
+    } = receptor
+    else {
+        return Err("CFD-E086: receptors: path sampling requires a path receptor".into());
+    };
+    let count = receptor.path_sample_count().unwrap_or(usize::MAX);
+    if count > PATH_SAMPLES_MAX {
+        return Err(format!(
+            "CFD-E088: receptor {} exceeds 20001 path samples",
+            receptor.id()
+        ));
+    }
+    if !(2..=4097).contains(&polyline_m.len())
+        || !height_m.is_finite()
+        || polyline_m.iter().flatten().any(|v| !v.is_finite())
+    {
+        return Err(format!(
+            "CFD-E086: receptor {} has invalid path vertices/height",
+            receptor.id()
+        ));
+    }
+    let mut cumulative = vec![0.0];
+    for segment in polyline_m.windows(2) {
+        let length = (segment[1][0] - segment[0][0]).hypot(segment[1][1] - segment[0][1]);
+        if length <= 0.0 {
+            return Err(format!(
+                "CFD-E086: receptor {} has a zero-length segment",
+                receptor.id()
+            ));
+        }
+        cumulative.push(cumulative.last().unwrap() + length);
+    }
+    let length = *cumulative.last().unwrap();
+    let intervals = count - 1;
+    let mut result = PathSamples {
+        points_m: Vec::with_capacity(count),
+        distance_m: Vec::with_capacity(count),
+        mean_weights: Vec::with_capacity(count),
+    };
+    let mut segment = 0;
+    for sample in 0..count {
+        let distance = if sample == intervals {
+            length
+        } else {
+            length * sample as f64 / intervals as f64
+        };
+        while segment + 2 < cumulative.len() && cumulative[segment + 1] < distance {
+            segment += 1;
+        }
+        let t = ((distance - cumulative[segment])
+            / (cumulative[segment + 1] - cumulative[segment]))
+            .clamp(0.0, 1.0);
+        let point = if sample == intervals {
+            let p = polyline_m.last().unwrap();
+            [p[0], p[1], *height_m]
+        } else {
+            let from = polyline_m[segment];
+            let to = polyline_m[segment + 1];
+            [
+                from[0] + t * (to[0] - from[0]),
+                from[1] + t * (to[1] - from[1]),
+                *height_m,
+            ]
+        };
+        result.points_m.push(point);
+        result.distance_m.push(distance);
+        result
+            .mean_weights
+            .push(if sample == 0 || sample == intervals {
+                0.5 / intervals as f64
+            } else {
+                1.0 / intervals as f64
+            });
+    }
+    Ok(result)
+}
+fn check_path_segments(g: &Grid, receptor: &Receptor) -> Result<()> {
+    let Receptor::Path {
+        polyline_m,
+        height_m,
+        ..
+    } = receptor
+    else {
+        return Ok(());
+    };
+    if polyline_m.iter().any(|p| {
+        p[0] < 0.0
+            || p[1] < 0.0
+            || p[0] >= g.n[0] as f64 * g.dx[0]
+            || p[1] >= g.n[1] as f64 * g.dx[1]
+    }) || *height_m < 0.0
+        || *height_m >= g.n[2] as f64 * g.dx[2]
+    {
+        return Err(format!(
+            "CFD-E086: receptor {} path is outside the domain",
+            receptor.id()
+        ));
+    }
+    for (segment_index, segment) in polyline_m.windows(2).enumerate() {
+        let mut crossings = vec![0.0, 1.0];
+        for axis in 0..2 {
+            let delta = segment[1][axis] - segment[0][axis];
+            if delta == 0.0 {
+                continue;
+            }
+            for k in 1..g.n[axis] {
+                let t = (k as f64 * g.dx[axis] - segment[0][axis]) / delta;
+                if t > 0.0 && t < 1.0 {
+                    crossings.push(t);
+                }
+            }
+        }
+        crossings.sort_by(f64::total_cmp);
+        for pair in crossings.windows(2) {
+            if pair[1] <= pair[0] {
+                continue;
+            }
+            let t = 0.5 * (pair[0] + pair[1]);
+            let point = [
+                segment[0][0] + t * (segment[1][0] - segment[0][0]),
+                segment[0][1] + t * (segment[1][1] - segment[0][1]),
+                *height_m,
+            ];
+            if !g.fluid[cell_at(g, point)] {
+                return Err(format!(
+                    "CFD-E087: receptor {} path segment {segment_index} crosses a represented solid cell",
+                    receptor.id()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+/// Build the ordinary point interpolation weights of every generated path
+/// sample. Entire segments are checked for solid crossings, including between
+/// sample positions; each point also retains the strict through-wall stencil rule.
+pub fn receptor_path_weights(g: &Grid, receptor: &Receptor) -> Result<PathWeights> {
+    let samples = path_samples(receptor)?;
+    check_path_segments(g, receptor)?;
+    let weights = samples
+        .points_m
+        .iter()
+        .map(|point| {
+            receptor_weights(
+                g,
+                &Receptor::Point {
+                    id: receptor.id().to_string(),
+                    point_m: *point,
+                },
+            )
+            .map_err(|e| {
+                format!(
+                    "CFD-E087: receptor {} path sample has invalid interpolation support: {e}",
+                    receptor.id()
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(PathWeights { samples, weights })
+}
 /// The normalized sampling weights of a receptor: trilinear interpolation
 /// between cell centers (clamped at the domain boundary) for a point, exact
 /// cell overlap for a volume average.
@@ -223,6 +408,16 @@ pub fn receptor_weights(g: &Grid, r: &Receptor) -> Result<Weights> {
                     result.push((i, w));
                 }
             }
+        }
+        Receptor::Path { .. } => {
+            let path = receptor_path_weights(g, r)?;
+            let mut combined = std::collections::BTreeMap::<usize, f64>::new();
+            for (weights, coefficient) in path.weights.iter().zip(&path.samples.mean_weights) {
+                for (cell, value) in weights {
+                    *combined.entry(*cell).or_default() += coefficient * value;
+                }
+            }
+            result = combined.into_iter().collect();
         }
     }
     if result.is_empty() || result.iter().any(|(i, _)| !g.fluid[*i]) {

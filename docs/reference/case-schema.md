@@ -303,6 +303,20 @@ Unknown fields are rejected.
 | `max_m` | array of 3 `number` | required | Upper corner [x, y, z] in meters; every bound above `min_m` and inside the domain. |
 | `min_m` | array of 3 `number` | required | Lower corner [x, y, z] in meters. |
 
+#### Receptor, kind path
+
+Polyline sampling at a constant height. Samples are equally spaced in arc length, including both endpoints, with spacing at most the declared maximum. The receptor mean is normalized trapezoidal quadrature.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `height_m` | `number` | required | Constant sample height above flat ground, in meters. |
+| `id` | `string` | required | Unique nonempty receptor ID (CFD-E019). |
+| `kind` | `path` | required |  |
+| `polyline_m` | array of array of 2 `number` | required | Local metric x/y vertices; 2..4097, without repeated neighbors. |
+| `sample_spacing_m` | `number` | required | Positive finite maximum arc-length spacing, in meters. |
+
 ### Run
 
 Mode, endpoint and execution budgets. The whole group is excluded from the physics hash, so budgets can change between a run and its restart.

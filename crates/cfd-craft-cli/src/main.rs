@@ -65,7 +65,7 @@ fn describe() -> Result<()> {
         "name":"CFD-craft","version":env!("CARGO_PKG_VERSION"),
         "source_sha256":source_sha256(),"compiler":env!("CFD_RUSTC"),
         "physics":["prescribed_uniform","laminar","neutral_rans"],
-        "geometry_kinds":["box","polygon_prism"],"urban_extensions":["masked_multigrid","particle_bins","settling","surface_deposition","vegetation_drag","leaf_deposition"],
+        "geometry_kinds":["box","polygon_prism"],"receptor_kinds":["point","volume_average","path"],"path_sampling":{"maximum_per_path":20001,"maximum_total":50000,"mean":"arc_length_trapezoidal"},"urban_extensions":["masked_multigrid","particle_bins","settling","surface_deposition","vegetation_drag","leaf_deposition"],
         "scalar_advection":["linear_upwind","muscl"],"pressure":"matrix_free_ic0_pcg",
         "pressure_preconditioners":["ic0","multigrid"],"default_pressure_preconditioner":"ic0",
         "momentum_advection":["donor_cell","second_order_upwind","limited_upwind"],"default_momentum_advection":"donor_cell",

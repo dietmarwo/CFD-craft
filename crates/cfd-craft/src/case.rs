@@ -762,12 +762,58 @@ pub enum Receptor {
         /// inside the domain.
         max_m: [f64; 3],
     },
+    /// Polyline sampling at a constant height. Samples are equally spaced
+    /// in arc length, including both endpoints, with spacing at most the
+    /// declared maximum. The receptor mean is normalized trapezoidal quadrature.
+    Path {
+        /// Unique nonempty receptor ID (CFD-E019).
+        id: String,
+        /// Local metric x/y vertices; 2..4097, without repeated neighbors.
+        polyline_m: Vec<[f64; 2]>,
+        /// Constant sample height above flat ground, in meters.
+        height_m: f64,
+        /// Positive finite maximum arc-length spacing, in meters.
+        sample_spacing_m: f64,
+    },
 }
+/// Maximum generated sample points in one path receptor.
+pub const PATH_SAMPLES_MAX: usize = 20001;
+/// Maximum generated sample points across all path receptors in one case.
+pub const PATH_SAMPLES_TOTAL_MAX: usize = 50000;
 impl Receptor {
+    /// Generated sample count for a path (None for other receptor kinds).
+    /// Invalid/nonfinite lengths or spacings return usize::MAX, so preflight
+    /// can reject them before allocation.
+    pub fn path_sample_count(&self) -> Option<usize> {
+        let Self::Path {
+            polyline_m,
+            sample_spacing_m,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let length = polyline_m
+            .windows(2)
+            .map(|p| (p[1][0] - p[0][0]).hypot(p[1][1] - p[0][1]))
+            .sum::<f64>();
+        if !length.is_finite()
+            || length <= 0.0
+            || !sample_spacing_m.is_finite()
+            || *sample_spacing_m <= 0.0
+        {
+            return Some(usize::MAX);
+        }
+        Some(
+            ((length / sample_spacing_m).ceil() as usize)
+                .max(1)
+                .saturating_add(1),
+        )
+    }
     /// The receptor ID.
     pub fn id(&self) -> &str {
         match self {
-            Self::Point { id, .. } | Self::VolumeAverage { id, .. } => id,
+            Self::Point { id, .. } | Self::VolumeAverage { id, .. } | Self::Path { id, .. } => id,
         }
     }
 }
@@ -1146,6 +1192,9 @@ impl Case {
                 Receptor::VolumeAverage { min_m, max_m, .. } => {
                     32.0 * self.covered_cells(min_m, max_m)
                 }
+                Receptor::Path { .. } => {
+                    512.0 * r.path_sample_count().unwrap_or(0).min(PATH_SAMPLES_MAX + 1) as f64
+                }
             })
             .sum();
         // One dense weight vector exists while each source is represented.
@@ -1233,7 +1282,14 @@ impl Case {
                     .map(|_| 700.0 + 200.0 * self.receptors.len() as f64),
             )
             .sum();
+        let path_output_bytes = self
+            .receptors
+            .iter()
+            .filter_map(Receptor::path_sample_count)
+            .map(|n| n.min(PATH_SAMPLES_MAX + 1) as f64 * (160.0 + 64.0 * species))
+            .sum::<f64>();
         let output = (element_text
+            + path_output_bytes
             + if self.output.fields {
                 output_fields
             } else {
@@ -1881,6 +1937,7 @@ impl Case {
             }
         }
         let mut receptor_ids = BTreeSet::new();
+        let mut path_samples_total = 0usize;
         for (i, r) in self.receptors.iter().enumerate() {
             if r.id().is_empty() || !receptor_ids.insert(r.id().to_string()) {
                 add(
@@ -1893,6 +1950,58 @@ impl Case {
             let ok = match r {
                 Receptor::Point { point_m, .. } => inside(point_m),
                 Receptor::VolumeAverage { min_m, max_m, .. } => box_ok(min_m, max_m),
+                Receptor::Path {
+                    polyline_m,
+                    height_m,
+                    sample_spacing_m,
+                    ..
+                } => {
+                    if !(2..=4097).contains(&polyline_m.len())
+                        || polyline_m.windows(2).any(|p| p[0] == p[1])
+                        || polyline_m.iter().any(|p| {
+                            !(0..2).all(|a| {
+                                p[a].is_finite() && p[a] >= 0.0 && p[a] < self.domain.size_m[a]
+                            })
+                        })
+                    {
+                        add(
+                            "CFD-E086",
+                            "error",
+                            &format!("receptors[{i}].polyline_m"),
+                            "Path needs 2..4097 finite in-domain vertices and positive-length segments.",
+                        );
+                    }
+                    if !height_m.is_finite()
+                        || *height_m < 0.0
+                        || *height_m >= self.domain.size_m[2]
+                    {
+                        add(
+                            "CFD-E086",
+                            "error",
+                            &format!("receptors[{i}].height_m"),
+                            "Path height must be finite and inside the vertical domain.",
+                        );
+                    }
+                    if !sample_spacing_m.is_finite() || *sample_spacing_m <= 0.0 {
+                        add(
+                            "CFD-E086",
+                            "error",
+                            &format!("receptors[{i}].sample_spacing_m"),
+                            "Use a finite positive maximum sample spacing.",
+                        );
+                    }
+                    let count = r.path_sample_count().unwrap_or(usize::MAX);
+                    path_samples_total = path_samples_total.saturating_add(count);
+                    if count > PATH_SAMPLES_MAX {
+                        add(
+                            "CFD-E088",
+                            "error",
+                            &format!("receptors[{i}].sample_spacing_m"),
+                            "A path may produce at most 20001 samples; increase spacing or split the study.",
+                        );
+                    }
+                    true
+                }
             };
             if !ok {
                 add(
@@ -1902,6 +2011,14 @@ impl Case {
                     "Receptor support must be nondegenerate and inside the domain.",
                 );
             }
+        }
+        if path_samples_total > PATH_SAMPLES_TOTAL_MAX {
+            add(
+                "CFD-E088",
+                "error",
+                "receptors",
+                "A case may produce at most 50000 total path samples.",
+            );
         }
         if self.run.mode == Mode::Steady
             && !self.sources.is_empty()

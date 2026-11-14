@@ -200,3 +200,17 @@ masked multigrid supports disconnected components. The optional worker adds
 trusted-command runner with `urban_campaign.py --runner`. G1/G3 and practical
 district qualification remain open; completed orchestration is not accepted
 urban physics. No GPU or new OpenFOAM urban model is implemented.
+
+## Mobile source extension
+
+R1 adds linear path receptors and an external idealized sensor-lag operator;
+R2 converts supplied street emission rates without inventing traffic inputs.
+R3 prepares one accepted flow per wind and solves cold scalar responses with
+zero flow updates, using `mobile_response::PreparedFlow`. It requires steady
+linear-upwind transport, zero initial concentrations, unchanged flow physics
+and full native plus independent archive gates. Source-rate inference reports
+rank/ambiguity and holds out whole rides. Pass counts are conditional noise
+assumptions; route/wind selection uses LP-IP-craft with a weakest-information
+objective and retained bounds/failures. See [chapter24](guide/24-mobile-source-inference.md)
+and [mobile evidence](evidence/mobile-measurements.md). Synthetic GR is separate
+from V2 measured validation; all earlier open qualification gates remain open.

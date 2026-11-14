@@ -335,6 +335,23 @@ pub struct ScalarEvidence {
     /// Concentration at each receptor, keyed by receptor ID. JSON maps are
     /// sorted lexically (`R10` before `R2`), so look values up by ID.
     pub receptors_kg_m3: BTreeMap<String, f64>,
+    /// Ordered path samples and their arc-length means, keyed by path ID.
+    /// Omitted when no path receptor is declared, preserving legacy output bytes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub paths: BTreeMap<String, PathEvidence>,
+}
+/// A path receptor sampled from one constituent's returned concentration field.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PathEvidence {
+    /// Local east/north/up positions in meters, in route order.
+    pub points_m: Vec<[f64; 3]>,
+    /// Arc length from the first route vertex, in meters.
+    pub distance_m: Vec<f64>,
+    /// Linear-interpolated concentration increments, in kg/m3.
+    pub concentrations_kg_m3: Vec<f64>,
+    /// Arc-length trapezoidal mean, also in receptors_kg_m3 for this ID.
+    pub mean_kg_m3: f64,
 }
 /// Sum over particle bins passing an aerodynamic-size cutoff.
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
@@ -446,6 +463,10 @@ pub struct Summary {
     pub build_version: String,
     /// The case's declared `run.threads`, not a measurement of the pool.
     pub threads: usize,
+    /// Optional verified fixed-flow initialization and zero-flow-update evidence.
+    /// Ordinary coupled runs omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen_flow: Option<crate::mobile_response::FrozenFlowEvidence>,
 }
 /// The cold-start state of a case: face velocities from
 /// [`Flow::vector`], zero pressure, the `neutral_rans` equilibrium k and
@@ -561,7 +582,7 @@ fn validate_with_history(c: &Case, g: &Grid, s: &State, history: &[Vec<f64>]) ->
     }
     Ok(())
 }
-fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
+pub(crate) fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
     let sc = if let Flow::NeutralRans {
         turbulent_schmidt, ..
     } = &c.flow
@@ -585,7 +606,13 @@ fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
 pub fn timestep(c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
     timestep_for(c.numerics.steady_algorithm, c, g, s, nut)
 }
-fn timestep_for(algorithm: SteadyAlgorithm, c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
+pub(crate) fn timestep_for(
+    algorithm: SteadyAlgorithm,
+    c: &Case,
+    g: &Grid,
+    s: &State,
+    nut: &[f64],
+) -> f64 {
     let mut umax = [0.0f64; 3];
     for (f, u) in g.faces.iter().zip(&s.velocity) {
         umax[f.axis] = umax[f.axis].max(u.abs());
@@ -769,7 +796,7 @@ pub fn scalar_substeps(dt: f64, stable: f64) -> (usize, f64) {
 
 /// Reused buffers of the SSPRK2 scalar step.
 #[derive(Default)]
-struct ScalarBuffers {
+pub(crate) struct ScalarBuffers {
     r1: Vec<f64>,
     stage: Vec<f64>,
     r2: Vec<f64>,
@@ -778,7 +805,7 @@ struct ScalarBuffers {
 /// One SSPRK2 step of scalar transport, with its budget increments, written
 /// into `concentration` in place.
 #[allow(clippy::too_many_arguments)]
-fn advance_scalar(
+pub(crate) fn advance_scalar(
     c: &Case,
     g: &Grid,
     species: usize,
@@ -1213,7 +1240,7 @@ pub fn assess(
                 1e-6,
             );
         }
-        let receptors = c
+        let receptors: BTreeMap<String, f64> = c
             .receptors
             .iter()
             .zip(weights)
@@ -1221,6 +1248,29 @@ pub fn assess(
                 (
                     r.id().to_string(),
                     w.iter().map(|(i, w)| values[*i] * w).sum(),
+                )
+            })
+            .collect();
+        let paths = c
+            .receptors
+            .iter()
+            .filter(|r| matches!(r, Receptor::Path { .. }))
+            .map(|r| {
+                let path =
+                    transport::receptor_path_weights(g, r).expect("path receptor passed preflight");
+                let concentrations = path
+                    .weights
+                    .iter()
+                    .map(|weights| weights.iter().map(|(cell, w)| values[*cell] * w).sum())
+                    .collect();
+                (
+                    r.id().to_string(),
+                    PathEvidence {
+                        points_m: path.samples.points_m,
+                        distance_m: path.samples.distance_m,
+                        concentrations_kg_m3: concentrations,
+                        mean_kg_m3: receptors[r.id()],
+                    },
                 )
             })
             .collect();
@@ -1247,6 +1297,7 @@ pub fn assess(
             boundary_inflow_rate_kg_s: rhs.inflow,
             boundary_outflow_rate_kg_s: rhs.outflow,
             receptors_kg_m3: receptors,
+            paths,
         });
     }
     if c.run.mode == Mode::Steady {
@@ -1475,9 +1526,35 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
     if c.run.mode == Mode::Transient && state.time_s >= c.run.end_time_s * (1.0 - 1e-13) {
         termination = "completed".into();
     }
+    Ok(finish_run(
+        c,
+        &g,
+        state,
+        &sources,
+        &weights,
+        termination,
+        error,
+        initial_state_sha256,
+        control,
+    ))
+}
+
+/// Shared unchanged numerical assessment and archive result construction.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn finish_run(
+    c: &Case,
+    g: &Grid,
+    state: State,
+    sources: &[Vec<f64>],
+    weights: &[transport::Weights],
+    termination: String,
+    error: Option<String>,
+    initial_state_sha256: String,
+    control: &Control,
+) -> RunResult {
     let (checks, constituents, momentum_residual, turbulence_residual) = {
         let _phase = control.span(Phase::Assessment);
-        assess(c, &g, &state, &sources, &weights)
+        assess(c, g, &state, sources, weights)
     };
     let passed = checks.iter().all(|x| x.passed);
     let assessment = if termination == "completed" && passed {
@@ -1531,7 +1608,7 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         mask_sha256: geo.mask_sha256.clone(),
         estimated_peak_mib: c.check().estimated_peak_mib,
         checks,
-        vegetation: crate::vegetation::evidence(c, &g, &state.velocity),
+        vegetation: crate::vegetation::evidence(c, g, &state.velocity),
         particulate_matter: particulate_sums(c, &constituents),
         constituents,
         velocity_max_m_s: state.velocity.iter().map(|v| v.abs()).fold(0.0, f64::max),
@@ -1541,10 +1618,11 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         source_sha256: crate::SOURCE_SHA256.into(),
         build_version: format!("{}; {}", env!("CARGO_PKG_VERSION"), crate::RUSTC_VERSION),
         threads: c.run.threads,
+        frozen_flow: None,
     };
-    Ok(RunResult {
+    RunResult {
         summary,
         state,
         geometry: geo,
-    })
+    }
 }

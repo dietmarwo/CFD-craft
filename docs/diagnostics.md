@@ -303,3 +303,41 @@ positive represented ground/roof/leaf removal mechanism in the same fluid
 component as each source support cell. A sink in another component or a canopy
 volume that misses all fluid-cell centers does not qualify. Passive gases keep
 the original outlet requirement. Admissibility does not establish convergence.
+
+`CFD-M002` covers the optional supplied-street emission converter. Paths identify
+`rates.columns`, `rates.rows[CSV line].<field>`, `streets.features[i].<field>`,
+`streets['ID'].segments[i]`, `map_provenance.<field>`, `height_m`, `case.sources`,
+`native_check` or `output`. It rejects missing/nonfinite/negative rates, missing
+or mismatched kg/s/m units, duplicate/unknown IDs, invalid coordinates or map
+transforms, continuous building intersections and failed native case preflight.
+Intersecting sources are never relocated; positive-rate omissions from clipping
+and unrated streets remain explicit in the provenance. See
+[the traffic converter](../integrations/traffic-sources.md).
+
+`CFD-E086 receptors[i].polyline_m`, `.height_m` or `.sample_spacing_m`
+rejects an invalid path receptor: 2..4097 finite in-domain vertices, positive
+segment lengths, in-domain height and finite positive spacing are required.
+`CFD-E087 receptors[i]` rejects any path segment that enters a represented solid
+cell, even between generated samples, or any sample interpolation stencil with
+positive solid support. `CFD-E088 receptors[i].sample_spacing_m` rejects more
+than 20001 generated samples per path; `CFD-E088 receptors` rejects more than
+50000 across a case. Both limits apply before sample allocation.
+
+`CFD-M004 virtual_ride` identifies invalid/nonfinite speed, interval, response
+time or sensor series, an unaccepted/non-steady source field, consumed archive
+checksum problems, a missing route/constituent, a ride exceeding 200000 samples,
+or an existing/unwritable result file. The tool's output is an idealized pass
+through a steady mean local increment, not time-resolved atmospheric validation.
+
+`CFD-E089 mobile_response.case` rejects nonlinear transport, nonzero initial
+scalar conditions, a non-steady run or changed frozen-flow physics/controls.
+`mobile_response.flow` rejects an incomplete/unaccepted, mismatched or changed
+flow preparation; identities and actual field gates are recomputed. A retained
+flow/diffusivity allocation exceeding `run.memory_limit_mib` is also rejected.
+The ordinary run and restart contracts are unchanged.
+
+`CFD-M003 mobile_inference` covers invalid matrix/observation identities,
+nonfinite values, noise/pass assumptions, malformed study inputs, unsafe IDs,
+duplicate training/held-out identities and execution/output errors in the
+optional mobile study driver. Bounded native or integer-solver failures remain
+in the report and do not produce a passed GR gate.

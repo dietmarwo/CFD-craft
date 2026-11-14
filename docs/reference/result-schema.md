@@ -27,6 +27,7 @@ Unknown fields are rejected.
 | `experimental_validation` | `string` | required | Always `not_validated; see validation/data-inventory.json`: numerical acceptance is not experimental validation. |
 | `fluid_cells` | `integer` (>= 0) | required | Number of fluid cells. |
 | `fluid_components` | `integer` (>= 0) | required | Number of face-connected fluid regions, each with its own pressure gauge unless it touches an outlet. |
+| `frozen_flow` | [FrozenFlowEvidence](#frozenflowevidence) or `null` | optional | Optional verified fixed-flow initialization and zero-flow-update evidence. Ordinary coupled runs omit this field. |
 | `initial_state_sha256` | `string` | required | SHA-256 of the starting state (cold or restored), so restarts from different states stay distinguishable. |
 | `mask_sha256` | `string` | required | SHA-256 of the cell mask, one byte per cell (1 fluid, 0 solid) in cell order; also in geometry.json. |
 | `model_scope` | `string` | required | Model label: `incompressible_laminar`, `prescribed_flow_passive_transport` or `neutral_k_epsilon_rough_wall`; the CLI prefixes `preview: ` for a coarsened preview. |
@@ -77,6 +78,23 @@ Unknown fields are rejected.
 | `validation` | `string` | required | The model remains numerically verified and physically unvalidated. |
 | `volume_fluid_cells` | object with string keys and values of `integer` (>= 0) | required | Number of represented fluid cells per vegetation ID; overlaps count twice. |
 
+### FrozenFlowEvidence
+
+Provenance for scalar responses on one accepted, immutable flow state.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `assessment` | `string` | required | Source flow assessment; only steady_discrete_solution is accepted. |
+| `flow_physics_sha256` | `string` | required | Physics hash of the source flow-only case. |
+| `flow_state_sha256` | `string` | required | SHA-256 of length-prefixed little-endian f64 velocity,p,k,epsilon arrays. |
+| `initialization` | `string` | required | The transport starts from the declared (required zero) concentration field. |
+| `native_flow_solves` | `integer` (>= 0) | required | Number of nonprescribed native flow solves: 0 for analytic prescribed flow,1 otherwise. |
+| `preparation_steps` | `integer` (>= 0) | required | Coupled flow steps used in the preparation, counted separately. |
+| `response_flow_updates` | `integer` (>= 0) | required | Flow updates during this scalar response; always zero. |
+| `source_sha256` | `string` | required | Source implementation of the accepted flow preparation. |
+
 ### ParticulateEvidence
 
 Sum over particle bins passing an aerodynamic-size cutoff.
@@ -87,6 +105,19 @@ Unknown fields are rejected.
 |---|---|---|---|
 | `mass_kg` | `number` | required | Integrated airborne mass, in kg. |
 | `receptors_kg_m3` | object with string keys and values of `number` | required | Local-source concentration increments at receptors, in kg/m3. |
+
+### PathEvidence
+
+A path receptor sampled from one constituent's returned concentration field.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `concentrations_kg_m3` | array of `number` | required | Linear-interpolated concentration increments, in kg/m3. |
+| `distance_m` | array of `number` | required | Arc length from the first route vertex, in meters. |
+| `mean_kg_m3` | `number` | required | Arc-length trapezoidal mean, also in receptors_kg_m3 for this ID. |
+| `points_m` | array of array of 3 `number` | required | Local east/north/up positions in meters, in route order. |
 
 ### ScalarEvidence
 
@@ -110,6 +141,7 @@ Unknown fields are rejected.
 | `minimum_kg_m3` | `number` | required | Smallest concentration over the fluid cells. |
 | `negative_mass_kg` | `number` | required | Mass of the negative concentrations, as a positive number; never clipped. |
 | `outflow_kg` | `number` | required | Cumulative mass that left through boundary faces. |
+| `paths` | object with string keys and values of [PathEvidence](#pathevidence) | optional | Ordered path samples and their arc-length means, keyed by path ID. Omitted when no path receptor is declared, preserving legacy output bytes. |
 | `receptors_kg_m3` | object with string keys and values of `number` | required | Concentration at each receptor, keyed by receptor ID. JSON maps are sorted lexically (`R10` before `R2`), so look values up by ID. |
 | `relative_budget_defect` | `number` | required | Absolute budget defect over the sum of initial, emitted, inflow and outflow mass; the `mass_budget` check requires at most 1e-9. |
 | `settling_velocity_m_s` | `number` or `null` | optional | Resolved particle settling speed; omitted for gases. |

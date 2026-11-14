@@ -158,6 +158,8 @@ pub mod flow;
 /// Polygon-prism geometry and grid-resolution evidence.
 pub mod geometry;
 pub mod grid;
+/// Fixed-flow scalar responses for mobile-receptor inference studies.
+pub mod mobile_response;
 pub mod momentum_solve;
 pub mod multigrid;
 pub mod output;

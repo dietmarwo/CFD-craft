@@ -1,5 +1,10 @@
 # How do I …?
 
+For path receptors and idealized sensor lag, see
+[mobile paths](guide/23-mobile-paths-and-virtual-rides.md). For supplied street
+rates, source inference, required passes and integer route/wind selection, see
+[mobile source inference](guide/24-mobile-source-inference.md).
+
 Tasks in plain words. Each link goes to the section of the
 [guide](guide/README.md) or the reference that does it; the section starts from
 the setup of its chapter.

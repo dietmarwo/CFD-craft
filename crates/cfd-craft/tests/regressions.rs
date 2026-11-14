@@ -289,9 +289,9 @@ fn the_output_estimate_counts_receptors_and_history() {
     for i in 0..25_000 {
         let mut r = receptor.clone();
         match &mut r {
-            Receptor::Point { id, .. } | Receptor::VolumeAverage { id, .. } => {
-                *id = format!("p{i}")
-            }
+            Receptor::Point { id, .. }
+            | Receptor::VolumeAverage { id, .. }
+            | Receptor::Path { id, .. } => *id = format!("p{i}"),
         }
         c.receptors.push(r);
     }

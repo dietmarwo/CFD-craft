@@ -77,3 +77,4 @@ replaces its rows; a later record that adds to it is named.
   comparison between the two solvers exists.
 
 - [Urban source extension: verification, measured failures and open gates](urban-extension.md)
+- [Mobile paths, supplied street emissions and synthetic source recovery](mobile-measurements.md)

@@ -46,6 +46,8 @@
 - [21. Troubleshooting](guide/21-troubleshooting.md)
 
 - [Urban geometry, particles and vegetation (source extension)](guide/22-urban-geometry-particles-vegetation.md)
+- [Mobile paths and virtual rides](guide/23-mobile-paths-and-virtual-rides.md)
+- [Source inference and route selection from rides](guide/24-mobile-source-inference.md)
 
 # Reference
 
@@ -85,6 +87,8 @@
   - [Mesh initialization](evidence/mesh-initialization.md)
   - [Refinement campaign](evidence/refinement-campaign.md)
   - [Optimization lessons](evidence/optimization-lessons.md)
+  - [Urban source extension](evidence/urban-extension.md)
+  - [Mobile-measurement verification](evidence/mobile-measurements.md)
 
 # Developer
 

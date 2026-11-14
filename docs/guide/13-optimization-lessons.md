@@ -144,7 +144,7 @@ To separate the methods, predeclare a stricter detection threshold (one at which
 
 ## F3: a design must survive a finer grid
 
-The optimizer searches a coarse grid; a separate fixed gate decides whether its design holds on a finer one. The problem is the laminar lid-driven cavity with the lid speed in [0.6, 1.4] m/s as the only design variable, training kinematic viscosities 0.01 and 0.015 m2/s, and 0.0125 m2/s withheld. The solves use supported box geometry, `implicit_projection`, `limited_upwind` momentum advection with the van Leer limiter and multigrid pressure; there are no masks and no new physics.
+The optimizer searches a coarse grid; a separate fixed gate decides whether its design holds on a finer one. The problem is the laminar lid-driven cavity with the lid speed in [0.6, 1.4] m/s as the only design variable, training kinematic viscosities 0.01 and 0.015 m2/s, and 0.0125 m2/s withheld. The solves use supported box geometry and the opt-in numerics of [chapter 9](09-opt-in-numerics.md): `implicit_projection`, `limited_upwind` momentum advection with the van Leer limiter and multigrid pressure. There are no masks and no new physics.
 
 The objective targets a mean squared fluid speed of 0.04 m2/s2: `((mean_square_speed - 0.04) / 0.04)^2 + 0.02 * lid_speed^2`, worst case over the two training viscosities. `mean_square_speed` is the trapezoid volume mean of the squared face-normal velocities of the staggered grid. The target is a teaching criterion, not a measured requirement.
 

@@ -1,12 +1,6 @@
+<!-- stub -->
 # Numerical decisions for 0.1
 
-1. Use face-flux projection on a uniform masked grid. Build and test one operator definition before adding geometry formats or refinement blocks.
-2. Use matrix-free PCG with cached IC(0). This improves the small reference cases but does not solve the fine-grid throughput problem. IC(0) stays the default; opt-in unmasked symmetric multigrid (with anisotropic line blocks) was added later after its own gates, and masked multigrid remains open.
-3. Use explicit diffusion and bounded timestep selection. This is simple to verify and increasingly expensive on fine RANS grids. It remains the default and the transient method; steady runs can opt into implicit viscosity and implicit k–ε steps (decisions 9 and 10).
-4. Retain linear transport alongside MUSCL. It provides exact response matrices, reference comparisons and a simpler failure diagnosis.
-5. Keep one neutral inlet/wall/turbulence combination. Its coefficient and upper-boundary choices are recorded; a change needs the empty-ABL test.
-6. Keep execution artifacts separate from optimization claims. A completed command is not an inferred optimization optimum or a validated CFD result.
-7. Keep generated performance failures. A change in hardware or work budget needs a new run identity and evidence.
-8. Offer conservative second-order momentum advection as an opt-in selection beside the donor-cell default. Allow the unbounded `second_order_upwind` scheme, which matches the external cavity reference's scheme class, and keep limited schemes for cases that need boundedness. A default change waits for a matched-accuracy measurement and is a separate, announced change of results and hashes.
-9. Offer implicit steady pseudo-time in delta form beside the explicit default: implicit viscosity in the SSPRK2 stages, and a SIMPLEC-type implicit correction with a projection per outer iteration. Inner tolerances, the CFL ramp and the inner solver are predeclared algorithm constants; acceptance is unchanged, because the delta form keeps the fixed point. A default change waits for the matched-accuracy measurement.
-10. Extend `implicit_projection` to RANS with segregated implicit k and ε steps in delta form (lagged wall functions and production, the explicit step's implicit destruction terms) and to constituents with explicit sub-steps of the unchanged transport step inside each outer iteration (cap 16), rather than an implicit scalar solve, so the mass budget, positivity and receptors stay exactly those of the explicit step. Cap the CFL ramp at 5, and recommend inexact inner projections (relative tolerance 0.1) and a non-binding pseudo-time cap for implicit runs; both change the path, not the fixed point. A periodic axis may have one cell.
+This page moved.
+
+[decisions.md](../developer/decisions.md)

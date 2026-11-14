@@ -99,12 +99,14 @@ change that a reviewer sees in the diff.
 The job `docs` of `.github/workflows/ci.yml` runs the default set in smoke mode
 on every push, normally and under `python -O` with identical reports, with
 `scripts/generate_reference.py --check` and the tests of both scripts. Two
-opt-in jobs run what needs a runtime: `external-backend` runs chapters 15 to 19
-with `--smoke --foam-root`, and `runner-integration` runs chapter 14 with
-`--runner`. These two paths have not been exercised yet, because neither the
-OpenFOAM runtime nor `optimization-run` exists on the host where the
-documentation was written. Full mode for chapters 18 and 19 takes hours and is
-not part of any job. `validation/manual_examples.py` still runs its fixed suite
+more jobs run what needs a runtime. `runner-integration` runs chapter 14 with
+`--runner` on every push. `external-backend`, a manual dispatch, runs chapters
+15 to 19 with `--smoke --foam-root`; this path has not been exercised yet,
+because the OpenFOAM runtime does not exist on the host where the
+documentation was written. The F1 section of chapter 13 (`jobs`) is executed
+by no job: `runner-integration` does not install the two optimization
+packages, so its blocks are checked for syntax and script paths only. Full
+mode for chapters 18 and 19 takes hours and is not part of any job. `validation/manual_examples.py` still runs its fixed suite
 of 11 native steps in the job `numerical` and its 8 OpenFOAM steps in
 `external-backend`; `validation/test_manual_examples.py` requires those steps
 to equal the blocks of chapters 15 and 17.

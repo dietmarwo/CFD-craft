@@ -168,28 +168,64 @@ def heading_anchors(path):
     return anchors
 
 
+BLOB = "https://github.com/dietmarwo/CFD-craft/blob/main/"
+STUB_MARK = "<!-- stub -->"
+
+
+def is_stub(path):
+    """A permanent stub starts with the marker line `<!-- stub -->`."""
+    with path.open(encoding="utf-8") as handle:
+        return handle.readline().strip() == STUB_MARK
+
+
 class DocumentationLinks(unittest.TestCase):
     def test_relative_links_and_anchors_resolve(self):
         broken = []
+        to_stub = []
+        stub_problems = []
+        checked = 0
         files = sorted(
             p
             for p in ROOT.rglob("*.md")
-            if not {"runs", "target", ".git"} & set(p.relative_to(ROOT).parts)
+            if not {"runs", "target", ".git", "book"} & set(p.relative_to(ROOT).parts)
         )
         self.assertGreater(len(files), 20)
+        stubs = {p for p in files if is_stub(p)}
         for path in files:
             text = path.read_text(encoding="utf-8")
-            for target, anchor in re.findall(r"\]\(([^)#\s]*)(#[^)\s]*)?\)", text):
-                if target.startswith(("http:", "https:", "mailto:")):
+            links = re.findall(r"\]\(([^)#\s]*)(#[^)\s]*)?\)", text)
+            if path in stubs and not links:
+                stub_problems.append(
+                    f"{path.relative_to(ROOT)}: no link to the new page"
+                )
+            for target, anchor in links:
+                if target.startswith(BLOB):
+                    linked = (ROOT / target[len(BLOB) :]).resolve()
+                elif target.startswith(("http:", "https:", "mailto:")):
                     continue
-                linked = (path.parent / target).resolve() if target else path
+                else:
+                    linked = (path.parent / target).resolve() if target else path
+                checked += 1
                 name = f"{path.relative_to(ROOT)}: {target}{anchor}"
                 if not linked.exists():
                     broken.append(name)
-                elif anchor and linked.suffix == ".md":
+                    continue
+                if anchor and linked.suffix == ".md":
                     if anchor[1:] not in heading_anchors(linked):
                         broken.append(name)
+                if linked in stubs:
+                    if path in stubs:
+                        stub_problems.append(f"{name} (a stub links to a stub)")
+                    else:
+                        to_stub.append(name)
+        print(
+            f"links checked: {checked}, stubs: {len(stubs)}, "
+            f"links to stubs: {len(to_stub)}",
+            file=sys.stderr,
+        )
         self.assertEqual(broken, [])
+        self.assertEqual(stub_problems, [])
+        self.assertEqual(to_stub, [])
 
 
 if __name__ == "__main__":

@@ -668,7 +668,7 @@ pub enum PressurePreconditioner {
     Ic0,
     #[cfg_attr(
         doc,
-        doc = "Fixed symmetric geometric multigrid cycle; unmasked grids only (CFD-E034). See the [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PRESSURE_MULTIGRID.md)."
+        doc = "Fixed symmetric geometric multigrid cycle; unmasked grids only (CFD-E034). See the [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/pressure-multigrid.md)."
     )]
     #[allow(missing_docs)]
     Multigrid,

@@ -1,6 +1,6 @@
 //! Matrix-free linear operators on the face-velocity unknowns, for implicit
 //! steady pseudo-time (stages P4 and P5a of the
-//! [accuracy and steady-solver plan](https://github.com/dietmarwo/CFD-craft/blob/main/docs/ACCURACY_STEADY_PLAN.md)).
+//! [accuracy and steady-solver plan](https://github.com/dietmarwo/CFD-craft/blob/main/docs/history/accuracy-steady-plan.md)).
 //!
 //! The unknowns are the corrections δ on faces that carry a momentum equation
 //! (interior and outlet faces). All other faces keep their prescribed velocity,
@@ -430,7 +430,7 @@ impl Matrix {
 }
 
 /// Inner solve of the implicit steady iteration (P5a), selected by the
-/// predeclared pilot (validation/IMPLICIT_STEADY_RESULTS.md): Jacobi-
+/// predeclared pilot (docs/evidence/implicit-steady.md): Jacobi-
 /// preconditioned BiCGStab (van der Vorst, 1992) from δ = 0, to this relative
 /// residual or cap. One iteration is two operator applications.
 pub const BICGSTAB_RELATIVE_TOLERANCE: f64 = 0.1;

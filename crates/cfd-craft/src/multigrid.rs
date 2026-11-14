@@ -11,7 +11,7 @@
 //! report its storage ([`MultigridStats`], from
 //! [`pressure::multigrid_stats`](crate::pressure::multigrid_stats)) and its
 //! work in a phase profile ([`MultigridWork`]). See the
-//! [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PRESSURE_MULTIGRID.md).
+//! [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/pressure-multigrid.md).
 use crate::{
     Result,
     grid::{FaceKind, Grid},

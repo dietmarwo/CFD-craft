@@ -25,8 +25,8 @@
 //! The release scope is uniform grids, box geometry, passive gas and CPU
 //! execution. Particles, vegetation, LES, chemistry, annual statistics,
 //! stretched grids, masked multigrid and GPU execution are not implemented.
-//! See the [roadmap](https://github.com/dietmarwo/CFD-craft/blob/main/docs/roadmap.md),
-//! the [recorded results](https://github.com/dietmarwo/CFD-craft/blob/main/validation/RESULTS.md)
+//! See the [roadmap](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/roadmap.md),
+//! the [recorded results](https://github.com/dietmarwo/CFD-craft/blob/main/docs/evidence/native-verification.md)
 //! and the [model cards](https://github.com/dietmarwo/CFD-craft/blob/main/docs/model-cards/README.md).
 //!
 //! # What is implemented
@@ -140,7 +140,7 @@
 //!   binding (`check`, `simulate`, `describe`), see the
 //!   [Python guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md).
 //! - The [user manual](https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md)
-//!   explains architecture, numerical and evidence concepts and has 31
+//!   explains architecture, numerical and evidence concepts and has
 //!   examples; its [Rust library section](https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md#rust-library-api)
 //!   covers this crate.
 //! - The [result contract](https://github.com/dietmarwo/CFD-craft/blob/main/docs/result-contract.md)

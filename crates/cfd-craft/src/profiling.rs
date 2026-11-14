@@ -10,7 +10,7 @@
 //! The CLI's `profile` command writes the same record into its
 //! `cfd-craft.native-profile/0.1` envelope; its JSON schema is the
 //! `phase_profile_schema` of `cfd-craft describe`. See the
-//! [profiling guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PROFILING.md).
+//! [profiling guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/profiling.md).
 //!
 //! ```
 //! # let json = r#"{"schema_version": "cfd-craft.case/0.1", "name": "tiny",

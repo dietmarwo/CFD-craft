@@ -107,4 +107,4 @@ during a long run (each must stop it within seconds), and the installed console
 script. `--binary PATH` also compares numerical summaries with the Rust CLI.
 Run the checker with `python -I` from outside the checkout, normally and under
 `-O`. The release workflow runs it for every wheel on CPython 3.10 and 3.14 and
-for the source distribution; see [RELEASING.md](../RELEASING.md).
+for the source distribution; see [Releasing](developer/releasing.md).

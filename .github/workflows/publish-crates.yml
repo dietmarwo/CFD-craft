@@ -5,7 +5,7 @@
 # token in the secret CARGO_REGISTRY_TOKEN of the `release` environment
 # (crates.io accepts Trusted Publishers only for existing crates); without
 # either, the workflow validates and skips the upload. Pull requests that touch
-# the crate manifests and manual runs validate only. See RELEASING.md.
+# the crate manifests and manual runs validate only. See docs/developer/releasing.md.
 name: Publish crates to crates.io
 
 on:

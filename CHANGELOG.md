@@ -2,8 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Documentation restructure. One [guide](docs/guide/README.md) of 21 chapters ordered by difficulty replaces the user manual, the tutorial pages and the integration guides; the first chapter installs with `pip` and runs the smallest case. New pages: a [landing page](docs/index.md), ["How do I …?"](docs/how-to.md) with 82 tasks, a [comparison with OpenFOAM and Ansys Fluent](docs/comparison.md) that uses committed measurements only, a [reference section](docs/reference/README.md) with pages generated from `describe` and the Python docstrings, and index pages for [developers](docs/developer/README.md), [evidence](docs/evidence/README.md) and [history](docs/history/README.md).
+- A documentation site built with mdBook and deployed to GitHub Pages (`book.toml`, `docs/SUMMARY.md`, `.github/workflows/pages.yml`); `scripts/check_site.py` verifies every internal reference of the built pages (`CFD-R004`).
+- `scripts/check_docs.py` runs the code blocks of the guide, the README files and the reference pages and compares the shown outputs, floats within the tolerance each page declares (`CFD-R003`). `docs/check-counts.json` holds the minimum number of checked blocks per page, so a page cannot lose a checked block unnoticed. A new CI job `docs` runs it on every push with `scripts/generate_reference.py --check` (`CFD-R002`); the OpenFOAM and optimization-job chapters run in the existing opt-in jobs. See [the documentation check](docs/developer/documentation.md).
+
 ### Changed
 
+- `docs/` is sorted by reader: `guide/`, `reference/`, `developer/`, `evidence/` (the validation records, moved from `validation/`) and `history/` (the iteration plans). Every old path keeps a permanent stub that links to the new place; the stub of the user manual keeps its headings and maps the 31 example numbers to chapters.
+- The README starts with one sentence, the install line and a Python example with its output, and has seven documentation links. `docs/ai-context.md` starts with the run loop and the rules.
+- Links in the rustdoc, the package metadata and one schema description of `describe` (the multigrid option) point to the new paths. No solver behavior changed.
 - README: links the [overview of the 18 related repositories](https://github.com/dietmarwo/fcmaes-rust/blob/main/docs/repositories.md).
 - CI: `retry-runner-shortage.yml` reruns the failed jobs of a release or CI run when every job that did not succeed was cancelled before a runner picked it up (hosted macOS arm64 shortage), up to three attempts. A release is no longer held back until someone reruns it by hand.
 - The optional `fcmaes-cfd-worker` pins optimization-jobs `12f9d57` (its 0.4.0 release `602d31a` plus documentation-only changes) and fcmaes-rust `f764a75`, whose crates are unchanged since `583f33a` apart from that pin. The `runner-integration` CI job builds `optimization-run` at the same revision (it built `cc6b03d`). `integrations/run_jobs.py` against it reproduces the recorded objectives (baseline 1.8682465, BiteOpt 1.8657713, GP 1.6799143).

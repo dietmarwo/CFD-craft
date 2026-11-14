@@ -9,7 +9,7 @@ numbers below for one complete smoke and one complete study run of the
 committed lessons. [record.py](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/record.py) writes it from the runs' summaries
 and refuses incomplete or failed runs:
 
-```bash
+```sh
 python tutorials/optimization/record.py --smoke SMOKE_DIR --study STUDY_DIR \
   --output tutorials/optimization/results/verified.json
 ```

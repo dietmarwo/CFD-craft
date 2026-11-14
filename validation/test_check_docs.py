@@ -955,6 +955,21 @@ class Repository(unittest.TestCase):
                         )
         self.assertEqual(problems, [])
 
+    def test_no_page_of_the_default_set_hides_a_runnable_block(self):
+        """`python` and `bash` mean "is run": not on a page marked `none`."""
+        problems = []
+        pages = check_docs.default_pages(ROOT)
+        self.assertGreater(len(pages), 60)
+        for name in pages:
+            parsed, _ = check_docs.parse((ROOT / name).read_text(encoding="utf-8"))
+            for section in parsed["sections"]:
+                for block in section["blocks"]:
+                    if block["language"] in ("python", "bash") and (
+                        parsed["none"] is not None or "none" in block["markers"]
+                    ):
+                        problems.append(f"{name}:{block['line']}")
+        self.assertEqual(problems, [])
+
 
 if __name__ == "__main__":
     unittest.main()

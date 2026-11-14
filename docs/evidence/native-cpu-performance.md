@@ -1,5 +1,7 @@
 # Native CPU performance: results
 
+<!-- check: none: record of past runs -->
+
 Measured against merged main `402a15036636d8f48591a2d9b5f4ed203cb5ab91`, as
 declared in the [plan](../history/07-14-performance-plan.md). The changes reduce the cost
 of the native pressure solve, the RANS and momentum stencils and the step's

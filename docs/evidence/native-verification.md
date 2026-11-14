@@ -1,5 +1,7 @@
 # Recorded verification results
 
+<!-- check: none: record of past runs -->
+
 The source fingerprint quoted below uses the definition before 0.1.0, which
 hashed the Rust/TOML files under `crates/` and the root manifest and lockfile;
 0.1.0 fingerprints each package instead (see

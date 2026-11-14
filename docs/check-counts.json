@@ -41,6 +41,16 @@
       "text": 0,
       "json": 0
     },
+    "docs/developer/pressure-multigrid.md": {
+      "run": 1,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/profiling.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
     "docs/developer/releasing.md": {
       "run": 0,
       "text": 0,
@@ -57,6 +67,101 @@
       "json": 0
     },
     "docs/evidence/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/anisotropic-pressure.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/backend-comparison.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/backstep-resolution.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/external-backend.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/gap-baseline.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/implicit-rans.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/implicit-steady.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/matched-accuracy.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/mesh-initialization.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/momentum-verification.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/native-cpu-performance.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/native-verification.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/optimization-lessons.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/performance-gap-status.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/performance-iterations.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/pressure-multigrid.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/refinement-campaign.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/second-order-momentum.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/steady-continuation.md": {
       "run": 0,
       "text": 0,
       "json": 0

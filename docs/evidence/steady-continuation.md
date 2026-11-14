@@ -1,5 +1,7 @@
 # Recorded steady-continuation results
 
+<!-- check: none: record of past runs -->
+
 These results cover same-mesh steady field continuation of the OpenFOAM
 backend ([guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/STEADY_RESTART.md),
 [plan](../history/04-steady-continuation-plan.md)). The

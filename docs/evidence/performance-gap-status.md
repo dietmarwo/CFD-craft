@@ -1,5 +1,7 @@
 # Performance gap: current state and remaining stages
 
+<!-- check: none: record of past runs -->
+
 ## After P5c, P5d and ten performance iterations (1 November 2026)
 
 The hosted paired sweep with the final implicit recipe

@@ -16,7 +16,7 @@ for measured coverage and limitations; extreme aspect ratios are not guaranteed.
 
 Create an explicit case copy and retain it with the result:
 
-```sh
+```bash
 mkdir -p runs
 python - <<'PY'
 import json
@@ -41,6 +41,7 @@ The result/archive schemas and ordinary output layout are unchanged.
 
 In Rust, set the case **before** building its grid or calling `solver::run`:
 
+<!-- check: none: an excerpt with free variables; the compiled form is guide chapter 20, Select multigrid from Rust -->
 ```rust
 use cfd_craft::case::PressurePreconditioner;
 case.numerics.pressure_preconditioner = PressurePreconditioner::Multigrid;

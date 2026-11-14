@@ -1,5 +1,7 @@
 # Second-order momentum advection (stage P3a): results
 
+<!-- check: none: record of past runs -->
+
 Date: 1 November 2026. Plan and predeclared gates:
 [accuracy and steady-solver plan](../history/accuracy-steady-plan.md), stage P3a.
 Base: `main` at `6d33850` (merged PR #15).

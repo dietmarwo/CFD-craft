@@ -1,5 +1,7 @@
 # Recorded coarse-to-fine initialization results
 
+<!-- check: none: record of past runs -->
+
 These results cover one-level mesh initialization of the OpenFOAM backend
 ([guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/MESH_INITIALIZATION.md),
 [plan](../history/05-mesh-initialization-plan.md)). The

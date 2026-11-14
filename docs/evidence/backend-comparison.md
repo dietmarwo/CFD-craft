@@ -1,5 +1,7 @@
 # Native solver and OpenFOAM on the lid-driven cavity: measured cost
 
+<!-- check: none: record of past runs -->
+
 Both backends solve the supported Re=100 lid-driven cavity on the same machine,
 one solver thread each, on two hosts. The first host ran an earlier script of
 the same procedure; the second, a GitHub runner, ran

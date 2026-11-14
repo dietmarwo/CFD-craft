@@ -1,5 +1,7 @@
 # Implicit steady pseudo-time (stages P4 and P5a): results
 
+<!-- check: none: record of past runs -->
+
 Date: 1 November 2026. Plan and predeclared gates:
 [accuracy and steady-solver plan](../history/accuracy-steady-plan.md), stages P4
 and P5a. Method: [flow model card](../model-cards/flow.md), "Steady

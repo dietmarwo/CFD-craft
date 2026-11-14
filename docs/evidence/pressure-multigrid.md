@@ -1,5 +1,7 @@
 # Pressure multigrid results
 
+<!-- check: none: record of past runs -->
+
 This is the historical P1 point-smoother/full-coarsening campaign, including
 the shape sweep added in merged PR #13. Its rows are retained unchanged.
 The subsequent line/small-plane and semicoarsening implementation has

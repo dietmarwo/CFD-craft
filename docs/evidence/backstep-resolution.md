@@ -1,5 +1,7 @@
 # Recorded wall-resolved backstep results
 
+<!-- check: none: record of past runs -->
+
 These results cover the wall-resolved Driver--Seegmiller backstep recipes and
 the independent Cartesian audit. The [external results](external-backend.md)
 record the legacy recipe; the [plan](../history/03-wall-resolution-plan.md)

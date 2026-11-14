@@ -1,5 +1,7 @@
 # Stage V: momentum verification and donor-cell baseline
 
+<!-- check: none: record of past runs -->
+
 Measured 1 November 2026 against main `f358be6` (merged PR #14).
 Stage V changes verification and measurement only. Production Rust numerics,
 default serialization, physical models and acceptance thresholds are unchanged.

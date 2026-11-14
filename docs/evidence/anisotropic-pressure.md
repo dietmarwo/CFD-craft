@@ -1,5 +1,7 @@
 # Anisotropic pressure multigrid results
 
+<!-- check: none: record of past runs -->
+
 ## Scope and frozen protocol
 
 Measured 2026-10-31 on one AMD EPYC 9V74 solver thread; host exposes 9 CPUs,

@@ -1,5 +1,7 @@
 # Matched-accuracy measurement against OpenFOAM (stage M)
 
+<!-- check: none: record of past runs -->
+
 Date: 1 November 2026. Protocol: stage M of the
 [accuracy and steady-solver plan](../history/accuracy-steady-plan.md), run through the
 `external=momentum` CI selection, which was declared for Stage V and extended

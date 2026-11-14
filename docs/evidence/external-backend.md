@@ -1,5 +1,7 @@
 # Recorded external-backend results
 
+<!-- check: none: record of past runs -->
+
 These numbers were produced by the commands below. The implementation files had the SHA-256 identities listed at the end. The run used OpenFOAM Foundation 13 package `20260407` (build `13-441953dfbb42`, serial, f64, 32-bit labels) on a GitHub-hosted ubuntu-24.04 runner with four cores of an AMD EPYC 9V45, using Python 3.12. The `external-backend` job of the CI workflow runs exactly these commands on manual dispatch. Rerun them and read the reports rather than treating these values as targets; wall times and the iterations reached within a time budget depend on the machine.
 
 The cavity comparison passes. The backstep does **not** pass its numerical gate: the coarse solve stalls, and the finer meshes time out. Its measurement screen is therefore not assessed. Nothing here qualifies the native canyon model or passive-gas transport.

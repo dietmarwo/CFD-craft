@@ -1,5 +1,7 @@
 # Implicit steady iteration with RANS and constituents (stages P5c and P5d): results
 
+<!-- check: none: record of past runs -->
+
 Date: 1 November 2026. Plan and predeclared gates:
 [accuracy and steady-solver plan](../history/accuracy-steady-plan.md), stages P5c
 and P5d. Method: [flow model card](../model-cards/flow.md) ("Steady

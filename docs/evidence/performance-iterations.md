@@ -1,5 +1,7 @@
 # Ten performance iterations after P5d: results
 
+<!-- check: none: record of past runs -->
+
 Date: 1 November 2026. Goal: close the remaining cost gap to OpenFOAM at
 matched accuracy (stage M measures it on the cavity) and make the steady RANS
 canyon with its tracer, the case of the dust study, cheaper. No OpenFOAM source

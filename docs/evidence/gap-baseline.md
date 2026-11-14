@@ -1,5 +1,7 @@
 # Native/OpenFOAM gap-closing baseline
 
+<!-- check: none: record of past runs -->
+
 Measured 31 October 2026 on the code of `6759996` plus the profiling and sweep tools. The native numerics measured are IC(0)-PCG pressure, donor-cell momentum and SSPRK2 steps; profiling leaves their results unchanged.
 
 ## Protocol

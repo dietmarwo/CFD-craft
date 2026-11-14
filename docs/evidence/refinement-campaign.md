@@ -1,5 +1,7 @@
 # Bounded mapped refinement: results
 
+<!-- check: none: record of past runs -->
+
 The declared level-2 backstep campaign of the
 [plan](../history/06-refinement-campaign-plan.md), run on a
 GitHub-hosted runner on 31 October 2026 from commit

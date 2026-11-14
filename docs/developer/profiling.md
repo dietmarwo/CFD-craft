@@ -100,6 +100,7 @@ measure on/off overhead with paired runs before making timing claims.
 Given a validated `Case` named `case` in a function returning `cfd_craft::Result`,
 use the same solver entry point:
 
+<!-- check: none: an excerpt with free variables; the compiled form is guide chapter 20, Profile from Rust -->
 ```rust
 use cfd_craft::solver::{self, Control};
 

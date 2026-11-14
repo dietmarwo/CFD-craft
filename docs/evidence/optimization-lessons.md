@@ -1,5 +1,7 @@
 # Validation record
 
+<!-- check: none: record of past runs -->
+
 F1–F3 use the existing numerical solvers, the native LP/MIP API, native
 BiteOpt and the CFD GP worker; no transport, pressure or physical model is
 changed by them. [results/verified.json](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/optimization/results/verified.json) holds the

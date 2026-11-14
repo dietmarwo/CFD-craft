@@ -152,10 +152,13 @@ outer approximation: unit-vector cuts provide upper bounds, and eigenvectors
 of each returned information matrix add violated cuts. Actual candidate
 feasibility, integrality, time cost and eigenvalues are checked independently.
 Native solver results, incumbents and bounds are retained even when a limit
-or failure prevents certification. `certified` means convergence within the
-declared floating-point gap, not an exact rational proof. The small synthetic
-campaign additionally checks every binary pattern independently. Rank of the
-selected observations is reported separately.
+or failure prevents certification. Each outer bound is the native solver's
+proven master bound (`best_bound`), never the incumbent's objective value; a
+master without a finite proven bound stops without certification. `certified`
+means convergence within the declared floating-point gap, not an exact
+rational proof. The small synthetic campaign additionally checks every binary
+pattern independently. Rank of the selected observations is reported
+separately.
 
 ## Use an observation CSV and compare a station
 

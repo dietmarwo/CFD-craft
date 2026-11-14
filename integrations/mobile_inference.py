@@ -398,9 +398,14 @@ def _native_master(information, costs, budget, cuts, remaining):
             pivot_tolerance=1e-10,
         ),
     )
-    if result.status != "optimal" or result.candidate is None:
+    if (
+        result.status != "optimal"
+        or result.candidate is None
+        or result.best_bound is None
+        or not math.isfinite(result.best_bound)
+    ):
         failure = ValueError(
-            f"CFD-M003 mobile_inference: route MIP stopped as {result.status}; optimum not certified"
+            f"CFD-M003 mobile_inference: route MIP stopped as {result.status} without a finite proven bound; optimum not certified"
         )
         failure.native_result = plain(result)
         raise failure
@@ -415,7 +420,9 @@ def _native_master(information, costs, budget, cuts, remaining):
         and np.max(activity[1:]) <= 1e-7,
         "native route candidate failed independent primal/integrality check",
     )
-    return x, plain(result)
+    # The incumbent's t is only a lower bound of the master; the outer
+    # approximation needs the master's proven upper bound.
+    return x, max(float(x[-1]), float(result.best_bound)), plain(result)
 
 
 def select_routes(
@@ -475,7 +482,7 @@ def select_routes(
         if remaining <= 0:
             break
         try:
-            x, native = _native_master(
+            x, bound, native = _native_master(
                 normalized, costs, riding_time_budget_s, cuts, remaining
             )
         except (ValueError, RuntimeError) as exc:
@@ -493,7 +500,6 @@ def select_routes(
             normalized[chosen].sum(axis=0) if chosen else np.zeros_like(normalized[0])
         )
         actual = max(0.0, float(eigen[0]))
-        bound = float(x[-1])
         if actual > best_score:
             best_score = actual
             best = chosen

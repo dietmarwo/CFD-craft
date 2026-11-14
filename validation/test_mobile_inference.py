@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -292,6 +293,45 @@ class ActualNativeRouteMIP(unittest.TestCase):
             self.assertLessEqual(iteration["normalized_lower_bound"], optimum + 2e-7)
             self.assertGreaterEqual(iteration["normalized_upper_bound"], optimum - 2e-7)
             self.assertEqual(iteration["native"]["status"], "optimal")
+
+    def test_certificate_uses_the_proven_master_bound_not_the_incumbent(self):
+        import dataclasses
+
+        import lp_ip_craft
+
+        information = np.array(
+            [[[1, 0], [0, 0]], [[0, 0], [0, 1]], [[0.7, 0.6], [0.6, 0.7]]],
+            dtype=float,
+        )
+        candidates = [dict(id=f"route-{i}", riding_time_s=1.0) for i in range(3)]
+        native_solve = lp_ip_craft.solve
+
+        def weaker_bound(*args, **kwargs):
+            # An "optimal" stop within a positive gap: the proven bound
+            # exceeds the incumbent's objective value.
+            result = native_solve(*args, **kwargs)
+            return dataclasses.replace(result, best_bound=result.best_bound + 0.25)
+
+        with mock.patch.object(lp_ip_craft, "solve", side_effect=weaker_bound):
+            result = mobile.select_routes(
+                information, candidates, 2.0, max_cuts=4, wall_time_limit_s=20.0
+            )
+        self.assertFalse(result["certified"], result)
+        for iteration in result["iterations"]:
+            self.assertGreaterEqual(
+                iteration["normalized_upper_bound"],
+                iteration["native"]["best_bound"],
+            )
+
+        def no_bound(*args, **kwargs):
+            return dataclasses.replace(native_solve(*args, **kwargs), best_bound=None)
+
+        with mock.patch.object(lp_ip_craft, "solve", side_effect=no_bound):
+            result = mobile.select_routes(
+                information, candidates, 2.0, wall_time_limit_s=20.0
+            )
+        self.assertFalse(result["certified"])
+        self.assertIn("proven bound", result["iterations"][0]["error"])
 
     def test_cut_budget_retains_actual_incumbent_without_certifying_relaxation(self):
         information = np.array(

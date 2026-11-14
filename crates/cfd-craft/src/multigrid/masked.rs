@@ -406,6 +406,171 @@ mod tests {
             }
         }
     }
+    /// Dense matrix of the cycle on the gauged fluid space: every cell of an
+    /// anchored component, and differences to the first cell of a sealed one.
+    fn gauged_cycle(g: &Grid) -> (usize, Vec<f64>) {
+        let mut h = MaskedHierarchy::build(g, &Control::new(60.)).unwrap();
+        let mut basis = vec![];
+        for (region, anchored) in g.components.iter().zip(&g.anchored) {
+            for &i in &region[usize::from(!anchored)..] {
+                let mut v = vec![0.; g.count()];
+                v[i] = 1.;
+                if !anchored {
+                    v[region[0]] = -1.;
+                }
+                basis.push(v);
+            }
+        }
+        let n = basis.len();
+        let mut m = vec![0.; n * n];
+        for (j, b) in basis.iter().enumerate() {
+            let mut y = vec![f64::NAN; g.count()];
+            h.apply(b, &mut y, &mut MultigridWork::default());
+            assert!(y.iter().all(|v| v.is_finite()));
+            assert!(g.fluid.iter().zip(&y).all(|(fluid, v)| *fluid || *v == 0.));
+            for (region, anchored) in g.components.iter().zip(&g.anchored) {
+                if !anchored {
+                    let mean = region.iter().map(|&i| y[i]).sum::<f64>() / region.len() as f64;
+                    assert!(mean.abs() < 1e-12, "sealed component mean {mean}");
+                }
+            }
+            for (i, v) in basis.iter().enumerate() {
+                m[i * n + j] = v.iter().zip(&y).map(|(a, b)| a * b).sum();
+            }
+        }
+        (n, m)
+    }
+    fn assert_spd(n: usize, mut m: Vec<f64>, name: &str) {
+        let scale = m.iter().fold(0.0f64, |a, b| a.max(b.abs()));
+        for i in 0..n {
+            for j in 0..i {
+                assert!(
+                    (m[i * n + j] - m[j * n + i]).abs() < 1e-11 * scale,
+                    "{name}: asymmetric at {i},{j}"
+                );
+            }
+        }
+        for i in 0..n {
+            for j in 0..=i {
+                let mut v = m[i * n + j];
+                for k in 0..j {
+                    v -= m[i * n + k] * m[j * n + k];
+                }
+                if i == j {
+                    assert!(v > 1e-12 * scale, "{name}: pivot {i} is {v}");
+                    m[i * n + j] = v.sqrt();
+                } else {
+                    m[i * n + j] = v / m[j * n + j];
+                }
+            }
+        }
+    }
+    fn topology(
+        cells: [usize; 3],
+        boundaries: [&str; 3],
+        solid: impl Fn([usize; 3]) -> bool,
+    ) -> Grid {
+        let mut c: Case = serde_json::from_str(include_str!(
+            "../../../../cases/verification/lid-cavity.json"
+        ))
+        .unwrap();
+        c.grid.cells = cells;
+        c.domain.size_m = cells.map(|v| v as f64);
+        c.moving_walls.clear();
+        c.boundaries = serde_json::from_value(serde_json::json!({
+            "x": boundaries[0], "y": boundaries[1], "z": boundaries[2]
+        }))
+        .unwrap();
+        if let crate::case::Flow::Laminar {
+            initial_velocity_m_s,
+            ..
+        } = &mut c.flow
+        {
+            *initial_velocity_m_s = [1., 0., 0.];
+        }
+        for z in 0..cells[2] {
+            for y in 0..cells[1] {
+                for x in 0..cells[0] {
+                    if solid([x, y, z]) {
+                        c.geometry.push(Block {
+                            id: format!("s{x}-{y}-{z}"),
+                            min_m: [x as f64, y as f64, z as f64],
+                            max_m: [x as f64 + 1., y as f64 + 1., z as f64 + 1.],
+                            footprint_m: None,
+                        });
+                    }
+                }
+            }
+        }
+        c.numerics.pressure_preconditioner = PressurePreconditioner::Multigrid;
+        Grid::build(&c).unwrap()
+    }
+    #[test]
+    fn masked_cycle_is_symmetric_positive_definite_for_every_component_topology() {
+        // A one-cell passage through a barrier, outlet-anchored, two-cell periodic span.
+        let g = topology([10, 2, 7], ["open", "periodic", "wall"], |q| {
+            q[0] == 4 && q[2] != 3
+        });
+        assert_eq!(g.anchored, vec![true]);
+        let (n, m) = gauged_cycle(&g);
+        assert_spd(n, m, "thin passage");
+        // An inlet-only sealed side, an outlet side, a sealed singleton pocket
+        // and an outlet cell that is an anchored singleton.
+        let g = topology([9, 3, 6], ["open", "wall", "wall"], |q| {
+            let pocket = [6usize, 1, 3];
+            let around = (0..3).map(|a| q[a].abs_diff(pocket[a])).sum::<usize>() == 1;
+            q[0] == 3 || around || [[7, 0, 0], [8, 1, 0], [8, 0, 1]].contains(&q)
+        });
+        assert!(
+            g.components
+                .iter()
+                .any(|r| r == &[Grid::index(g.n, [6, 1, 3])])
+        );
+        assert!(
+            g.components
+                .iter()
+                .zip(&g.anchored)
+                .any(|(r, a)| r.len() == 1 && *a)
+        );
+        assert!(g.anchored.iter().any(|a| !*a));
+        let (n, m) = gauged_cycle(&g);
+        assert_spd(n, m, "sealed side and anchored singleton");
+        // Sealed components that close only through the periodic wrap, with an
+        // odd cell count and a one-cell periodic axis.
+        let g = topology([9, 1, 8], ["periodic", "periodic", "wall"], |q| {
+            q[0] == 2 || q[0] == 6
+        });
+        assert_eq!(g.anchored, vec![false, false]);
+        assert!(
+            g.components
+                .iter()
+                .any(|r| r.contains(&0) && r.contains(&8))
+        );
+        let (n, m) = gauged_cycle(&g);
+        assert_spd(n, m, "periodic wrap");
+        // A fixed pseudo-random porous mask, fully periodic: sealed singletons,
+        // diagonal-only contacts and one-cell passages.
+        let mut state = 12345u64;
+        let mut mask = vec![false; 8 * 6 * 6];
+        for v in &mut mask {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            *v = (state >> 33) % 100 < 45;
+        }
+        let g = topology([8, 6, 6], ["periodic", "periodic", "periodic"], |q| {
+            mask[q[0] + 8 * (q[1] + 6 * q[2])]
+        });
+        assert!(g.components.iter().any(|r| r.len() == 1));
+        assert!(
+            g.components
+                .iter()
+                .any(|r| r.len() > super::super::COARSE_CELLS)
+        );
+        assert!(g.anchored.iter().all(|a| !*a));
+        let (n, m) = gauged_cycle(&g);
+        assert_spd(n, m, "porous periodic");
+    }
     #[test]
     fn complete_masked_cycle_is_symmetric_and_positive_on_all_gauged_directions() {
         let g = grid();

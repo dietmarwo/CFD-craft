@@ -26,10 +26,10 @@ The case is
 [`cases/canyon/wh1-wind270.json`](https://github.com/dietmarwo/CFD-craft/blob/main/cases/canyon/wh1-wind270.json):
 18 m x 16 m x 6 m with 18 x 16 x 12 cells of 1 m x 1 m x 0.5 m.
 
-- `geometry` lists solid boxes: two buildings, 1 m wide, 10 m long and 1 m
-  high, with a 1 m street between them (W/H = 1). A cell is solid when its
-  center lies inside a box; a box without a cell center is rejected
-  (`CFD-E028`).
+- `geometry` lists solid boxes as `{"id": "west", "min_m": [x, y, z], "max_m": [x, y, z]}`:
+  two buildings, 1 m wide, 10 m long and 1 m high, with a 1 m street between
+  them (W/H = 1). A cell is solid when its center lies inside a box; a box
+  without a cell center is rejected (`CFD-E028`).
 - `flow.kind` is `neutral_rans`: a neutral boundary layer with a k-epsilon
   model and rough walls. The inlet is a logarithmic profile with `speed_m_s`
   (2 m/s) at `reference_height_m` (1 m) over `roughness_m`.

@@ -66,7 +66,7 @@ def summarize(root):
             try:
                 audit = check(archive)
                 passed = audit["passed"]
-            except (ValueError, OSError, KeyError) as exc:
+            except (ValueError, OSError, KeyError, IndexError, TypeError) as exc:
                 audit = dict(passed=False, error=str(exc))
                 passed = False
             (directory / "final-independent-check.json").write_text(
@@ -80,7 +80,9 @@ def summarize(root):
                 source_sha256=s["source_sha256"],
                 case_sha256=s["case_sha256"],
                 physics_sha256=s["physics_sha256"],
-                fields_sha256=digest(archive / "fields.json"),
+                fields_sha256=digest(archive / "fields.json")
+                if (archive / "fields.json").is_file()
+                else None,
                 pressure_iterations=s["pressure_iterations"],
                 phase_exclusive_s={k: v["exclusive_s"] for k, v in phases.items()},
                 independent_check=audit,
@@ -124,6 +126,11 @@ def summarize(root):
             ),
             both_accepted=ra["accepted"] and rb["accepted"],
         )
+        if not all((archive(n) / "case.json").is_file() for n in (a, b)):
+            pair["case_fidelity_passed"] = False
+            pair["error"] = "a paired run has no consumed case; failed row retained"
+            pairs.append(pair)
+            continue
         cases = [json.loads((archive(n) / "case.json").read_text()) for n in (a, b)]
         pair["case_fidelity_passed"] = paired_case_fidelity(*cases)
         if not pair["case_fidelity_passed"]:

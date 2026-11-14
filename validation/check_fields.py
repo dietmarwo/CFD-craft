@@ -341,10 +341,21 @@ def check(path):
         == geometry["mask_sha256"],
         "geometry mask differs from the case shapes",
     )
-    for shape in c["geometry"]:
-        if shape["id"] not in geometry.get("shapes", {}):
-            continue  # compatible with archives predating urban geometry evidence
-        record = geometry["shapes"][shape["id"]]
+    shape_records = geometry.get("shapes")
+    # Archives predating per-shape evidence hold boxes only; a polygon prism
+    # always has evidence, and present evidence must cover exactly the case.
+    require(
+        shape_records is not None
+        or not any("footprint_m" in shape for shape in c["geometry"]),
+        "per-shape evidence missing for polygon prisms",
+    )
+    require(
+        shape_records is None
+        or set(shape_records) == {shape["id"] for shape in c["geometry"]},
+        "per-shape evidence ID set differs from the case",
+    )
+    for shape in c["geometry"] if shape_records is not None else []:
+        record = shape_records[shape["id"]]
         vertices = shape.get("footprint_m")
         area = (
             abs(

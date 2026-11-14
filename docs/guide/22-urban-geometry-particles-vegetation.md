@@ -28,7 +28,9 @@ exclusive. It uses the same wall faces and pressure operator as boxes. There
 are no cut cells, terrain or body-fitted native walls. `geometry.json.shapes`
 records exact and represented volume, signed volume error, contained cells,
 and the narrowest horizontal fluid run from each shape to another solid.
-Exterior clearances are excluded from that street-width measure. A vanished
+`validation/check_fields.py` recomputes every record and requires one per case
+shape; only box-only archives written before this evidence existed may omit
+`shapes`. Exterior clearances are excluded from that street-width measure. A vanished
 shape is still an error (`CFD-E028`), and an underresolved street is a warning
 (`CFD-W011`). Passing these checks does not establish geometric accuracy.
 

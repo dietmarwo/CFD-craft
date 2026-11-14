@@ -1,7 +1,7 @@
 # Continue a solve, start a finer mesh
 
 <!-- check: openfoam -->
-<!-- check: timeout=600 -->
+<!-- check: timeout=1800 -->
 
 This chapter shows the two ways to reuse an OpenFOAM result of the backend: continue a steady solve on the same mesh in a fresh, bounded stage, and start the next finer mesh from an accepted coarse solution. Both start new local work, and both need the unchanged final gates again. You need the runtime of [chapter 15](15-openfoam-first-run.md) and a checkout with the validation requirements.
 

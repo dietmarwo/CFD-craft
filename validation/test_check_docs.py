@@ -10,6 +10,7 @@ same under `python -O`.
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -859,6 +860,100 @@ class Counts(unittest.TestCase):
         code, _, errors = self.checkout.run("docs/page.md")
         self.assertEqual(code, 1)
         self.assertIn("CFD-R003 docs.counts", errors)
+
+
+SITE = "https://dietmarwo.github.io/CFD-craft/"
+BLOB_DOCS = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/"
+ENTRY_PAGES = (
+    "docs/index.md",
+    "docs/how-to.md",
+    "docs/ai-context.md",
+    "docs/comparison.md",
+)
+
+
+def documentation_links(text):
+    """Links of a page into `docs/` or to the documentation site.
+
+    A link counts when its target is a relative path that starts with `docs/`,
+    a `blob/main/docs/` URL of the repository or any URL of the site. Each
+    occurrence counts; images do not.
+    """
+    targets = re.findall(r"(?<!!)\[[^\]]*\]\(([^)\s]+)\)", text)
+    return [
+        t
+        for t in targets
+        if t.startswith(("docs/", "./docs/", BLOB_DOCS, SITE)) or t + "/" == SITE
+    ]
+
+
+class Repository(unittest.TestCase):
+    def test_the_committed_ledger_covers_the_default_set(self):
+        ledger = check_docs.read_counts(ROOT / check_docs.COUNTS_FILE)
+        self.assertEqual(sorted(ledger), sorted(check_docs.default_pages(ROOT)))
+        for name, minimum in ledger.items():
+            text = (ROOT / name).read_text(encoding="utf-8")
+            parsed, failures = check_docs.parse(text)
+            self.assertEqual(failures, [], name)
+            self.assertEqual(
+                check_docs.ledger_shortfalls(check_docs.ledger(parsed), minimum),
+                [],
+                name,
+            )
+
+    def test_the_readme_has_at_most_seven_documentation_links(self):
+        links = documentation_links((ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertGreater(len(links), 0)
+        self.assertLessEqual(len(links), 7, links)
+        counted = documentation_links(
+            "[a](docs/x.md) [b](https://dietmarwo.github.io/CFD-craft/) "
+            "[c](https://dietmarwo.github.io/CFD-craft) ![i](docs/images/x.png) "
+            f"[d]({BLOB_DOCS}y.md) [e](https://pypi.org/project/cfd-craft/) "
+            "[f](CHANGELOG.md)"
+        )
+        self.assertEqual(len(counted), 4)
+
+    def test_guide_reference_entry_pages_and_readmes_have_no_unchecked_runnable_block(
+        self,
+    ):
+        pages = [
+            p.relative_to(ROOT).as_posix()
+            for directory in ("docs/guide", "docs/reference")
+            for p in sorted((ROOT / directory).glob("*.md"))
+        ]
+        pages += list(ENTRY_PAGES) + [
+            name for name in check_docs.READMES if (ROOT / name).is_file()
+        ]
+        self.assertGreater(len(pages), 30)
+        ledger = check_docs.read_counts(ROOT / check_docs.COUNTS_FILE)
+        problems = []
+        for name in pages:
+            parsed, failures = check_docs.parse(
+                (ROOT / name).read_text(encoding="utf-8")
+            )
+            failures += check_docs.static_failures(parsed)
+            problems += [f"{name}:{f.line}: {f}" for f in failures]
+            if name not in ledger and parsed["none"] != check_docs.GENERATED:
+                problems.append(f"{name}: not in the ledger")
+            if parsed["none"] is not None:
+                runnable = [
+                    b
+                    for section in parsed["sections"]
+                    for b in section["blocks"]
+                    if b["language"] in ("python", "bash")
+                ]
+                if runnable:
+                    problems.append(f"{name}: runnable blocks on an unchecked page")
+                continue
+            for section in parsed["sections"]:
+                for block in section["blocks"]:
+                    if block["language"] in ("python", "bash") and (
+                        "none" in block["markers"]
+                    ):
+                        problems.append(
+                            f"{name}:{block['line']}: unchecked runnable block"
+                        )
+        self.assertEqual(problems, [])
 
 
 if __name__ == "__main__":

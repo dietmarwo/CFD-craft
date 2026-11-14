@@ -36,7 +36,8 @@ the directory of the running interpreter are put on `PATH`.
 A `text` block must have as many lines as the output. Number literals with a
 decimal point or an exponent are compared with the declared tolerance,
 `|actual - shown| <= rel * max(|actual|, |shown|) + abs`; integers and all other
-text must be identical. A block that is not executed (a `long` section with
+text must be identical. Digits inside a word, a hash, a version string or a
+schema name (`cfd-craft.result/0.1`) are text. A block that is not executed (a `long` section with
 `--smoke`, `openfoam` without `--foam-root`, `jobs` without `--runner`) is
 checked for syntax and script paths, and its `text` blocks are not compared.
 
@@ -85,9 +86,10 @@ FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 MARKER = re.compile(r"^<!--\s*(check|file):\s*(.*?)\s*-->$")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
 TOLERANCE = re.compile(r"^rel=(\S+)(?:\s+abs=(\S+))?$")
-# A number that is not part of a word, a hash or a version string.
+# A number that is not part of a word, a hash, a version string or a schema
+# name such as `cfd-craft.result/0.1`.
 NUMBER = re.compile(
-    r"(?<![\w.])[-+]?(?:\d+\.\d+|\.\d+|\d+)(?:[eE][-+]?\d+)?(?!\w|\.\d)"
+    r"(?<![\w.])(?<![A-Za-z]/)[-+]?(?:\d+\.\d+|\.\d+|\d+)(?:[eE][-+]?\d+)?(?!\w|\.\d)"
 )
 SCRIPT = re.compile(
     r"(?:^|[\s;&|(])python[0-9.]*\s+(?:-[A-Za-z]\s+)*((?:[\w.-]+/)*[\w.-]+\.py)\b"

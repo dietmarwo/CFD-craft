@@ -1,163 +1,186 @@
 # Agent entry point
+<!-- check: rel=1e-4 -->
 
-For native accuracy and steady-solver work, start with the
-[plan](history/accuracy-steady-plan.md), the
-[Stage V protocol](history/20-momentum-verification-plan.md),
-[measured donor-cell baseline](evidence/momentum-verification.md)
-and the [second-order momentum results](evidence/second-order-momentum.md).
-Use `compare_backends.py --grid-sweep --grids 16 24 32 48` to test both backends
-on the same list; `--native-numerics JSON` selects opt-in native numerics.
-Opt-in conservative second-order momentum advection (P3a,
-`numerics.momentum_advection`) reaches 0.01 Ghia error at 24² like OpenFOAM;
-donor-cell needed 96². Opt-in `numerics.steady_algorithm = implicit_projection`
-(P5a, a SIMPLEC-type implicit correction with a projection per outer iteration)
-reaches the unchanged steady gates 18–40× faster than the explicit march; see
-the [implicit steady results](evidence/implicit-steady.md). With
-both, the hosted paired sweep had native at 0.74× OpenFOAM's solver time at the
-0.01 target, and 0.111× with the implicit recipe below and one span cell
-([matched accuracy](evidence/matched-accuracy.md)).
-`implicit_projection` also runs `neutral_rans` and constituents (P5c, P5d); for
-implicit runs use `"pressure_relative_tolerance": 0.1, "max_time_step_s": 100`
-and, for a two-dimensional problem, one cell on its periodic axis
-([performance](evidence/performance-iterations.md)). Keep the
-default donor-cell/explicit path, acceptance thresholds and failed measurements.
+CFD-craft is a CPU research solver for constant-density incompressible flow
+and passive-gas dispersion on uniform Cartesian grids. A case is one strict
+JSON file; a run is bounded and reports why it stopped, what its numerical
+checks support and an experimental-validation label. An optional adapter runs
+two generated cases on OpenFOAM Foundation 13 for cross-checks.
 
-CFD-craft is a numerical research tool. Use the actual CLI schemas and model cards rather than inventing case fields from an older proposal.
+Version 0.1.0 is a research prototype. A numerically accepted run is not an
+experimentally validated prediction.
 
-The [user manual](USER_MANUAL.md) explains architecture, units, numerical and
-evidence concepts, CLI/Rust/Python APIs and external/job workflows. Its
-[runnable examples](../examples/manual/README.md) are exercised by
-`validation/manual_examples.py`; use them as concrete API starting points.
+## The run loop
 
-For established-solver execution, start with [OPENFOAM.md](../integrations/OPENFOAM.md)
-and the [external model card](model-cards/openfoam-backend.md). The generated
-Foundation-13 cavity and backstep cases have their own external result schema.
-Do not feed those archives to the native `cfd-craft report` command. Numerical
-code agreement, comparison with measurements and physical qualification remain
-distinct. The native canyon validation gate is unchanged.
+Commands run from the root of a checkout, with the built command on `PATH`
+(`cargo build --release --locked`, then
+`export PATH="$PWD/target/release:$PATH"`) and the packages of
+`requirements-validation.txt` installed. Without a checkout,
+`pip install cfd-craft` gives `check` and `simulate` in Python
+([chapter 1](guide/01-first-run.md)), but no fields or archives.
 
-For the backstep resolution workflow, read the
-[prompt](../tutorials/backstep-resolution-prompt.md) and the
-[resolution results](evidence/backstep-resolution.md). Legacy remains the
-default recipe; the wall-resolved reference is `wall-resolved`/`simplec`, accepted
-at level 1 only. Its measurement screen additionally requires the independent
-local-flux and all-wall y+ audit. Never turn a saved pre-failure snapshot into
-a final result.
+1. **Discover.** `cfd-craft describe` prints the schemas, the allowed values
+   and the exit codes. Use only fields it lists.
+2. **Choose or edit a case.** Start from a committed case under
+   [`cases/`](https://github.com/dietmarwo/CFD-craft/blob/main/cases) or
+   [`examples/manual/`](https://github.com/dietmarwo/CFD-craft/blob/main/examples/manual);
+   write edits to a new file.
+3. **Check.** `cfd-craft check CASE` exits 1 on invalid input and prints every
+   diagnostic with a `code` and the `path` of the offending field. Read all of
+   them, warnings included, before you spend compute.
+4. **Bound the run.** Set `run.max_steps`, `run.wall_time_limit_s`,
+   `run.threads`, `run.memory_limit_mib` and `output.max_total_mib`. Choose a
+   new output directory whose parent exists.
+5. **Run.** `cfd-craft run CASE --output NEW_DIR`. Read `termination`,
+   `assessment`, every entry of `checks` and `experimental_validation` in
+   `summary.json`.
+6. **Verify.** `cfd-craft report NEW_DIR` checks the archive against its
+   hashes. `python validation/check_fields.py NEW_DIR` recomputes continuity,
+   mass balances and receptor values from the stored fields.
 
-For long steady solves use [verified continuation](../integrations/STEADY_RESTART.md)
-and its [results](evidence/steady-continuation.md). `prepare-restart` accepts a
-completed run with finite final fields whose stored face flux passes the
-independent local gate; unconverged completed stages are eligible,
-failed/timeout/cancelled ones are not. It preserves physics and mesh, resets local pseudo-time and records source
-fields, runtime and mesh. `--max-stages` defaults to 1. These are steady field
-initializations, not transient-history restarts or cross-mesh mappings.
+```bash
+cfd-craft describe > runs/describe.json
+cfd-craft check examples/manual/point-source.json > runs/check.json
+cfd-craft run examples/manual/point-source.json --output runs/point > /dev/null
+cfd-craft report runs/point > /dev/null
+python validation/check_fields.py runs/point > runs/fields-check.json
+```
 
-For one-level refinement use [mesh initialization](../integrations/MESH_INITIALIZATION.md)
-and its [plan](history/05-mesh-initialization-plan.md). It is a different
-operation: accepted, independently audited cold-generated source only; target
-BCs preserved, internal volume fields mapped, coarse phi never copied, and the
-mapping replayed independently. Fine-grid work starts at zero and needs the
-unchanged final gates; same-mesh source-flux eligibility is unchanged. A mapped
-run can later supply an ordinary continuation.
+```python
+import json
 
-For an acceptance-aware mapped/continued chain use the
-[refinement campaign](../integrations/REFINEMENT_CAMPAIGN.md) and
-[results](evidence/refinement-campaign.md). It freezes limits and producer
-identities, snapshots a complete accepted cold source, maps once and retains
-every fine stage. Cumulative fine work excludes coarse work. Repeated parent
-and archive checks reject added or changed files without repair. Only
-numerically accepted, independently audited grids enter the descriptive
-observable comparison; its pass means both original reference screens pass, not
-mesh independence. Cancellation overrides campaign acceptance, but not an
-integrity error. Two grids do not give a GCI, and physical qualification stays
-false.
+s = json.load(open("runs/point/summary.json"))
+print(s["termination"], s["assessment"], s["model_scope"])
+print(all(c["passed"] for c in s["checks"]), s["experimental_validation"])
+tracer = next(c for c in s["constituents"] if c["id"] == "tracer")
+print(f"R_down = {tracer['receptors_kg_m3']['R_down'] * 1e9:.6g} micrograms/m3")
+print("fields check passed:", json.load(open("runs/fields-check.json"))["passed"])
+```
 
-1. Build with cargo build --release --locked. Inspect cfd-craft describe.
-2. Choose a canonical case. Run check before allocating a larger simulation. Each diagnostic names its element and field (for example `geometry[1]` or `sources[0].rate_kg_s_m`); [diagnostics](diagnostics.md) lists the codes. Invalid input exits 1 from check, run, profile and preview, with the report on stdout. A check on a host too small for the case warns with CFD-W070 and skips the grid checks; run the case on a larger host, or preview it here.
-3. Set an available thread/memory allowance, an iteration limit and a wall-time limit. Use a new output directory.
-4. Read summary.json and its checks. Inspect the termination, assessment, scope, numerical interventions and experimental-validation label.
-5. Verify the manifest with report. If full fields were retained, use validation/check_fields.py for independent mass/continuity checks.
-6. Compare settings only under the same source, geometry, sampling and numerical-fidelity definitions. Keep failed rows and actual work counts.
+```text
+completed steady_discrete_solution prescribed_flow_passive_transport
+True not_validated; see validation/data-inventory.json
+R_down = 17.8118 micrograms/m3
+fields check passed: True
+```
 
-Successful assessments are steady_discrete_solution or transient_interval_completed. They describe the discrete calculation. An iteration/time limit is incomplete even when some diagnostics pass. Model validation is a separate dataset-specific report.
+Outputs on this page are real. The documentation check compares floating-point
+numbers with a relative tolerance of 1e-4; everything else must match exactly.
 
-Local coordinates are east/north/up, in meters. Meteorological wind is direction **from**, clockwise from north. A wind from 270 degrees travels in positive x. Stored pressure is kinematic pressure; RANS isotropic turbulent pressure is absorbed into it.
+## Rules
 
-Give a trace gas its molecular diffusivity (of order 1e-5 m2/s). In RANS cases the turbulent diffusivity nu_t/Sc_t then does the mixing; a large constant would hide the effect of the turbulent Schmidt number.
+- Use only the fields that `describe` lists. Do not invent fields from older
+  proposals; an unknown field is an error (`CFD-E000`).
+- Never weaken a tolerance or a gate after a failure.
+- Keep failed and incomplete rows in every report, with their actual work counts.
+- `completed` is not `accepted`, and `accepted` is not `validated`. An
+  iteration or time limit is incomplete even when some checks pass.
+- Exit 0 of `report` means an intact archive, not convergence.
+- Look up constituents and receptors by ID, never by position: receptor maps
+  are sorted as text (`R10` before `R2`).
+- Never write into a run directory, and never reuse one.
+- Never turn an earlier saved state of a failed run into a final result.
+- Compare settings only with the same source, geometry, sampling and
+  numerical-fidelity definitions.
+- The canyon cases are illustrative research cases on a coarse grid, not a
+  reproduction of a wind-tunnel experiment.
 
-Sources declare mass per second, per line length, or per source volume. The code integrates represented support and rejects masked-solid intersections. Point receptors interpolate from cell centers and reject stencils through a wall; near the external boundary they use the nearest available cell center. Volume receptors integrate exact Cartesian overlap.
+## Machine-readable entry points
 
-summary.json stores receptor values by ID, in sorted order (R10 before R2). Look them up by ID; do not rely on their position.
+| Entry point | What it gives |
+|---|---|
+| `cfd-craft describe` | JSON with `case_schema`, `result_schema`, `phase_profile_schema`, `exit_codes`, the allowed `physics`, `scalar_advection`, `momentum_advection`, `steady_algorithms` and `pressure_preconditioners`, the defaults, `limitations` and the build identity |
+| `python -m cfd_craft describe` | The same description from the Python package |
+| `cfd-craft check CASE` | `cfd-craft.check/0.1`: `valid`, `cells`, size estimates and `diagnostics`, each with `code`, `severity` and `path` |
+| `summary.json` of a run | `cfd-craft.result/0.1`: `termination`, `assessment`, `checks`, `model_scope`, `experimental_validation`, work counts, receptor values in kg/m3 |
+| Exit codes | 0 success (valid case, accepted run, intact archive); 1 invalid input or an execution or I/O error; 2 a run without numerical acceptance, or an accepted run that omitted files over its output budget |
+| [Diagnostics](diagnostics.md) | Every `CFD-` code with its meaning |
 
-Use linear_upwind for an exact source-response matrix. The MUSCL limiter makes the discrete transport map nonlinear. Keep model mismatch experiments separate from exact same-model recovery. An inverse optimizer's solutions or archive are not a calibrated posterior.
+Generated pages: [case schema](reference/case-schema.md),
+[result schema](reference/result-schema.md), [command line](reference/cli.md),
+[Python API](reference/python-api.md); also the [result contract](result-contract.md).
 
-The steady transport operator needs a removal path for sourced regions. Fully periodic or closed domains with persistent positive sources have no steady concentration solution in this release.
+## Conventions that cause wrong cases
 
-The optional native optimization worker supports prescribed-flow, three-source scalar allocation. Its positive box parameterization preserves total emissions and supplies a dimensionless concentration objective. MODE/QD, noisy GP, PM and vegetation are outside this adapter.
+- Coordinates are east, north, up, in meters. A meteorological wind direction
+  is where the wind comes **from**, clockwise from north: 270 blows toward +x.
+- Stored pressure is kinematic pressure (m2/s2). In RANS cases the isotropic
+  turbulent pressure is absorbed into it.
+- A point source declares kg/s, a line source kg/s per meter, a volume source
+  kg/s per cubic meter. The solver integrates the represented support and
+  rejects sources inside solids.
+- Use `linear_upwind` for an exact source-response matrix; the MUSCL limiter
+  makes transport nonlinear.
+- A steady source needs an open boundary. A closed or fully periodic domain
+  with a steady source has no steady solution (`CFD-E020`).
+- Give a trace gas its molecular diffusivity (of order 1e-5 m2/s). In RANS
+  cases the turbulent diffusivity does the mixing; a large constant hides it.
+- Point receptors interpolate from cell centers and reject stencils through a
+  wall; volume receptors integrate the exact overlap.
 
-Until data access and the frozen experimental protocol exist, use the canyon examples as illustrative research cases. Their dimensions are not an exact reproduction of the CODASC wind tunnel. Do not infer experimental compliance from a zero process exit or a visually plausible concentration field.
+Units of every field: [units and conventions](reference/units-and-conventions.md).
 
-Canonical workflows:
+## Where to find what
 
-~~~sh
-python tutorials/source_inference.py --preset smoke --output runs/new-inference
-python tutorials/canyon_study.py --preset smoke --output runs/new-canyons
-python tutorials/canyon_study.py --preset sensitivity --output runs/new-sensitivity
-~~~
+| Task | Where |
+|---|---|
+| Run a first case from Python | [First run](guide/01-first-run.md) |
+| Read the files of a run directory | [The files of a run](guide/03-cli-and-archive.md#the-files-of-a-run) |
+| Decide whether a result can be used | [Can I trust this result?](guide/04-reading-a-result.md) |
+| Budgets, preview, cancellation | [Before you spend compute](guide/07-budgets-preview-cancel.md) |
+| Resume a stopped run | [Checkpoint and restart](guide/08-checkpoint-restart.md) |
+| Buildings and a street canyon | [Buildings and a street canyon](guide/10-street-canyon.md) |
+| Many runs, source inference | [Many runs](guide/12-studies.md) |
+| Optimization | [Optimization lessons](guide/13-optimization-lessons.md), [optimization jobs](guide/14-optimization-jobs.md) |
+| A diagnostic or an unexpected exit | [Troubleshooting](guide/21-troubleshooting.md) |
+| Any other task | [How do I …?](how-to.md) |
 
-The study preset is deliberately more expensive; it may hit its per-case budgets. Record this outcome. Change numerical methods or available resources with evidence before increasing scope.
+Chapters 10, 12, 14, 16, 18 and 19 end with a section "A task for an agent":
+a bounded task with its budgets and interpretation rules.
 
-For performance work use the Rust `performance_probe` example and
-`validation/benchmark_native.py` with the cases in `cases/performance/`: they
-compare fixed work between two builds, with input and producer hashes, exact
-work counts and field comparisons. Kernel, step and CLI timings and numerical or
-physical acceptance are separate observations. Record slower controls and memory
-costs; keep the scientific gates unchanged. See the
-[performance results](evidence/native-cpu-performance.md). To compare the
-native solver with OpenFOAM, use `validation/compare_backends.py` (same host,
-one thread, every run accepted); its ratios describe configured workflows, not
-equal work. With the default explicit donor-cell numerics OpenFOAM is faster
-on the cavity ([backend comparison](evidence/backend-comparison.md)); with
-`limited_upwind`, `implicit_projection` and the implicit recipe native reaches
-the 0.01 target in about a tenth of OpenFOAM's solver time
-([matched accuracy](evidence/matched-accuracy.md)).
+## Opt-in numerics
 
-For actual phase attribution use [`profile`](developer/profiling.md); its envelope keeps
-the ordinary archive in `run/` and a separate versioned timing report. Read
-attempted versus retained work and add exclusive times only. The comparator's
-`--grid-sweep` mode retains incomplete rows and reports cost at an accuracy
-target only for repeated accepted qualifying configurations. An unreached
-target has no finite ratio. See the [baseline](evidence/gap-baseline.md).
+The defaults are donor-cell momentum, explicit pseudo-time and an IC(0)
+pressure preconditioner, and they stay. For a steady run, opt in with
+`numerics.momentum_advection = limited_upwind`, `steady_algorithm =
+implicit_projection`, `pressure_relative_tolerance` 0.1, `max_time_step_s` 100
+and, for a two-dimensional problem, one cell on the periodic axis. On the
+cavity this reaches the same accepted steady state in far fewer iterations.
+`pressure_preconditioner = multigrid` is rejected for a case with `geometry`
+(`CFD-E034`). See
+[the implicit recipe](guide/09-opt-in-numerics.md#the-implicit-recipe) and the
+[implicit steady results](evidence/implicit-steady.md).
 
-For unmasked pressure acceleration see [symmetric multigrid](developer/pressure-multigrid.md).
-IC(0) remains the default; `numerics.pressure_preconditioner=multigrid` is an
-explicit, checkpoint-hashed selection. Masks are rejected, without fallback.
-Keep the fine operator, true residual and numerical gates unchanged. Use
-`validation/benchmark_pressure.py` to separate cold setup, reused pressure and
-accepted coupled cost; retain nonrepeating/unaccepted rows without a ratio.
+## OpenFOAM backend
 
-P2a adds spacing-selected exact principal line/small-plane blocks and
-semicoarsening above weight ratio 25; isotropic point arithmetic is retained.
-Cache identity compares spacing bits as well as faces; statistics keep their
-separate mutex. `benchmark_anisotropy.py` compares IC(0), merged point MG and
-the candidate on rough fields, including failures. `benchmark_anisotropic_flow.py`
-distinguishes steady acceptance from transient interval completion. See
-[results](evidence/anisotropic-pressure.md) and the
-[remaining P2b–P6 work](evidence/performance-gap-status.md).
-The accuracy sweep supports an explicitly recorded native preconditioner;
-do not confuse a same-grid ratio with cost at matched accuracy.
+- It runs two generated cases (laminar cavity, turbulent backward-facing
+  step); it does not translate native cases and runs no dispersion.
+- Its archives have their own schema and their own `report`
+  (`integrations/openfoam_backend.py report`); do not give them to
+  `cfd-craft report`.
+- Continuation needs a complete source archive whose stored face flux passes
+  the independent gate; failed, timed-out and cancelled runs are not eligible.
+- Mesh initialization needs an accepted, independently audited, cold-generated
+  source; coarse face flux is never copied.
+- Code agreement, comparison with measurements and physical qualification are
+  separate results; none of them qualifies the native canyon model.
 
-## Optimization applications
+Chapters [15](guide/15-openfoam-first-run.md), [16](guide/16-compare-solvers.md),
+[17](guide/17-continuation-and-mapping.md), [18](guide/18-backstep-resolution.md)
+and [19](guide/19-refinement-campaign.md) cover it.
 
-The [F1–F3 tutorials](../tutorials/optimization/README.md) provide runnable native LP/MIP and global-search examples. F1 uses the existing prescribed-flow scalar worker for GP; F3 uses a bounded coupled-flow callback/command route and does not claim a stock coupled-flow application worker. See their separate numerical acceptance and fidelity gates.
+## Scope
 
-## Package interfaces
+Version 0.1.0 models uniform Cartesian grids with box-shaped solids, laminar
+flow, one neutral k-epsilon package and passive gas. It does not model
+particles, deposition, vegetation, LES, chemistry, stretched grids or GPU
+execution. The fcmaes worker supports prescribed-flow, three-source scalar
+allocation only. Nothing is experimentally validated; the canyon validation
+gate (measured data and a grid study) is open. The
+[model cards](model-cards/README.md) state the scope of each component.
 
-Releases install with `pip install cfd-craft` (Python binding) and
-`cargo install cfd-craft-cli --locked` (CLI); the library crate is `cfd-craft`.
-The optional `bindings/python` workspace builds `cfd_craft` through maturin;
-the core workspace stays independent of PyO3. `check` shares native preflight,
-and `simulate` returns a native summary with the GIL released. The native CLI
-owns fields, archive writing, restart and profiles. Read [PYTHON.md](PYTHON.md)
-and [RELEASING.md](../RELEASING.md). Package distribution does not close the
-physical-validation or grid-study gates.
+## For contributors
+
+Changing the solver: start at the [developer pages](developer/README.md) and
+follow
+[`AGENTS.md`](https://github.com/dietmarwo/CFD-craft/blob/main/AGENTS.md).

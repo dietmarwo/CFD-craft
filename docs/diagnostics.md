@@ -38,6 +38,24 @@ when `--check` finds a committed page that differs from the current build, and
 `reference.diagnostics` when `--check` finds a `CFD-` code in the Rust or Python
 sources that this page does not list.
 
+The documentation check (`scripts/check_docs.py`) reports
+`CFD-R003 docs.<field>: PAGE:LINE: message` for a page whose code blocks do not
+hold: `docs.fence` for a block without a known info string or without an end,
+`docs.marker` for an unknown or misplaced `<!-- check: ... -->` or
+`<!-- file: ... -->` comment, a tolerance above 1e-4 or a missing tolerance
+sentence, `docs.setup` when `## Setup` is not the first section, `docs.python`
+and `docs.bash` for a block that raises, exits non-zero, has a syntax error,
+names a script that is not in the checkout or does not end in time, `docs.text`
+when the output of the block before it differs from the shown text (floats
+within the tolerance the page declares, everything else exactly), `docs.json`
+for JSON that is not strict, a case that `cfd-craft check` rejects or a block
+that differs from the committed file it names, `docs.sh`, `docs.toml` and
+`docs.rust` for a block that does not parse or is not found in the file it is
+bound to, `docs.binary` when `cfd-craft` cannot be run, `docs.page` for an
+unreadable page and `docs.arguments` for invalid options. The line is the line
+of the opening fence, or of the differing output line. These are checks of the
+documentation, not solver tolerances.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that

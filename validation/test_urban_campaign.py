@@ -74,6 +74,20 @@ class UrbanCampaignTests(unittest.TestCase):
                         threads=1,
                         workers=1,
                     )
+            prescribed = self.base()
+            prescribed["flow"] = dict(
+                kind="prescribed_uniform", velocity_m_s=[1.0, 0.0, 0.0]
+            )
+            with self.assertRaisesRegex(ValueError, "neutral_rans"):
+                campaign.prepare(
+                    prescribed,
+                    Path(tmp) / "prescribed",
+                    run_budget_s=1,
+                    campaign_budget_s=1,
+                    threads=1,
+                    workers=1,
+                )
+            self.assertFalse((Path(tmp) / "prescribed").exists())
 
     def test_actual_worker_retains_native_invalid_input(self):
         with tempfile.TemporaryDirectory() as tmp:

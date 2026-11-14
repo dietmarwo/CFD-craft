@@ -1,6 +1,20 @@
 # Diagnostics
 
-The manual's example programs and `validation/manual_examples.py` use
+Every diagnostic has a code, and the family of the code says which part
+reported it.
+
+| Codes | Reported by | Section |
+|---|---|---|
+| `CFD-E`, `CFD-W` | The native solver: `check`, `run`, `preview`, `profile`, `report` | [Native case checks and run errors](#native-case-checks-and-run-errors) |
+| `CFD-X`, `CFD-D` | The OpenFOAM adapter and the reference data | [External backend and reference data](#external-backend-and-reference-data) |
+| `CFD-P` | The Python package | [Tools, examples and scripts](#tools-examples-and-scripts) |
+| `CFD-U`, `CFD-T`, `CFD-R` | Example programs, optimization lessons, release and documentation tools | [Tools, examples and scripts](#tools-examples-and-scripts) |
+| `CFD-B` | Performance probes, comparisons and sweeps | [Tools, examples and scripts](#tools-examples-and-scripts); [Native profiling and accuracy-sweep diagnostics](#native-profiling-and-accuracy-sweep-diagnostics) |
+
+## Tools, examples and scripts
+
+The guide's example programs (`examples/manual/`, `crates/cfd-craft/examples/`)
+and `validation/manual_examples.py` use
 `CFD-U001 manual.<field>` for missing/unavailable inputs, occupied example
 output paths, failed process/schema expectations, unaccepted example results,
 incorrect source units or source-response scaling, and checkpoint/archive
@@ -83,6 +97,8 @@ between rounds, and inputs changed during the comparison. These research
 measurements are not CFD numerical-acceptance or physical-qualification
 verdicts.
 
+## Native case checks and run errors
+
 `cfd-craft check CASE` prints a `cfd-craft.check/0.1` report on stdout. Each
 diagnostic has a code, a severity, a JSON path into the case (for example
 `geometry[1]`, `sources[0].rate_kg_s_m`, `numerics.advective_cfl_max`) and a
@@ -94,7 +110,9 @@ grid.
 
 The grid, source and receptor checks need the built grid. When the estimated peak
 does not fit this host (CFD-W070), they are skipped, so a check never allocates
-more than the host can hold.
+more than the host can hold. They also run only when the case has no other
+error, and a file that does not parse is reported alone (CFD-E000): check again
+after each fix.
 
 | Code | Severity | Meaning |
 |---|---|---|

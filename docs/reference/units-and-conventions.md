@@ -19,6 +19,10 @@ Commands run from the root of a checkout with `target/release` on `PATH`.
 | Source rate | kg/s (point), kg/(s m) (line), kg/(s m3) (volume) |
 | Diffusivity and viscosity | m2/s |
 
+A point (a point source, an end of a line source, a point receptor) is inside
+the domain when 0 <= coordinate < size on every axis, so a point on an upper
+domain face is outside (`CFD-E017`, `CFD-E027`). A box may reach the faces.
+
 `describe` states the coordinates and the pressure unit itself:
 
 ```bash

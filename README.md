@@ -1,193 +1,103 @@
+# CFD-craft
+<!-- check: rel=1e-4 -->
+
+A Rust CFD research solver for incompressible flow and passive-gas dispersion
+on uniform Cartesian grids, used from Python, a JSON command line or Rust, with
+a bounded OpenFOAM Foundation 13 backend for cross-checks.
+
+```sh
+python -m pip install cfd-craft
+```
+
+```python
+import json
+import urllib.request
+import cfd_craft as cfd
+
+url = "https://raw.githubusercontent.com/dietmarwo/CFD-craft/main/examples/manual/point-source.json"
+case = json.load(urllib.request.urlopen(url, timeout=30))  # a case is one JSON file
+print(cfd.check(case)["valid"])
+result = cfd.simulate(case)
+print(result["termination"], result["assessment"], result["experimental_validation"])
+r_down = result["constituents"][0]["receptors_kg_m3"]["R_down"]
+print(f"{r_down * 1e9:.6g} micrograms/m3 at receptor R_down")
+```
+
+```text
+True
+completed steady_discrete_solution not_validated; see validation/data-inventory.json
+17.8118 micrograms/m3 at receptor R_down
+```
+
+The second line is the point of the tool: why the run stopped, what the
+numerical checks support, and the experimental-validation label. Version 0.1.0
+is a research prototype. A numerically accepted run is not an experimentally
+validated prediction.
+
+Outputs on this page are real. The documentation check compares floating-point
+numbers with a relative tolerance of 1e-4; everything else must match exactly.
+
+## Why CFD-craft
+
+- A case is one strict JSON file. An unknown field is an error with a code and the path of the field.
+- Every run is bounded in steps, wall time, memory and output, and says why it stopped.
+- A result keeps termination, numerical assessment and experimental validation apart.
+- A run directory carries hashes of the case, the physics, the initial state, the source and the executable, and an independent checker recomputes the balances from the stored fields.
+- It is small and scriptable: in-process from Python, a JSON command line, a Rust library without native scientific-library dependencies; OpenFOAM is optional and stays a separate program.
+
+## Documentation
+
+- [Documentation site](https://dietmarwo.github.io/CFD-craft/): all pages, with search.
+- [Guide, chapter 1: First run](docs/guide/01-first-run.md): 21 chapters, smallest case first.
+- [How do I …?](docs/how-to.md): tasks in plain words, each linked to the section that does it.
+- [Comparison with OpenFOAM and others](docs/comparison.md): features and committed measurements, including where the others are ahead.
+- [Reference](docs/reference/README.md): case and result schemas, command line, Python API, units, diagnostics, model cards.
+- [Evidence](docs/evidence/README.md): verification and comparison records, failed rows included.
+- [For AI agents](docs/ai-context.md): the run loop, the rules and the machine-readable entry points.
+
 <p align="center">
   <img src="docs/images/cfd-craft.jpg" alt="CFD-craft: CFD experiments and validation with native Rust and OpenFOAM workflows">
 </p>
 
-# CFD-craft
+## What 0.1.0 contains
 
-> **One of 18 related repositories.** The [repository overview](https://github.com/dietmarwo/fcmaes-rust/blob/main/docs/repositories.md) shows what each one does and how they connect.
+Uniform Cartesian finite volumes with box-shaped solids; laminar flow and one
+neutral k-epsilon package; passive gas with point, line and volume sources and
+point and volume receptors; bounded runs with checksummed restart; opt-in
+second-order momentum, implicit steady iteration and pressure multigrid; an
+optional OpenFOAM Foundation 13 backend for two generated cases (a laminar
+cavity and a turbulent backward-facing step). It does not contain particles,
+vegetation, LES, chemistry, stretched grids or GPU execution.
 
-CFD experiment and validation workbench, with a Rust CPU research solver for incompressible flow and conservative passive-gas dispersion and a bounded OpenFOAM Foundation 13 backend. Cases are data; runs report numerical checks, stopping reason, model scope and reproducible input/build identity.
+## Command line and source build
 
-**[Read the detailed user manual](docs/USER_MANUAL.md)** for architecture,
-numerical and evidence concepts, 31 API examples, native and OpenFOAM workflows,
-Rust/Python integration, optimizer jobs and troubleshooting. The
-[runnable examples](examples/manual/README.md) include four compiled Rust
-programs and a complete CLI/Python cookbook.
-
-Version 0.1.0 is a **research prototype**. The coarse finite-canyon examples converge under independent continuity and mass checks. Experimental canyon validation is blocked by access to raw benchmark data, and the first finer-grid study exceeded its compute budgets. These remain physical-qualification gates. They do not prevent distribution of an explicitly experimental research package. See [results](docs/evidence/native-verification.md) and [model cards](docs/model-cards/README.md).
-
-## Install
-
-Releases are on PyPI (`cfd-craft`, the Python binding) and crates.io
-(`cfd-craft`, the library, and `cfd-craft-cli`, the `cfd-craft` command):
+The `cfd-craft` command keeps fields, verified run archives, restart, preview
+and profiles. It is built with Rust 1.88 or newer; there is no prebuilt binary.
 
 ```sh
-python -m pip install cfd-craft
 cargo install cfd-craft-cli --locked
 ```
 
-Building from this checkout is described under [Start](#start); see
-[RELEASING.md](RELEASING.md) for how releases are made.
+In a checkout:
 
-The optional [Python binding](docs/PYTHON.md) calls Rust in-process and returns
-native summaries, including receptor values, checks and termination. It has no
-NumPy dependency. `python -m cfd_craft describe` discovers its schemas. The native
-CLI remains the interface for fields, verified archives, restart and profiling.
-OpenFOAM adapters, optimizer workers and analysis tools remain optional.
-
-## Start
-
-Rust 1.88 or newer is required. The normal workspace has two crates and no native scientific-library dependency.
-
-~~~sh
+```sh
 cargo build --release --locked
-target/release/cfd-craft describe
-target/release/cfd-craft check cases/verification/periodic-tracer.json
-mkdir -p runs
-target/release/cfd-craft run cases/verification/periodic-tracer.json --output runs/tracer
-target/release/cfd-craft report runs/tracer
-~~~
+target/release/cfd-craft describe > describe.json
+```
 
-The output directory must be new, and its parent must exist; both are checked before the solve starts. Exit 0 means the request succeeded (a valid case, a passed numerical assessment or a verified archive); exit 2 means a completed execution with incomplete/failed numerical evidence or with artifacts omitted over the output budget (CFD-E061); exit 1 means invalid input or an execution/I/O error. For invalid input, check, run, profile and preview print the check report on stdout: every diagnostic carries a code and the path of the offending field ([diagnostics](docs/diagnostics.md)). `preview CASE --output NEW_DIR [--factor N]` runs the case on a grid coarsened by N (default 2; at least two cells per axis, a one-cell periodic axis stays at one) and refuses a coarsening that changes the solid volume by more than 20 % or the fluid topology. A timeout or cancelled solve retains a report.
-
-Python is optional for the solver. Install the analysis dependencies to reproduce tutorials, independent checks and figures:
-
-~~~sh
-python -m pip install -r requirements-validation.txt
-python validation/check_fields.py runs/tracer
-python tutorials/source_inference.py --output runs/inference
-python tutorials/canyon_study.py --preset smoke --output runs/canyons
-python validation/export_vtk.py --run runs/tracer --output runs/tracer.vtr
-~~~
-
-Open the VTR file in ParaView. Filter by the fluid mask before analyzing solid cells. The default field archive also contains native face velocities, allowing continuity to be recomputed without relying on reconstructed cell velocities.
-
-## What is implemented
-
-- Uniform Cartesian finite volumes; staggered face velocities; deterministic box masks and fluid-component discovery.
-- Matrix-free pressure projection, one gauge per unanchored fluid component, cached IC(0) preconditioning (default), opt-in symmetric multigrid on unmasked grids with anisotropic line blocks/semicoarsening, and an independent residual check.
-- Laminar flow, moving tangential walls, donor-cell momentum advection by default with opt-in conservative second-order momentum (`second_order_upwind`, `limited_upwind`), and SSPRK2 stepping by default with opt-in implicit steady pseudo-time (`implicit_viscous` for laminar flow, `implicit_projection` also for `neutral_rans` and constituents). A periodic axis may have one cell for two-dimensional runs.
-- One neutral equilibrium k–epsilon package with rough-wall stress, k-based wall dissipation and a matching upper-boundary treatment, advanced explicitly or, with `implicit_projection`, by implicit k and ε corrections.
-- Passive gas with linear upwind or bounded MUSCL/MC transport, diffusion, point/line/volume sources, and point or volume-average receptors.
-- Explicit work/time/memory/output budgets, cooperative cancellation, checksummed restart and immutable output-directory behavior.
-- Strict case/result schemas through describe; JSON/CSV evidence; VTK conversion.
-- Synthetic source inversion, finite-canyon wind/Schmidt/domain studies, and a scalar fcmaes application worker.
-
-The RANS coefficients, wall treatment and supported assumptions are documented in [the flow card](docs/model-cards/flow.md). The [roadmap](docs/developer/roadmap.md) maps the development plan's milestones, numeric targets and tutorials to this release and lists the next steps. Particle deposition, vegetation, LES, city import, annual statistics, stretched grids, masked multigrid and GPU execution are later work.
-
-The [native CPU performance results](docs/evidence/native-cpu-performance.md)
-give paired pressure, stencil, step and CLI timings at fixed work, with the
-fields compared against the previous implementation and the memory cost. The
-paired runner is `validation/benchmark_native.py`; the frozen cases are in
-`cases/performance/`. On the earlier IC(0) lid-driven cavity workflow, timed
-on one machine with one thread each, OpenFOAM is 4.7–5.5 times faster than
-native steady mode and closer to the reference
-([backend comparison](docs/evidence/backend-comparison.md)). Opt-in multigrid
-reduces accepted native 48² cavity solver time by 2.44× in the
-[original pressure comparison](docs/evidence/pressure-multigrid.md).
-Line and plane smoothing for stretched grids is measured in the
-[anisotropic pressure results](docs/evidence/anisotropic-pressure.md).
-The [current performance-gap status](docs/evidence/performance-gap-status.md)
-reports fresh native/OpenFOAM timings, accuracy and the remaining stages.
-The [momentum verification baseline](docs/evidence/momentum-verification.md)
-starts the accuracy/steady-solver track: shifted operator and translating-vortex
-tests, conservation/extrema controls, a shared backend grid list and a native
-self-convergence reference. The [accuracy and steady-solver plan](docs/history/accuracy-steady-plan.md)
-specifies the methods built on it, their opt-in behavior and acceptance gates:
-conservative second-order momentum and the implicit steady algorithms, now
-implemented as opt-in choices with unchanged defaults. With them and the
-implicit recipe native reaches the cavity's 0.01 Ghia target in 0.111×
-OpenFOAM's solver time on a shared runner
-([performance iterations](docs/evidence/performance-iterations.md)).
-The opt-in [`profile` command and accuracy sweep](docs/developer/profiling.md) attribute
-actual solver phases, retain incomplete grid-sweep rows and report cost at a
-declared error only when the target is reached. See the
-[gap-closing baseline](docs/evidence/gap-baseline.md) and the opt-in
-[pressure multigrid guide](docs/developer/pressure-multigrid.md).
-
-## Verification
-
-~~~sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --release --workspace --locked
-ruff format --check . && ruff check .
-python validation/test_cli.py -v
-python -O validation/test_cli.py -v
-python validation/test_openfoam.py -v
-python -O validation/test_openfoam.py -v
-python validation/test_resolution.py -v
-python -O validation/test_resolution.py -v
-python validation/test_restart.py -v
-python -O validation/test_restart.py -v
-python validation/test_mapping.py -v
-python -O validation/test_mapping.py -v
-python validation/test_refinement.py -v
-python -O validation/test_refinement.py -v
-python validation/run_suite.py --preset smoke --output runs/verification
-python validation/flow_accuracy.py --output runs/flow-accuracy
-python validation/cavity.py --output runs/cavity
-python validation/scipy_reference.py --output runs/scipy-reference
-~~~
-
-The independent Python checker tests archived mass, emission-rate/time accounting (against the constituents' own pseudo-time, `scalar_time_s`, when an implicit steady algorithm archives one), positivity, current face-flux continuity and open-boundary scalar rates. It also recomputes every receptor value from the concentration field, the geometry mask from the case boxes, and the finiteness and signs of the stored fields. It does not independently reconstruct the full time history or establish turbulence-model validity.
-
-The study preset adds a larger transport grid series or a canyon resolution series. Study reports include failed rows. A failed refinement run does not become an accepted grid-convergence result.
-
-## Established-solver and experimental comparisons
-
-The [external backend](integrations/OPENFOAM.md) runs generated Foundation-13
-cases with resource limits and input/runtime hashes. Its cavity tutorial
-compares both solvers with the Ghia numerical reference. A separate backstep
-tutorial compares actual predictions with public Driver--Seegmiller measurements
-under a frozen protocol. Execution, numerical convergence, measurement screening
-and physical qualification are separate results. See the
-[model card](docs/model-cards/openfoam-backend.md),
-[iteration plan](docs/history/02-external-validation-plan.md) and
-[recorded results](docs/evidence/external-backend.md). These comparisons do not
-qualify the native street-canyon model.
-
-The [backstep resolution tutorial](tutorials/backstep-resolution-prompt.md)
-runs wall-resolved recipes with independent Cartesian mesh, local face-flux and
-wall-y+ audits; refinement stops after a coarse case that is not accepted. On
-its coarse mesh the reference recipe converges, passes the audit and is screened
-against the measurements; no mesh pair or physical qualification is claimed.
-See the [plan](docs/history/03-wall-resolution-plan.md) and the
-[resolution results](docs/evidence/backstep-resolution.md).
-
-The [continuation workflow](integrations/STEADY_RESTART.md) starts a fresh
-bounded stage from the verified final fields and face flux of a completed
-same-mesh run. Initial-state provenance, runtime and rebuilt mesh are checked;
-staged work counts and final convergence remain distinct, and the numerical
-gates are unchanged. See the [plan](docs/history/04-steady-continuation-plan.md)
-and the [continuation results](docs/evidence/steady-continuation.md).
-
-The separate [coarse-to-fine initializer](integrations/MESH_INITIALIZATION.md)
-uses Foundation-13 mapNearest volume fields from an accepted cold-generated
-source, preserves generated fine-grid boundaries and lets the solver construct
-new face flux. Its receipt, an independent replay of the mapping and the rebuilt
-mesh and runtime are checked. A mapped and a cold level-2 cavity converge to the
-same fields ([mapping results](docs/evidence/mesh-initialization.md)); an accepted fine
-turbulent backstep and physical qualification remain open.
-
-The [bounded refinement campaign](integrations/REFINEMENT_CAMPAIGN.md) retains
-an accepted cold coarse source, maps once and chains eligible fine stages under
-declared limits. Every stage keeps its own numerical, independent and reference
-verdicts; parent/archive checks run again at collection. A two-grid observable
-comparison requires accepted fields on both meshes and does not establish a
-GCI. The declared level-2 backstep campaign (three stages of 4000 iterations)
-ended at its stage limit without an accepted fine grid: every stage passed the
-audit, but the Uy and k residuals stayed above the gate. See the
-[plan](docs/history/06-refinement-campaign-plan.md),
-[tutorial](tutorials/refinement-campaign-prompt.md) and
-[results](docs/evidence/refinement-campaign.md).
-
-## Optimization tutorials
-
-The [three optimization lessons](tutorials/optimization/README.md) derive a source-allocation LP and compare BiteOpt/GP, solve a sensor-coverage MIP with exhaustive checks, and optimize coupled cavity flow with frozen fidelity gates. They retain native results and independent field checks; a completed experiment can support zero designs.
+Packages: [PyPI `cfd-craft`](https://pypi.org/project/cfd-craft/) (Python), crates.io
+[`cfd-craft`](https://crates.io/crates/cfd-craft) (library) and [`cfd-craft-cli`](https://crates.io/crates/cfd-craft-cli) (command).
 
 ## Ecosystem
 
-[optimization-jobs](https://github.com/dietmarwo/optimization-jobs) runs the CLI through a trusted command; CFD evidence stays in a separate CFD result artifact. The optional [fcmaes adapter](integrations/README.md) uses fallible, cancellable scalar simulations with hashed case inputs and existing evaluate/retry/surrogate profiles. [experiment-craft](https://github.com/dietmarwo/experiment-craft) can schedule those same command or optimizer envelopes.
+CFD-craft is one of 18 related repositories; the
+[repository overview](https://github.com/dietmarwo/fcmaes-rust/blob/main/docs/repositories.md)
+shows how they connect.
+[optimization-jobs](https://github.com/dietmarwo/optimization-jobs) runs
+CFD-craft as an optimization job, and
+[experiment-craft](https://github.com/dietmarwo/experiment-craft) schedules
+campaigns of such jobs.
 
-Agents should start with [ai-context](docs/ai-context.md). The [tutorial guide](tutorials/README.md) supplies concrete tasks, budgets and interpretation rules.
+## License
+
+MIT. OpenFOAM is not part of this repository; the backend starts it as separate programs.

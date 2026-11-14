@@ -34,10 +34,12 @@ python -m venv .venv
 python -m pip install -r requirements-validation.txt
 ```
 
-Run outputs go to `runs/`, which Git ignores:
+Run outputs go to `runs/`, which Git ignores. `describe` prints the schemas,
+the exit codes and the build identity of the command as JSON:
 
 ```bash
 mkdir -p runs
+cfd-craft describe > runs/describe.json
 ```
 
 Outputs on this page are real. The documentation check compares floating-point

@@ -47,7 +47,7 @@ flowchart TD
 |---|---|---|
 | A steady run met all its criteria | `completed` | `steady_discrete_solution` |
 | A transient run reached its end time and its checks passed | `completed` | `transient_interval_completed` |
-| A budget ran out, or the run was cancelled | `iteration_limit`, `wall_time_limit` or `cancelled` | `incomplete` |
+| A budget ran out, or the run was canceled | `iteration_limit`, `wall_time_limit` or `cancelled` | `incomplete` |
 | The run finished and a check failed | `completed` | `failed_checks` |
 | A time step failed numerically | `diverged` | `incomplete` |
 

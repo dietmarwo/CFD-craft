@@ -2,7 +2,7 @@
 <!-- check: rel=1e-4 -->
 
 At the end of this chapter you have called the solver in process from Rust,
-cancelled it, round-tripped a checkpoint and read a run archive. It is for
+canceled it, round-tripped a checkpoint and read a run archive. It is for
 readers who embed the solver in a service or a worker. You need Rust 1.88 or
 newer and a checkout.
 
@@ -99,7 +99,7 @@ if run.summary.assessment != "steady_discrete_solution" {
 ```
 
 `Ok(RunResult)` means the solver returned a result you can inspect. That
-result can be cancelled, incomplete or numerically failed. Always test
+result can be canceled, incomplete or numerically failed. Always test
 `summary.assessment`.
 
 ## Cancellation and deadlines

@@ -33,6 +33,8 @@ jobs:
           cargo install --locked --version "$PIN_MDBOOK" --root ~/mdbook-tools mdbook
           cargo install --locked --version "$PIN_MDBOOK_MERMAID" --root ~/mdbook-tools mdbook-mermaid
       - run: echo "$HOME/mdbook-tools/bin" >> "$GITHUB_PATH"
+      - name: Write the mermaid scripts next to book.toml
+        run: mdbook-mermaid install .
       - name: Build with warnings as errors
         run: |
           mdbook --version

@@ -25,8 +25,8 @@ site-url = "/CFD-craft/"
 git-repository-url = "https://github.com/dietmarwo/CFD-craft"
 edit-url-template = "https://github.com/dietmarwo/CFD-craft/edit/main/{path}"
 no-section-label = true
-# Written by `mdbook-mermaid install site`; committed, not generated in CI.
-additional-js = ["site/mermaid.min.js", "site/mermaid-init.js"]
+# Written next to this file by `mdbook-mermaid install .` (git-ignored).
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
 [output.html.search]
 enable = true

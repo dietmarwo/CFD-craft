@@ -136,7 +136,7 @@ after each fix.
 | CFD-E017 | error | Source support degenerate or outside the domain |
 | CFD-E018 | error | More than one initial condition per constituent, or an undeclared one |
 | CFD-E019 | error | Receptor ID missing or repeated |
-| CFD-E020 | error | Steady sources without an open boundary to remove their mass |
+| CFD-E020 | error | Steady sources without an open boundary to remove their mass; a particle source also passes with a declared ground, roof or leaf deposition candidate |
 | CFD-E021 | error | Invalid moving wall |
 | CFD-E022 | error | Wall-time limit above seven days or physical horizon above 1e12 s |
 | CFD-E023 | error | Laminar flow with `ground_open_top`; its open top exists only in the RANS closure |
@@ -146,16 +146,16 @@ after each fix.
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
 | CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
 | CFD-E030 | error | The geometry leaves no fluid cells |
-| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid was selected with a mask; the library also rejects a masked/disconnected grid or nonpositive/nonfinite pressure weights |
+| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid on a grid without fluid components, or with nonpositive/nonfinite pressure weights. Release 0.1.1 also raised it for any geometry mask; masks and several fluid components are now supported |
 | CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |
-| CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
+| CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite (on a masked grid, the factor of one fluid component), or masked aggregation could not reduce a connected component; no diagonal repair or hidden fallback is applied |
 | CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
 | CFD-E045 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm in transient mode |
 | CFD-E047 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with prescribed flow, or `implicit_viscous` with `neutral_rans` |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
-| CFD-E043 | error | A steady source in a fluid component without an outlet |
+| CFD-E043 | error | A steady source in a fluid component without an outlet; a particle source also passes with a represented ground, roof or leaf deposition sink in that component |
 | CFD-E044 | error | The represented source density is not finite |
 | CFD-E070 | error | `run`, `profile` and `preview`: the estimated peak exceeds 80 % of this host's available memory |
 | CFD-E072 | error | `preview` only: coarsening changes the solid volume by more than 20 % or the number of fluid components |
@@ -163,7 +163,7 @@ after each fix.
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
 | CFD-W002 | warning | RANS blockage ratio above the COST 732 recommendation of 3 % |
 | CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
-| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. See the [pressure guide](developer/pressure-multigrid.md) and anisotropy results |
+| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. With geometry the same weight ratio draws the warning, but the masked path has no line blocks: it keeps point smoothing and can need more iterations and time than IC(0). See the [pressure guide](developer/pressure-multigrid.md) and anisotropy results |
 | CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
 W002 and W003 encode the COST 732 best-practice guideline (Franke et al., 2007) as summarized by secondary sources that cite it. The primary document was not retrieved from its distribution share; `validation/data-inventory.json` records that. They are warnings because best-practice distances depend on the scenario: a wind-tunnel reproduction may use the tunnel's own dimensions.

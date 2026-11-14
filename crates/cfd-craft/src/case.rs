@@ -840,10 +840,13 @@ pub enum Advection {
 }
 /// Preconditioner of the pressure PCG solve. `ic0` (the default) is an
 /// incomplete Cholesky factor built once per grid and works on every grid.
-/// `multigrid` is a fixed symmetric geometric multigrid cycle for unmasked
-/// grids only (CFD-E034); strongly anisotropic spacings select line or plane
-/// smoothing and draw warning CFD-W004. Both solve the same equation to the
-/// same tolerance and recomputed residual.
+/// `multigrid` is a fixed symmetric multigrid cycle. On an unmasked grid it is
+/// geometric, and strongly anisotropic spacings select line or plane
+/// smoothing. With geometry it aggregates connected fluid cells and uses
+/// point smoothing only, so strong anisotropy can make it slower than `ic0`.
+/// Strong anisotropy draws warning CFD-W004 in both cases. Both
+/// preconditioners solve the same equation to the same tolerance and
+/// recomputed residual.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PressurePreconditioner {
@@ -856,7 +859,7 @@ pub enum PressurePreconditioner {
     Ic0,
     #[cfg_attr(
         doc,
-        doc = "Fixed symmetric geometric multigrid cycle; unmasked grids only (CFD-E034). See the [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/pressure-multigrid.md)."
+        doc = "Fixed symmetric multigrid cycle: geometric on unmasked grids, connected aggregates with geometry. See the [pressure multigrid guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/pressure-multigrid.md)."
     )]
     #[allow(missing_docs)]
     Multigrid,
@@ -1370,7 +1373,12 @@ impl Case {
                     "CFD-W004",
                     "warning",
                     "numerics.pressure_preconditioner",
-                    "Strong pressure anisotropy selects symmetric line-block smoothing with additional setup and memory; compare measured cost with ic0. Extreme anisotropy can still reach the pressure limit (CFD-E033).",
+                    if self.geometry.is_empty() {
+                        "Strong pressure anisotropy selects symmetric line-block smoothing with additional setup and memory; compare measured cost with ic0. Extreme anisotropy can still reach the pressure limit (CFD-E033)."
+                    } else {
+                        // Geometry always masks at least one cell (CFD-E028), which selects the aggregate path.
+                        "Strong pressure anisotropy with geometry: the masked multigrid path uses point smoothing and has no line-block smoothing, so it can need more iterations and time than ic0; compare measured cost with ic0. Extreme anisotropy can still reach the pressure limit (CFD-E033)."
+                    },
                 );
             }
         }

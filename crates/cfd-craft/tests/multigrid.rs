@@ -73,6 +73,27 @@ fn strong_anisotropy_between_coarsened_axes_is_a_check_warning() {
     c.domain.size_m = [1.0, 0.1, 0.1];
     assert!(warned(&c)); // ratio 100
     assert!(c.check().valid);
+    // The masked path has no line blocks, and its warning must not claim them.
+    let message = |c: &Case| {
+        c.check()
+            .diagnostics
+            .into_iter()
+            .find(|d| d.code == "CFD-W004")
+            .unwrap()
+            .message
+    };
+    assert!(message(&c).contains("selects symmetric line-block smoothing"));
+    let mut masked = c.clone();
+    masked.geometry.push(Block {
+        footprint_m: None,
+        id: "solid".into(),
+        min_m: [0.4, 0.0, 0.04],
+        max_m: [0.6, 0.1, 0.06],
+    });
+    assert!(warned(&masked) && masked.check().valid);
+    assert!(message(&masked).contains("no line-block smoothing"));
+    assert!(message(&masked).contains("point smoothing"));
+    assert!(Grid::build(&masked).unwrap().fluid.contains(&false));
     // A coarsened span axis of eight cells, 64 times weaker than x and z.
     let mut c = case([64, 8, 64], Boundary::Wall);
     c.domain.size_m = [1.0, 1.0, 1.0];

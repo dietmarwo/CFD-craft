@@ -270,7 +270,7 @@ Unknown fields are rejected.
 
 ### PressurePreconditioner
 
-Preconditioner of the pressure PCG solve. `ic0` (the default) is an incomplete Cholesky factor built once per grid and works on every grid. `multigrid` is a fixed symmetric geometric multigrid cycle for unmasked grids only (CFD-E034); strongly anisotropic spacings select line or plane smoothing and draw warning CFD-W004. Both solve the same equation to the same tolerance and recomputed residual.
+Preconditioner of the pressure PCG solve. `ic0` (the default) is an incomplete Cholesky factor built once per grid and works on every grid. `multigrid` is a fixed symmetric multigrid cycle. On an unmasked grid it is geometric, and strongly anisotropic spacings select line or plane smoothing. With geometry it aggregates connected fluid cells and uses point smoothing only, so strong anisotropy can make it slower than `ic0`. Strong anisotropy draws warning CFD-W004 in both cases. Both preconditioners solve the same equation to the same tolerance and recomputed residual.
 
 Allowed values: `ic0`, `multigrid`.
 

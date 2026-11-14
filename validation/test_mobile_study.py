@@ -351,6 +351,27 @@ class MobileStudy(unittest.TestCase):
                 self.assertFalse(report["passed"])
                 self.assertIn(message, report["error"])
 
+    def test_malformed_archive_is_a_retained_failed_audit(self):
+        plan = study.configuration("source-response")
+        plan["winds"] = plan["winds"][:1]
+        output = self.directory / "malformed"
+
+        def native_run(command, **kwargs):
+            self.native_layout(Path(command[2]))
+            return subprocess.CompletedProcess(command, 0)
+
+        with (
+            mock.patch.object(study.subprocess, "run", side_effect=native_run),
+            mock.patch.object(study, "check", side_effect=TypeError("malformed")),
+        ):
+            report = study.run(plan, self.directory / "unused-native", output)
+        self.assertFalse(report["passed"])
+        self.assertIn("audit failure", report["error"])
+        audits = report["native_runs"][0]["independent_audits"]
+        self.assertEqual(len(audits), 3)
+        self.assertFalse(any(audit["passed"] for audit in audits))
+        self.assertEqual(json.loads((output / "report.json").read_text()), report)
+
     def test_unsafe_ids_overlap_and_affine_sensor_initialization_are_rejected(self):
         original = study.configuration("source-response")
         study.controlled_winds(original)

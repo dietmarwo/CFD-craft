@@ -383,7 +383,7 @@ def run(plan, binary, out):
                     continue
                 try:
                     audit = check(archive)
-                except (ValueError, OSError, KeyError) as exc:
+                except (ValueError, OSError, KeyError, IndexError, TypeError) as exc:
                     audit = dict(passed=False, error=str(exc))
                 write(
                     archive.parent / (archive.name + "-independent-check.json"), audit

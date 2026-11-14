@@ -217,3 +217,4 @@ See [pressure multigrid](../developer/pressure-multigrid.md).
 
 - [docs.rs/cfd-craft](https://docs.rs/cfd-craft): the API reference.
 - [Chapter 21](21-troubleshooting.md): symptoms, codes and actions.
+- [Architecture](../developer/architecture.md): how the crate, the CLI and the binding fit together.

@@ -192,9 +192,9 @@ Version 0.1.0 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 - What exists is verification: comparison with analytic solutions and with
-  numerical references such as the lid-driven cavity of
-  [chapter 6](06-flow-cavity.md), recorded in
-  [native verification](../evidence/native-verification.md).
+  numerical references such as the lid-driven cavity of [chapter 6](06-flow-cavity.md),
+  recorded in [native verification](../evidence/native-verification.md); the
+  [evidence index](../evidence/README.md) lists every record.
 - What is missing is validation: no result has been compared with measured
   street-canyon data. The raw wind-tunnel files could not be obtained (the
   [data inventory](https://github.com/dietmarwo/CFD-craft/blob/main/validation/data-inventory.json)

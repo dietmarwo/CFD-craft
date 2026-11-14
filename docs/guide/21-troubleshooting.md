@@ -65,7 +65,7 @@ documentation check requires an exact match.
 | Preview refused | `CFD-E072`, `CFD-E073`, `CFD-E040`, `CFD-E042` | The coarse geometry differs; use a smaller factor or the full grid. [Chapter 7](07-budgets-preview-cancel.md#when-a-preview-is-refused) |
 | Pressure iteration limit | `CFD-E033` in `error` | Look at resolution and conditioning; the saved earlier state is not a converged result. [Chapter 6](06-flow-cavity.md#what-the-pressure-step-does) |
 | Turbulence floors or very large eddy viscosity | `turbulent_floor_events`, `CFD-E054` | A numerical failure of this regime, not something to clip away. [Chapter 10](10-street-canyon.md#the-result) |
-| OpenFOAM timeout or invalid mesh | `CFD-X004`, `CFD-X006` and the logs | An earlier snapshot is not a final solution (chapter 15) |
+| OpenFOAM timeout or invalid mesh | `CFD-X004`, `CFD-X006` and the logs | An earlier snapshot is not a final solution. [Chapter 15](15-openfoam-first-run.md#trusted-inputs-only) |
 | An example script fails | `CFD-U001 manual.<field>` and the saved logs | Build the examples and check the paths. [Chapter 11](11-python.md#the-whole-native-workflow-in-one-script) |
 
 ## Reproduce the common ones

@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -114,6 +115,69 @@ class UrbanMapTests(unittest.TestCase):
         for name in ("default_height_m", "level_height_m", "max_ground_range_m"):
             with self.assertRaises(ValueError):
                 self.convert(**{name: float("inf")})
+
+    def test_geometry_and_wind_rotate_together_in_the_meteorological_frame(self):
+        # One 40 m x 10 m block whose long axis points 30 degrees
+        # counterclockwise from map east; wind from 270 blows toward east.
+        angle = math.radians(30.0)
+        axis, normal = (
+            (math.cos(angle), math.sin(angle)),
+            (-math.sin(angle), math.cos(angle)),
+        )
+        corners = [
+            [
+                120 + a * 20 * axis[0] + b * 5 * normal[0],
+                220 + a * 20 * axis[1] + b * 5 * normal[1],
+            ]
+            for a, b in [(-1, -1), (1, -1), (1, 1), (-1, 1), (-1, -1)]
+        ]
+        data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"height": 10.0},
+                    "geometry": {"type": "Polygon", "coordinates": [corners]},
+                }
+            ],
+        }
+
+        def signed_angle(u, v):
+            return math.degrees(
+                math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])
+            )
+
+        def wind(direction_from):
+            r = math.radians(direction_from)
+            return (-math.sin(r), -math.cos(r))
+
+        map_relative = signed_angle(axis, wind(270.0))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "map.json"
+            path.write_text(json.dumps(data))
+            for rotation in [None, 30.0, 75.0]:
+                with self.subTest(rotation=rotation):
+                    case, evidence = self.convert(
+                        path, crop=[80, 180, 160, 260], rotation_deg=rotation
+                    )
+                    self.assertAlmostEqual(evidence["rotation_deg"], rotation or 30.0)
+                    (shape,) = case["geometry"]
+                    points = shape["footprint_m"]
+                    edges = [
+                        (b[0] - a[0], b[1] - a[1])
+                        for a, b in zip(points, points[1:] + points[:1], strict=True)
+                    ]
+                    long_edge = max(edges, key=lambda e: math.hypot(*e))
+                    local_relative = signed_angle(
+                        long_edge, wind(case["flow"]["direction_deg_from"])
+                    )
+                    # The wind keeps its angle to the building (modulo the
+                    # 180-degree ambiguity of an edge direction).
+                    self.assertAlmostEqual(
+                        (local_relative - map_relative + 90) % 180 - 90, 0, places=6
+                    )
+                    if rotation is None:
+                        self.assertAlmostEqual(long_edge[1], 0.0, places=6)
 
     def test_cityjson_parent_containers_and_negative_indices(self):
         data = {

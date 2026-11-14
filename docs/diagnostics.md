@@ -29,6 +29,15 @@ own codes and paths. The release scripts (`scripts/package_version.py`,
 inconsistent versions, crate metadata or lockfiles, and failed installed
 checks. Neither family is a solver tolerance.
 
+The reference generator (`scripts/generate_reference.py`) reports
+`CFD-R002 reference.<field>`: `reference.binary` when the native binary cannot
+be run or prints no usable JSON, `reference.cli.markers` when `cli.md` lacks a
+generated-block marker, `reference.python-api` for a public Python definition
+without a docstring, `reference.<page>` (for example `reference.case-schema`)
+when `--check` finds a committed page that differs from the current build, and
+`reference.diagnostics` when `--check` finds a `CFD-` code in the Rust or Python
+sources that this page does not list.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that

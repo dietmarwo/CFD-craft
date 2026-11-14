@@ -38,6 +38,7 @@ integrations/fcmaes-cfd-worker/target/release/fcmaes-cfd-worker describe > runs/
 
 ```python
 import json
+
 d = json.load(open("runs/worker-description.json"))
 print(sorted(x["profile"] for x in d["examples"]))
 ```
@@ -58,14 +59,21 @@ python integrations/run_jobs.py \
 
 ```python
 import json
+
 r = json.load(open("runs/jobs/report.json"))
 print("passed:", r["passed"])
 print("command job:", r["command_result"]["state"])
 for profile in ["fcmaes.evaluate/1", "fcmaes.retry/1", "fcmaes.surrogate/1"]:
     execution = r[profile]["execution"]
     work = execution["known_work_lower_bound"]
-    print(profile, execution["state"],
-          "failed", work["failed_evaluations"], "cancelled", work["cancelled_evaluations"])
+    print(
+        profile,
+        execution["state"],
+        "failed",
+        work["failed_evaluations"],
+        "cancelled",
+        work["cancelled_evaluations"],
+    )
 ```
 
 `--binary` and `--worker` default to the release builds of the checkout. The script makes a local foreground node in `runs/jobs/node` and submits four jobs:

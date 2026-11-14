@@ -29,11 +29,19 @@ The setup ran the smoke preset: the `wall-resolved` mesh with the `simplec` prof
 
 ```python
 import json
+
 r = json.load(open("runs/resolution-smoke/report.json"))
 print("workflow completed:", r["workflow_completed"], "passed:", r["passed"])
 for row in r["rows"]:
-    print(row["name"], "accepted:", row["accepted"], "passed:", row["passed"],
-          "stop:", row.get("continuation_stop_reason"))
+    print(
+        row["name"],
+        "accepted:",
+        row["accepted"],
+        "passed:",
+        row["passed"],
+        "stop:",
+        row.get("continuation_stop_reason"),
+    )
 print("physical qualification:", r["physical_qualification"])
 ```
 

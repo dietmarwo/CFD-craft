@@ -64,6 +64,7 @@ python tutorials/optimization/run.py F1 \
 
 ```python
 import json
+
 s = json.load(open("runs/f1/summary.json"))
 print("passed:", s["passed"])
 for arm in s["arms"]:
@@ -109,6 +110,7 @@ python tutorials/optimization/run.py F2 --output runs/f2 > /dev/null
 
 ```python
 import json
+
 s = json.load(open("runs/f2/summary.json"))
 print("passed:", s["passed"])
 for arm in s["arms"]:
@@ -120,8 +122,10 @@ low, high = c["full_rank_condition_range"]
 print(f"condition numbers of the full-rank ones: {low:.6g} to {high:.6g}")
 for arm in s["arms"]:
     noisy = arm["inversion"][0]["noisy"]
-    print(f'{arm["method"]}: rank {noisy["rank"]}, nullity {noisy["nullity"]}, '
-          f'rate error at wind 1.0 with noise {noisy["relative_rate_error"]:.6g}')
+    print(
+        f"{arm['method']}: rank {noisy['rank']}, nullity {noisy['nullity']}, "
+        f"rate error at wind 1.0 with noise {noisy['relative_rate_error']:.6g}"
+    )
 ```
 ```text
 passed: True
@@ -154,14 +158,22 @@ python tutorials/optimization/run.py F3 --output runs/f3 > /dev/null
 
 ```python
 import json
+
 s = json.load(open("runs/f3/summary.json"))
 print("passed:", s["passed"])
 print("solves:", s["work"]["full_field_solves"], "accepted:", s["work"]["accepted"])
 for arm in s["arms"]:
-    print(f'{arm["method"]}: lid speed {arm["training"]["speed"]:.6g} m/s, '
-          f'grid change {arm["relative_energy_grid_change"]:.6g}, '
-          f'supported {arm["supported_at_requested_fidelity"]}')
-print("distinct designs:", s["distinct_designs"], "supported designs:", s["supported_designs"])
+    print(
+        f"{arm['method']}: lid speed {arm['training']['speed']:.6g} m/s, "
+        f"grid change {arm['relative_energy_grid_change']:.6g}, "
+        f"supported {arm['supported_at_requested_fidelity']}"
+    )
+print(
+    "distinct designs:",
+    s["distinct_designs"],
+    "supported designs:",
+    s["supported_designs"],
+)
 ```
 ```text
 passed: True

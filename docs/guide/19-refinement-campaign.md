@@ -32,6 +32,7 @@ The setup ran the coarse reference. Continue only when its report passes:
 
 ```python
 import json
+
 r = json.load(open("runs/coarse-reference/report.json"))
 if not r["passed"]:
     raise SystemExit("the coarse reference is not accepted; do not start a campaign")
@@ -56,11 +57,15 @@ These are the declared campaign of three 4,000-iteration stages, also the script
 
 ```python
 import json
+
 r = json.load(open("runs/refinement-campaign/report.json"))
 print("workflow completed:", r["workflow_completed"], "passed:", r["passed"])
 print("stop reason:", r["stop_reason"])
-print("fine iterations completed / started:",
-      r["completed_fine_iterations"], r["started_fine_iterations"])
+print(
+    "fine iterations completed / started:",
+    r["completed_fine_iterations"],
+    r["started_fine_iterations"],
+)
 print("coarse source iterations (separate):", r["source_iterations"])
 print("physical qualification:", r["physical_qualification"])
 ```

@@ -78,7 +78,7 @@ Every stage is kept, as `wall-resolved-simplec-level1`, then `wall-resolved-simp
 | `converged_without_numerical_acceptance` | The solver reported convergence but the gate failed; another stage would report convergence again at its first iteration |
 | `stage_limit` | The last permitted stage completed without convergence |
 | `execution_failed`, `execution_timeout`, `execution_cancelled`, `no_final_field` | The stage stopped without an eligible final field |
-| `cancelled` | The study was cancelled between stages |
+| `cancelled` | The study was canceled between stages |
 | `source_ineligible: …` | The completed stage fails the source flux gate and cannot seed the next (exit 2; finer meshes are skipped) |
 
 Other preparation, archive or I/O errors stop the workflow with exit 1. Disk use and time grow with the number of stages; there is no automatic resume across separate CI jobs. Iteration limits need a divisor between 50 and 250 for the write cadence (any multiple of 50 works), so that a stopped stage still writes a final field. In the [continuation record](../evidence/steady-continuation.md) (the record gives no date) four stages of 6,000, 6,000, 6,000 and 412 iterations reached the same converged solution as the single run, at the same cumulative iteration, with final fields about 2e-12 apart in U.

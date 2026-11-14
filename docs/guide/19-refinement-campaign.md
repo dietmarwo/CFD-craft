@@ -87,11 +87,11 @@ The plan, source identities, limits and producer hashes are written before mappi
 | `no_final_field` | It completed without a final field |
 | `source_ineligible` | The next stage's source failed the flux gate; its diagnostic and archive remain evidence |
 | `stage_limit` | Every declared stage completed without convergence |
-| `cancelled`, `workflow_error` | The campaign was cancelled, or hit a workflow error |
+| `cancelled`, `workflow_error` | The campaign was canceled, or hit a workflow error |
 
-Timeouts and cancelled or failed executions are never continued. A cancellation overrides acceptance if it arrives after a solver returned, but an integrity or workflow error stays an error after a cancellation. If the audit or the measurement comparison of a returned stage cannot be read (for example when sampling hit the deadline), the stage records that failure and the campaign continues with the stop reason of its execution.
+Timeouts and canceled or failed executions are never continued. A cancellation overrides acceptance if it arrives after a solver returned, but an integrity or workflow error stays an error after a cancellation. If the audit or the measurement comparison of a returned stage cannot be read (for example when sampling hit the deadline), the stage records that failure and the campaign continues with the stop reason of its execution.
 
-The script exits 0 when the declared scientific gates passed, 2 for retained unaccepted or cancelled evidence, and 1 for invalid input or a workflow error. `workflow_completed` describes the collection of a valid bounded trial, not its acceptance. `completed_fine_iterations` counts stages with a final field; `started_fine_iterations` also counts stopped ones.
+The script exits 0 when the declared scientific gates passed, 2 for retained unaccepted or canceled evidence, and 1 for invalid input or a workflow error. `workflow_completed` describes the collection of a valid bounded trial, not its acceptance. `completed_fine_iterations` counts stages with a final field; `started_fine_iterations` also counts stopped ones.
 
 ## The evidence directory
 

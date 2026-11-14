@@ -161,7 +161,7 @@ cavity this reaches the same accepted steady state in far fewer iterations.
   (`integrations/openfoam_backend.py report`); do not give them to
   `cfd-craft report`.
 - Continuation needs a complete source archive whose stored face flux passes
-  the independent gate; failed, timed-out and cancelled runs are not eligible.
+  the independent gate; failed, timed-out and canceled runs are not eligible.
 - Mesh initialization needs an accepted, independently audited, cold-generated
   source; coarse face flux is never copied.
 - Code agreement, comparison with measurements and physical qualification are

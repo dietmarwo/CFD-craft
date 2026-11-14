@@ -76,7 +76,7 @@ python validation/export_vtk.py --run runs/a --output runs/a.vtr | python -c "im
 | `prepare` | `--case cavity\|backstep --output DIR [--level 1] [--cavity-grid N] [--iterations 3000] [--data PATH] [--mesh-family legacy\|wall-resolved] [--solver-profile legacy\|simplec\|simple]` | 0, or 1 for an invalid request |
 | `prepare-restart` | `--source DIR --output DIR [--iterations 6000]` | 0, or 1 for an ineligible source |
 | `prepare-mapped` | `--source DIR --level N --output DIR --foam-root ROOT [--iterations 6000] [--data PATH] [--timeout-s 300] [--output-mib 512] [--memory-mib 2048]` | as `prepare-restart` |
-| `run` | `--case CASE --output DIR --foam-root ROOT [--timeout-s 600] [--output-mib 256] [--memory-mib 2048]` | 0 accepted; 2 completed, timed out or cancelled without accepted evidence; 1 execution failed |
+| `run` | `--case CASE --output DIR --foam-root ROOT [--timeout-s 600] [--output-mib 256] [--memory-mib 2048]` | 0 accepted; 2 completed, timed out or canceled without accepted evidence; 1 execution failed |
 | `report` | `DIR` | as `run` for the archived result; 1 if verification fails |
 
 | Script | Arguments | Result |

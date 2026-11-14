@@ -62,10 +62,10 @@ A convergence message in the log is not enough. The adapter also requires final 
 | Command | 0 | 2 | 1 |
 |---|---|---|---|
 | `prepare`, `prepare-mapped`, `prepare-restart` | prepared | – | invalid request or ineligible source |
-| `run` | accepted numerical evidence | completed, timed out or cancelled without it | the execution itself failed (runtime, input, I/O) |
+| `run` | accepted numerical evidence | completed, timed out or canceled without it | the execution itself failed (runtime, input, I/O) |
 | `report` | as `run` for the archived result | as `run` | failed execution, or an archive that fails verification |
 | `validation/compare_backstep.py` | numerical gate and development screen pass | either fails | output cannot be written |
-| `tutorials/external_cfd.py`, `tutorials/backstep_resolution.py` | everything passes | failed, unaccepted or cancelled evidence recorded | workflow error |
+| `tutorials/external_cfd.py`, `tutorials/backstep_resolution.py` | everything passes | failed, unaccepted or canceled evidence recorded | workflow error |
 | `validation/audit_openfoam_mesh.py` | checks pass | checks fail, or no final field | invalid archive or output path |
 | `validation/compare_restart.py`, `validation/restart_equivalence.py` | bounds hold | bounds do not hold | invalid input |
 

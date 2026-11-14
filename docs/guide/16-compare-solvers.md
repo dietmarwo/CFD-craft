@@ -41,7 +41,7 @@ python tutorials/external_cfd.py --preset smoke \
   --output runs/external-smoke || echo "exit $?"
 ```
 
-Without `--data`, the smoke and study presets download the same pinned files into their output. The smoke preset runs the cavity and the level-1 backstep (legacy recipe, 6,000 iterations) with a 300 s budget per case. It exits 0 when everything passes, 2 when it recorded failed, unaccepted or cancelled evidence, and 1 on a workflow error.
+Without `--data`, the smoke and study presets download the same pinned files into their output. The smoke preset runs the cavity and the level-1 backstep (legacy recipe, 6,000 iterations) with a 300 s budget per case. It exits 0 when everything passes, 2 when it recorded failed, unaccepted or canceled evidence, and 1 on a workflow error.
 
 The same backstep with the single commands, so that each verdict can be read on its own:
 

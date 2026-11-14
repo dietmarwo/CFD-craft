@@ -52,7 +52,7 @@ The lesson solves the same problem three ways:
 
 1. **LP.** The native LP of `lp-ip-craft`. An independent reference eliminates `q2`, enumerates the intersections of three active inequalities and checks every candidate against all inequalities. The two optima must agree within 1e-7.
 2. **BiteOpt.** Every evaluation is a full CFD run with its native and independent field checks. An unacceptable solve returns an unusable objective and stays in the report.
-3. **GP.** A deterministic Gaussian-process surrogate (`fcmaes.surrogate/1`: seed 601 as for BiteOpt, four initial points, 64 candidates, ten fit iterations, one fit restart) runs through the fcmaes worker on a local foreground node of `optimization-run`. Its search evaluations are accepted on the worker's native steady assessment; the independent field check applies to its answer at the final replay. The lesson fails if this arm has failed or cancelled evaluations.
+3. **GP.** A deterministic Gaussian-process surrogate (`fcmaes.surrogate/1`: seed 601 as for BiteOpt, four initial points, 64 candidates, ten fit iterations, one fit restart) runs through the fcmaes worker on a local foreground node of `optimization-run`. Its search evaluations are accepted on the worker's native steady assessment; the independent field check applies to its answer at the final replay. The lesson fails if this arm has failed or canceled evaluations.
 
 The smoke preset requests 16 BiteOpt and 16 GP evaluations; the study requests 128 each.
 

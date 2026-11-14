@@ -61,7 +61,7 @@ are assumptions. None of these parameters is calibrated to downstream data.
 
 The mesh has 22656, 90624 or 203904 cells at levels 1,2,3. The channel above
 y/H=1 is graded toward its walls. The block below the step is uniform in y, with
-24 cells per H at level 1, so the first cell centre sits at H/48. With wall
+24 cells per H at level 1, so the first cell center sits at H/48. With wall
 functions this places the first lower-wall cell in the buffer layer in the
 scored region, where the k-based wall function switches near y+ 11; refinement
 moves it lower, so a mesh series also changes the wall treatment. Each
@@ -113,7 +113,7 @@ the shear-layer line y/H=1 (first cell 9.15e-4 H). In x, both sides of the step
 plane start from the step wall's 0.002 H first cell (at level 1). Widths grow
 by 10% per cell downstream, with an 11% step into a uniform 0.1 H over the
 scored region 1 < x/H < 12, then to 0.31 H at the outlet, and by 15% per cell
-upstream to 0.18 H at the inlet. At level 1, neighbouring cell widths differ by
+upstream to 0.18 H at the inlet. At level 1, neighboring cell widths differ by
 at most a factor 1.15 in x and 1.32 in y, also across block interfaces; finer
 levels keep these bounds. Tests check these widths
 against blockMesh's grading rules and against the actual Foundation-13
@@ -158,7 +158,7 @@ The [tutorial](../guide/18-backstep-resolution.md) and
 
 `prepare-restart` copies the final U/p/phi and, for SST, k/omega/nut of a
 completed same-mesh run into a fresh local pseudo-time zero. Failed, timed-out
-or cancelled runs are ineligible. A completed but unconverged stage is eligible
+or canceled runs are ineligible. A completed but unconverged stage is eligible
 when its final fields are finite and its stored face flux passes the auditor's
 independent local gate, max abs(div(phi))*H/U <=1e-4. That gate follows the
 last pressure solve's relative tolerance and tightens like H/dx with
@@ -222,7 +222,7 @@ and mesh, the utility arguments and logs, and the runtime identity; it records
 the `mapFields` hash at preparation. Validation, before every solve and when an
 archive is verified, rechecks that chain and replays the mapping with the
 independent mesh reader: each consumed cell value must come, in every field,
-from one source cell among the 27 with the nearest centres. On the uniformly
+from one source cell among the 27 with the nearest centers. On the uniformly
 refined cavity that is always the nearest cell; on the graded backstep meshes
 Foundation 13 takes another nearby cell for some cells, and the replay reports
 how many and how far. Solved runs also require the recorded runtime and the

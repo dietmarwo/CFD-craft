@@ -84,21 +84,21 @@ for profile in ["fcmaes.evaluate/1", "fcmaes.retry/1", "fcmaes.surrogate/1"]:
 3. `fcmaes.retry/1`: BiteOpt with a hard cap of 24 new evaluations and a recheck of the best point.
 4. `fcmaes.surrogate/1`: the experimental GP surrogate, also 24 evaluations with a recheck.
 
-It checks terminal states, that every requested task completed, that the failed and cancelled evaluation counters are present and zero, and the runner's result manifests. It does not take a zero exit of the runner as proof that a job completed. The job files it writes (`command.json`, and `fcmaes.json` for the optimizer jobs, each overwriting the previous one) are the inputs to inspect; do not reconstruct their fields from memory.
+It checks terminal states, that every requested task completed, that the failed and canceled evaluation counters are present and zero, and the runner's result manifests. It does not take a zero exit of the runner as proof that a job completed. The job files it writes (`command.json`, and `fcmaes.json` for the optimizer jobs, each overwriting the previous one) are the inputs to inspect; do not reconstruct their fields from memory.
 
-**Recorded values.** The [native verification record](../evidence/native-verification.md#optimizer-integration) (the record gives no date) reports a run with `optimization-run` built at `12f9d57`: all three optimizer jobs completed, retry and GP each used 24 new CFD evaluations and one recheck with no failed or cancelled evaluations, and the objectives were 1.8682465 for the original layout and 1.8657713 and 1.6799143 for the BiteOpt and GP selections (largest receptor concentration over 1e-8 kg/m3). Each value is an accepted steady discrete solution; none is an experimental result, and one small seeded run does not rank BiteOpt against GP.
+**Recorded values.** The [native verification record](../evidence/native-verification.md#optimizer-integration) (the record gives no date) reports a run with `optimization-run` built at `12f9d57`: all three optimizer jobs completed, retry and GP each used 24 new CFD evaluations and one recheck with no failed or canceled evaluations, and the objectives were 1.8682465 for the original layout and 1.8657713 and 1.6799143 for the BiteOpt and GP selections (largest receptor concentration over 1e-8 kg/m3). Each value is an accepted steady discrete solution; none is an experimental result, and one small seeded run does not rank BiteOpt against GP.
 
 ## The command launcher
 
 `integrations/launch_command.py` is the program a command job runs. The runner creates the declared output parent directories before launch, but the CLI refuses an existing run directory. The launcher therefore runs `cfd-craft run case.json --output simulation` in a fresh child directory and then copies `simulation/summary.json` to the flat output the job declares. An empty prepared parent does not switch off the CLI's overwrite protection.
 
-On SIGTERM or SIGINT (a runner deadline or a cancellation) the launcher forwards the signal to the solver and waits, so the cancelled summary is still collected. Its handlers are installed before the solver starts; a signal that arrives during start-up is delivered once the solver exists.
+On SIGTERM or SIGINT (a runner deadline or a cancellation) the launcher forwards the signal to the solver and waits, so the canceled summary is still collected. Its handlers are installed before the solver starts; a signal that arrives during start-up is delivered once the solver exists.
 
 ## What a job result is not
 
 An `execution.command/0.1` envelope describes a process and the outputs it collected. An `optimization.job/0.1` envelope also names a registered optimizer worker and a versioned payload profile. A completed command state is not an optimization claim, and an optimizer's best-found and rechecked value is neither a CFD archive nor a calibrated posterior nor an experimental claim. Where a physical result is needed, attach separate CFD evidence (a native run archive, [chapter 4](04-reading-a-result.md)).
 
-Keep objective calls, SDK rechecks, failed and cancelled work and CFD steps apart when you report cost. The worker runs CFD for every evaluation; reusing a response matrix ([chapter 12](12-studies.md)) is a different technique with its own fixed-flow and linear-transport assumptions.
+Keep objective calls, SDK rechecks, failed and canceled work and CFD steps apart when you report cost. The worker runs CFD for every evaluation; reusing a response matrix ([chapter 12](12-studies.md)) is a different technique with its own fixed-flow and linear-transport assumptions.
 
 ## Campaigns
 
@@ -110,7 +110,7 @@ Not tested in this release: a full multi-node CFD campaign, remote machine commi
 
 > Build the optional worker with its lockfile. Register it on a new local foreground optimization-jobs node, then run `integrations/run_jobs.py`. Use `cases/verification/source-response.json`; keep geometry, source support, total integrated emission and receptor IDs fixed.
 >
-> Confirm that the case is a consumed, hashed input, that the CFD callback respects cancellation, and that every accepted objective comes from a checked steady simulation. Compare the original layout, BiteOpt and GP selected values with equal budgets of 24 new calls per optimizer. Count new evaluations, failed and cancelled calls and rechecks separately, and retain failures.
+> Confirm that the case is a consumed, hashed input, that the CFD callback respects cancellation, and that every accepted objective comes from a checked steady simulation. Compare the original layout, BiteOpt and GP selected values with equal budgets of 24 new calls per optimizer. Count new evaluations, failed and canceled calls and rechecks separately, and retain failures.
 >
 > Treat this as an integration demonstration, not a statistical ranking. Preserve the optimization result contract and attach separate CFD evidence where a physical result is needed. Report concentrations in kg/m3 and micrograms/m3, keep numerical checks apart from physical validation, and use fresh output directories.
 

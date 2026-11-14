@@ -460,3 +460,71 @@ fn near_buoyant_aerodynamic_diameter_is_not_clipped_to_a_fixed_lower_bound() {
     let diameter = particle.aerodynamic_diameter_m();
     assert!(diameter > 0.0 && diameter < 1e-12, "{diameter}");
 }
+#[test]
+fn particulate_sums_select_bins_by_aerodynamic_diameter_and_exclude_gases() {
+    // Geometric and aerodynamic diameters fall on different sides of a cutoff
+    // for "dense" (2.0 um geometric, 3.2 um aerodynamic) and "light" (12 um
+    // geometric, 8.5 um aerodynamic), so a sum by geometric diameter fails.
+    let mut v = serde_json::to_value(column(4, 0.05, true)).unwrap();
+    let bins = [
+        ("fine", 1e-6, 1000.0, 1e-9),
+        ("dense", 2e-6, 2500.0, 2e-9),
+        ("light", 1.2e-5, 500.0, 4e-9),
+        ("coarse", 1.2e-5, 1000.0, 8e-9),
+    ];
+    let mut constituents: Vec<_> = bins
+        .iter()
+        .map(|(id, diameter, density, _)| {
+            json!({"id":id,"diffusivity_m2_s":0.0,
+                "particle":{"diameter_m":diameter,"density_kg_m3":density}})
+        })
+        .collect();
+    constituents.push(json!({"id":"gas","diffusivity_m2_s":0.0}));
+    v["constituents"] = json!(constituents);
+    let mut initial: Vec<_> = bins
+        .iter()
+        .map(|(id, _, _, level)| json!({"kind":"uniform","constituent":id,"concentration_kg_m3":level}))
+        .collect();
+    initial.push(json!({"kind":"uniform","constituent":"gas","concentration_kg_m3":1.6e-8}));
+    v["initial_conditions"] = json!(initial);
+    v["sources"] = json!([]);
+    v["receptors"] = json!([{"kind":"point","id":"station","point_m":[0.5,0.5,0.5]}]);
+    let c: Case = serde_json::from_value(v).unwrap();
+    let r = solver::run(&c, &Control::new(20.0), None).unwrap();
+    assert_eq!(r.summary.assessment, "transient_interval_completed");
+    // Independent Newton solution of d_a^2 Cc(d_a) (1000 - rho_air) = d^2 Cc(d) (rho - rho_air).
+    let slip = |d: f64| {
+        let kn = 2.0 * 6.6e-8 / d;
+        1.0 + kn * (1.257 + 0.4 * (-1.1 / kn).exp())
+    };
+    let aerodynamic = |d: f64, density: f64| {
+        let target = (density - 1.204) / (1000.0 - 1.204) * d * d * slip(d);
+        let mut x = d * (density / 1000.0_f64).sqrt();
+        for _ in 0..60 {
+            let h = 1e-7 * x;
+            let slope = ((x + h).powi(2) * slip(x + h) - (x - h).powi(2) * slip(x - h)) / (2.0 * h);
+            x -= (x * x * slip(x) - target) / slope;
+        }
+        x
+    };
+    let expected = [1.0e-6, 3.21e-6, 8.46e-6, 1.2e-5];
+    for (((id, d, density, _), scalar), rough) in
+        bins.iter().zip(&r.summary.constituents).zip(expected)
+    {
+        let reported = scalar.aerodynamic_diameter_m.unwrap();
+        assert!(
+            (reported / aerodynamic(*d, *density) - 1.0).abs() < 1e-9,
+            "{id}"
+        );
+        assert!((reported / rough - 1.0).abs() < 2e-3, "{id}: {reported}");
+    }
+    assert!(r.summary.constituents[4].aerodynamic_diameter_m.is_none());
+    let pm = &r.summary.particulate_matter;
+    assert_eq!(pm.keys().collect::<Vec<_>>(), ["PM10", "PM2.5"]);
+    let close = |a: f64, b: f64| (a - b).abs() <= 1e-12 * b;
+    // The unit domain makes airborne mass equal to the uniform concentration.
+    assert!(close(pm["PM2.5"].mass_kg, 1e-9));
+    assert!(close(pm["PM10"].mass_kg, 7e-9));
+    assert!(close(pm["PM2.5"].receptors_kg_m3["station"], 1e-9));
+    assert!(close(pm["PM10"].receptors_kg_m3["station"], 7e-9));
+}

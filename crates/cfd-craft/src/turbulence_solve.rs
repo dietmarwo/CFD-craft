@@ -1,6 +1,6 @@
 //! Implicit k–ε pseudo-time steps in delta form for the implicit steady
 //! iteration with RANS (stage P5c of the
-//! [accuracy and steady-solver plan](https://github.com/dietmarwo/CFD-craft/blob/main/docs/ACCURACY_STEADY_PLAN.md)).
+//! [accuracy and steady-solver plan](https://github.com/dietmarwo/CFD-craft/blob/main/docs/history/accuracy-steady-plan.md)).
 //!
 //! Each outer iteration solves, after the momentum–pressure update,
 //!

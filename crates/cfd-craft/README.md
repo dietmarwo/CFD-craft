@@ -21,8 +21,16 @@ profiles) is the [`cfd-craft-cli`](https://crates.io/crates/cfd-craft-cli)
 crate (`cargo install cfd-craft-cli --locked`); the Python package is
 [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/).
 
-Version 0.1.0 is a research prototype. Experimental canyon validation (blocked
-by access to raw benchmark data) and a successful fine-grid resolution study
-remain open; numerical acceptance is not physical validation. Model cards,
-recorded evidence and the fixture-based test suite are in the
-[repository](https://github.com/dietmarwo/CFD-craft). MIT licensed.
+Version 0.1.0 is a research prototype. A numerically accepted run is not an
+experimentally validated prediction. Experimental canyon validation (blocked by
+access to raw benchmark data) and a successful fine-grid resolution study
+remain open.
+
+- [The Rust library](https://dietmarwo.github.io/CFD-craft/guide/20-rust-library.html):
+  solve in process, cancellation, checkpoints, reading a CLI archive
+- [Result contract](https://dietmarwo.github.io/CFD-craft/result-contract.html)
+- [Documentation](https://dietmarwo.github.io/CFD-craft/): guide, reference,
+  model cards and evidence
+- [Repository](https://github.com/dietmarwo/CFD-craft)
+
+MIT licensed.

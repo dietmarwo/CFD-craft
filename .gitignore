@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 
 /dist/
+
+book/
+mermaid.min.js
+mermaid-init.js

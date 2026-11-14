@@ -1,6 +1,20 @@
 # Diagnostics
 
-The manual's example programs and `validation/manual_examples.py` use
+Every diagnostic has a code, and the family of the code says which part
+reported it.
+
+| Codes | Reported by | Section |
+|---|---|---|
+| `CFD-E`, `CFD-W` | The native solver: `check`, `run`, `preview`, `profile`, `report` | [Native case checks and run errors](#native-case-checks-and-run-errors) |
+| `CFD-X`, `CFD-D` | The OpenFOAM adapter and the reference data | [External backend and reference data](#external-backend-and-reference-data) |
+| `CFD-P` | The Python package | [Tools, examples and scripts](#tools-examples-and-scripts) |
+| `CFD-U`, `CFD-T`, `CFD-R` | Example programs, optimization lessons, release and documentation tools | [Tools, examples and scripts](#tools-examples-and-scripts) |
+| `CFD-B` | Performance probes, comparisons and sweeps | [Tools, examples and scripts](#tools-examples-and-scripts); [Native profiling and accuracy-sweep diagnostics](#native-profiling-and-accuracy-sweep-diagnostics) |
+
+## Tools, examples and scripts
+
+The guide's example programs (`examples/manual/`, `crates/cfd-craft/examples/`)
+and `validation/manual_examples.py` use
 `CFD-U001 manual.<field>` for missing/unavailable inputs, occupied example
 output paths, failed process/schema expectations, unaccepted example results,
 incorrect source units or source-response scaling, and checkpoint/archive
@@ -29,6 +43,48 @@ own codes and paths. The release scripts (`scripts/package_version.py`,
 inconsistent versions, crate metadata or lockfiles, and failed installed
 checks. Neither family is a solver tolerance.
 
+The reference generator (`scripts/generate_reference.py`) reports
+`CFD-R002 reference.<field>`: `reference.binary` when the native binary cannot
+be run or prints no usable JSON, `reference.cli.markers` when `cli.md` lacks a
+generated-block marker, `reference.python-api` for a public Python definition
+without a docstring, `reference.<page>` (for example `reference.case-schema`)
+when `--check` finds a committed page that differs from the current build, and
+`reference.diagnostics` when `--check` finds a `CFD-` code in the Rust or Python
+sources that this page does not list.
+
+The documentation check (`scripts/check_docs.py`) reports
+`CFD-R003 docs.<field>: PAGE:LINE: message` for a page whose code blocks do not
+hold: `docs.fence` for a block without a known info string or without an end,
+`docs.marker` for an unknown, misplaced, malformed or repeated
+`<!-- check: ... -->` or `<!-- file: ... -->` comment, a tolerance above 1e-4,
+a timeout that is not a positive number of seconds or a missing tolerance
+sentence, `docs.setup` when `## Setup` is not the first section, `docs.python`
+and `docs.bash` for a block that raises, exits non-zero, has a syntax error,
+names a script that is not in the checkout or does not end in time, `docs.text`
+when the output of the block before it differs from the shown text (floats
+within the tolerance the page declares, everything else exactly) or when a
+`text` block shows a float on a page without a tolerance, `docs.json`
+for JSON that is not strict, a case that `cfd-craft check` rejects or a block
+that differs from the committed file it names, `docs.sh`, `docs.toml` and
+`docs.rust` for a block that does not parse or is not found in the file it is
+bound to, `docs.binary` when `cfd-craft` cannot be run, `docs.counts` when a page has
+fewer blocks of a class than its entry in `docs/check-counts.json`, has no
+entry, or (for the default set) an entry names a page that is not checked,
+`docs.page` for an unreadable page and `docs.arguments` for invalid options.
+The line is the line of the opening fence, or of the differing output line; it
+is 0 for `docs.counts`. These are checks of the
+documentation, not solver tolerances.
+
+The documentation site tools (`scripts/mdbook_links.py`, the mdBook
+preprocessor, and `scripts/check_site.py`, the check of the built `book/`
+directory) report `CFD-R004 site.<field>`: `site.link` for a link in a page
+under `docs/` whose target does not exist or leaves the repository,
+`site.book` or `site.protocol` for input that mdBook should not send,
+`site.directory` for a missing or empty site directory, `site.reference` for an
+internal `href` or `src` in the built HTML that resolves to no file, and
+`site.anchor` for a fragment that names no `id` on the target page. These are
+checks of the documentation site, not solver tolerances.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that
@@ -41,6 +97,8 @@ between rounds, and inputs changed during the comparison. These research
 measurements are not CFD numerical-acceptance or physical-qualification
 verdicts.
 
+## Native case checks and run errors
+
 `cfd-craft check CASE` prints a `cfd-craft.check/0.1` report on stdout. Each
 diagnostic has a code, a severity, a JSON path into the case (for example
 `geometry[1]`, `sources[0].rate_kg_s_m`, `numerics.advective_cfl_max`) and a
@@ -52,7 +110,9 @@ grid.
 
 The grid, source and receptor checks need the built grid. When the estimated peak
 does not fit this host (CFD-W070), they are skipped, so a check never allocates
-more than the host can hold.
+more than the host can hold. They also run only when the case has no other
+error, and a file that does not parse is reported alone (CFD-E000): check again
+after each fix.
 
 | Code | Severity | Meaning |
 |---|---|---|
@@ -103,7 +163,7 @@ more than the host can hold.
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
 | CFD-W002 | warning | RANS blockage ratio above the COST 732 recommendation of 3 % |
 | CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
-| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. See the [pressure guide](PRESSURE_MULTIGRID.md) and anisotropy results |
+| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. See the [pressure guide](developer/pressure-multigrid.md) and anisotropy results |
 | CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
 W002 and W003 encode the COST 732 best-practice guideline (Franke et al., 2007) as summarized by secondary sources that cite it. The primary document was not retrieved from its distribution share; `validation/data-inventory.json` records that. They are warnings because best-practice distances depend on the scenario: a wind-tunnel reproduction may use the tunnel's own dimensions.
@@ -138,7 +198,7 @@ They belong to the separate external artifact schema. E062/E063 are also used
 for occupied/unavailable external output paths. The external tools exit 0 for
 an accepted result, 2 for a completed, stopped or verified run without accepted
 evidence, and 1 for a failed execution or invalid input
-([backend guide](../integrations/OPENFOAM.md)).
+([backend guide](guide/15-openfoam-first-run.md)).
 
 | Code | Meaning |
 |---|---|

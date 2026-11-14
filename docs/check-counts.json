@@ -1,0 +1,387 @@
+{
+  "schema_version": "cfd-craft.docs-counts/0.1",
+  "pages": {
+    "README.md": {
+      "run": 1,
+      "text": 1,
+      "json": 0
+    },
+    "crates/cfd-craft-cli/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "crates/cfd-craft/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/ai-context.md": {
+      "run": 2,
+      "text": 1,
+      "json": 0
+    },
+    "docs/comparison.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/architecture.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/decisions.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/documentation.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/pressure-multigrid.md": {
+      "run": 1,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/profiling.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/releasing.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/developer/roadmap.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/diagnostics.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/anisotropic-pressure.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/backend-comparison.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/backstep-resolution.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/external-backend.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/gap-baseline.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/implicit-rans.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/implicit-steady.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/matched-accuracy.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/mesh-initialization.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/momentum-verification.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/native-cpu-performance.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/native-verification.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/optimization-lessons.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/performance-gap-status.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/performance-iterations.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/pressure-multigrid.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/refinement-campaign.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/second-order-momentum.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/steady-continuation.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/guide/01-first-run.md": {
+      "run": 4,
+      "text": 4,
+      "json": 1
+    },
+    "docs/guide/02-case-file.md": {
+      "run": 3,
+      "text": 3,
+      "json": 1
+    },
+    "docs/guide/03-cli-and-archive.md": {
+      "run": 8,
+      "text": 4,
+      "json": 0
+    },
+    "docs/guide/04-reading-a-result.md": {
+      "run": 9,
+      "text": 5,
+      "json": 0
+    },
+    "docs/guide/05-sources-receptors-transport.md": {
+      "run": 6,
+      "text": 6,
+      "json": 2
+    },
+    "docs/guide/06-flow-cavity.md": {
+      "run": 11,
+      "text": 5,
+      "json": 0
+    },
+    "docs/guide/07-budgets-preview-cancel.md": {
+      "run": 11,
+      "text": 6,
+      "json": 0
+    },
+    "docs/guide/08-checkpoint-restart.md": {
+      "run": 7,
+      "text": 3,
+      "json": 0
+    },
+    "docs/guide/09-opt-in-numerics.md": {
+      "run": 12,
+      "text": 5,
+      "json": 0
+    },
+    "docs/guide/10-street-canyon.md": {
+      "run": 9,
+      "text": 4,
+      "json": 0,
+      "long": {
+        "run": 2,
+        "text": 1
+      }
+    },
+    "docs/guide/11-python.md": {
+      "run": 9,
+      "text": 7,
+      "json": 0
+    },
+    "docs/guide/12-studies.md": {
+      "run": 6,
+      "text": 4,
+      "json": 0
+    },
+    "docs/guide/13-optimization-lessons.md": {
+      "run": 6,
+      "text": 2,
+      "json": 0,
+      "jobs": {
+        "run": 2,
+        "text": 0
+      }
+    },
+    "docs/guide/14-optimization-jobs.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0,
+      "jobs": {
+        "run": 5,
+        "text": 0
+      }
+    },
+    "docs/guide/15-openfoam-first-run.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0,
+      "openfoam": {
+        "run": 3,
+        "text": 0
+      }
+    },
+    "docs/guide/16-compare-solvers.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0,
+      "openfoam": {
+        "run": 5,
+        "text": 0
+      }
+    },
+    "docs/guide/17-continuation-and-mapping.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0,
+      "openfoam": {
+        "run": 4,
+        "text": 0
+      }
+    },
+    "docs/guide/18-backstep-resolution.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0,
+      "openfoam": {
+        "run": 3,
+        "text": 0
+      }
+    },
+    "docs/guide/19-refinement-campaign.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0,
+      "openfoam": {
+        "run": 4,
+        "text": 0
+      }
+    },
+    "docs/guide/20-rust-library.md": {
+      "run": 6,
+      "text": 5,
+      "json": 0
+    },
+    "docs/guide/21-troubleshooting.md": {
+      "run": 3,
+      "text": 1,
+      "json": 0
+    },
+    "docs/guide/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/how-to.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/images/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/index.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/model-cards/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/model-cards/flow.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/model-cards/openfoam-backend.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/model-cards/transport.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/reference/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/reference/cli.md": {
+      "run": 3,
+      "text": 3,
+      "json": 0
+    },
+    "docs/reference/scripts.md": {
+      "run": 1,
+      "text": 1,
+      "json": 0
+    },
+    "docs/reference/units-and-conventions.md": {
+      "run": 2,
+      "text": 2,
+      "json": 0
+    },
+    "docs/result-contract.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "examples/manual/README.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "python/README.md": {
+      "run": 1,
+      "text": 1,
+      "json": 0
+    }
+  }
+}

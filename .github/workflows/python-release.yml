@@ -4,7 +4,7 @@
 # the source distribution run the installed-package acceptance
 # (validation/check_installed.py) outside the checkout, on the oldest and the
 # newest supported Python, normally and under -O. A tag vX.Y.Z publishes
-# through PyPI Trusted Publishing (see RELEASING.md); pull requests that touch
+# through PyPI Trusted Publishing (see docs/developer/releasing.md); pull requests that touch
 # the packaging and manual runs build and test only.
 name: Build and publish cfd-craft for Python
 

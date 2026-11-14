@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fixed-point, acceptance and cost gates for the implicit steady algorithms.
 
-Predeclared in docs/ACCURACY_STEADY_PLAN.md (stages P4 and P5a):
+Predeclared in docs/history/accuracy-steady-plan.md (stages P4 and P5a):
 
 - **Same fixed point.** The 24² steady cavity with a momentum scheme runs in the
   explicit mode and in the candidate mode, at the case tolerances and with both

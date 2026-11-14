@@ -18,11 +18,19 @@ and `verify` run coarsened previews, profiled runs and a pressure-solver
 verification fixture.
 
 The library is [`cfd-craft`](https://crates.io/crates/cfd-craft); the Python
-package is [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/). Version
-0.1.0 is a research prototype: experimental canyon validation and a successful
-fine-grid resolution study remain open, and numerical acceptance is not
-physical validation. Builds from crates.io use Cargo's default release profile
-rather than the repository's thin-LTO profile; numerical results are the same,
-timings can differ from the recorded ones. See the
-[repository](https://github.com/dietmarwo/CFD-craft) for the user manual and
-evidence. MIT licensed.
+package is [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/). Builds
+from crates.io use Cargo's default release profile rather than the
+repository's thin-LTO profile; numerical results are the same, timings can
+differ from the recorded ones.
+
+Version 0.1.0 is a research prototype. A numerically accepted run is not an
+experimentally validated prediction. Experimental canyon validation and a
+successful fine-grid resolution study remain open.
+
+- [The command line and the run archive](https://dietmarwo.github.io/CFD-craft/guide/03-cli-and-archive.html)
+- [Command line reference](https://dietmarwo.github.io/CFD-craft/reference/cli.html)
+- [Diagnostics](https://dietmarwo.github.io/CFD-craft/diagnostics.html)
+- [Documentation](https://dietmarwo.github.io/CFD-craft/) and
+  [repository](https://github.com/dietmarwo/CFD-craft)
+
+MIT licensed.

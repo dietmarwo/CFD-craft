@@ -33,7 +33,7 @@ steady workflow is 4.7–5.5 times faster than the native steady mode and closer
 to Ghia (0.0090 against 0.0276); its solver process is about 9 times faster
 than the native solver. The native method needs about three times as many
 explicit pseudo-time steps as OpenFOAM needs SIMPLE iterations, on twice the
-cells. See the [backend comparison](../../validation/BACKEND_COMPARISON.md); it
+cells. See the [backend comparison](../evidence/backend-comparison.md); it
 is not a fixed operation count or a ranking for other problems.
 
 ## Experimental comparison: Driver--Seegmiller backstep
@@ -61,7 +61,7 @@ are assumptions. None of these parameters is calibrated to downstream data.
 
 The mesh has 22656, 90624 or 203904 cells at levels 1,2,3. The channel above
 y/H=1 is graded toward its walls. The block below the step is uniform in y, with
-24 cells per H at level 1, so the first cell centre sits at H/48. With wall
+24 cells per H at level 1, so the first cell center sits at H/48. With wall
 functions this places the first lower-wall cell in the buffer layer in the
 scored region, where the k-based wall function switches near y+ 11; refinement
 moves it lower, so a mesh series also changes the wall treatment. Each
@@ -113,12 +113,12 @@ the shear-layer line y/H=1 (first cell 9.15e-4 H). In x, both sides of the step
 plane start from the step wall's 0.002 H first cell (at level 1). Widths grow
 by 10% per cell downstream, with an 11% step into a uniform 0.1 H over the
 scored region 1 < x/H < 12, then to 0.31 H at the outlet, and by 15% per cell
-upstream to 0.18 H at the inlet. At level 1, neighbouring cell widths differ by
+upstream to 0.18 H at the inlet. At level 1, neighboring cell widths differ by
 at most a factor 1.15 in x and 1.32 in y, also across block interfaces; finer
 levels keep these bounds. Tests check these widths
 against blockMesh's grading rules and against the actual Foundation-13
 `blockMesh` output. An earlier streamwise spacing with a 140:1 width jump at the
-step plane diverged in every run ([results](../../validation/RESOLUTION_RESULTS.md)).
+step plane diverged in every run ([results](../evidence/backstep-resolution.md)).
 
 SST keeps its default coefficients. k is fixed to zero at walls,
 nutLowReWallFunction imposes zero wall eddy viscosity, and omegaWallFunction
@@ -151,14 +151,14 @@ against nature.
 Measurement screening of the wall-resolved package additionally requires this
 independent audit. A failed numerical/independent gate leaves the screen not
 assessed. Refinement skips finer cases after a coarse case is not accepted.
-The [tutorial](../../tutorials/backstep-resolution-prompt.md) and
-[results](../../validation/RESOLUTION_RESULTS.md) retain those failures.
+The [tutorial](../guide/18-backstep-resolution.md) and
+[results](../evidence/backstep-resolution.md) retain those failures.
 
 ## Bounded steady field continuation
 
 `prepare-restart` copies the final U/p/phi and, for SST, k/omega/nut of a
 completed same-mesh run into a fresh local pseudo-time zero. Failed, timed-out
-or cancelled runs are ineligible. A completed but unconverged stage is eligible
+or canceled runs are ineligible. A completed but unconverged stage is eligible
 when its final fields are finite and its stored face flux passes the auditor's
 independent local gate, max abs(div(phi))*H/U <=1e-4. That gate follows the
 last pressure solve's relative tolerance and tightens like H/dx with
@@ -195,8 +195,8 @@ A run that stops at its iteration limit writes a final field only when the
 limit is a multiple of the write cadence. Preparation uses the largest divisor
 of the limit up to 250, and rejects limits without a divisor between 50 and 250;
 6000 and 20000 keep cadence 250. See the
-[guide](../../integrations/STEADY_RESTART.md) and
-[continuation results](../../validation/RESTART_RESULTS.md).
+[guide](../guide/17-continuation-and-mapping.md) and
+[continuation results](../evidence/steady-continuation.md).
 
 ## Coarse-to-fine volume initialization
 
@@ -222,7 +222,7 @@ and mesh, the utility arguments and logs, and the runtime identity; it records
 the `mapFields` hash at preparation. Validation, before every solve and when an
 archive is verified, rechecks that chain and replays the mapping with the
 independent mesh reader: each consumed cell value must come, in every field,
-from one source cell among the 27 with the nearest centres. On the uniformly
+from one source cell among the 27 with the nearest centers. On the uniformly
 refined cavity that is always the nearest cell; on the graded backstep meshes
 Foundation 13 takes another nearby cell for some cells, and the replay reports
 how many and how far. Solved runs also require the recorded runtime and the
@@ -234,15 +234,15 @@ After a mapped solve completes, same-mesh continuation uses its actual final
 fields and phi under the existing gate. The new stage's receipt names the mapped
 parent and replaces the mapping receipt; source-grid work is not fine-grid
 work. No source-flux, final nonlinear, wall-y+ or measurement threshold changes.
-See the [guide](../../integrations/MESH_INITIALIZATION.md),
-[plan](../iterations/05-mesh-initialization-plan.md) and
-[results](../../validation/MAPPING_RESULTS.md). The cavity comparison is
+See the [guide](../guide/17-continuation-and-mapping.md#start-a-finer-mesh),
+[plan](../history/05-mesh-initialization-plan.md) and
+[results](../evidence/mesh-initialization.md). The cavity comparison is
 numerical verification, the SST mapping check uses synthetic fields, and no
 accepted fine backstep is claimed.
 
 ## Bounded mapped refinement campaign
 
-The [campaign driver](../../integrations/REFINEMENT_CAMPAIGN.md) snapshots an
+The [campaign driver](../guide/19-refinement-campaign.md) snapshots an
 accepted cold source that passes its audit and measurement screen, freezes
 producer identities and limits, maps to the next level once, and continues
 eligible completed stages on that same fine mesh. After each stage and at final
@@ -259,7 +259,7 @@ exactly; Cf uses common experimental locations without extrapolation.
 `mesh_sensitivity.passed` means both original numerical/audit/reference gates
 pass. It does not bound the inter-grid change or certify mesh independence.
 Two grids do not give a GCI, and physical qualification remains false. The
-[results](../../validation/REFINEMENT_RESULTS.md) record the declared level-2
+[results](../evidence/refinement-campaign.md) record the declared level-2
 backstep campaign: three audited 4000-iteration stages that ended at the stage
 limit, with the final Uy (1.8e-7) and k (1.05e-7) residuals above the 1e-7
 gate, so no accepted fine backstep is claimed. The campaign changes no native
@@ -280,7 +280,7 @@ No GCI is manufactured from an incomplete or non-asymptotic series.
 There are no passive-scalar measurements in this benchmark. These comparisons
 therefore do not validate gas dispersion, particles, the native RANS package
 or a street canyon. CODASC and the native building-wall/throughput gates remain
-open. See the recorded [external results](../../validation/EXTERNAL_RESULTS.md).
+open. See the recorded [external results](../evidence/external-backend.md).
 
 ## Execution limits
 

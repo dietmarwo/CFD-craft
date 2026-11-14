@@ -3,7 +3,7 @@
 
 Each directory holds F1/, F2/ and F3/ with the summary.json that run.py
 writes. Only complete, passed runs are recorded; the record keeps the numbers
-that VALIDATION.md cites, not host paths or timings.
+that docs/evidence/optimization-lessons.md cites, not host paths or timings.
 """
 
 import argparse

@@ -25,8 +25,8 @@
 //! The release scope is uniform grids, box geometry, passive gas and CPU
 //! execution. Particles, vegetation, LES, chemistry, annual statistics,
 //! stretched grids, masked multigrid and GPU execution are not implemented.
-//! See the [roadmap](https://github.com/dietmarwo/CFD-craft/blob/main/docs/roadmap.md),
-//! the [recorded results](https://github.com/dietmarwo/CFD-craft/blob/main/validation/RESULTS.md)
+//! See the [roadmap](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/roadmap.md),
+//! the [recorded results](https://github.com/dietmarwo/CFD-craft/blob/main/docs/evidence/native-verification.md)
 //! and the [model cards](https://github.com/dietmarwo/CFD-craft/blob/main/docs/model-cards/README.md).
 //!
 //! # What is implemented
@@ -138,10 +138,10 @@
 //!   `report`, `verify`) with checksummed archives, restarts and signals.
 //! - [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/): the Python
 //!   binding (`check`, `simulate`, `describe`), see the
-//!   [Python guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md).
-//! - The [user manual](https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md)
-//!   explains architecture, numerical and evidence concepts and has 31
-//!   examples; its [Rust library section](https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md#rust-library-api)
+//!   [Python chapter](https://dietmarwo.github.io/CFD-craft/guide/11-python.html).
+//! - The [guide](https://dietmarwo.github.io/CFD-craft/guide/) explains the
+//!   numerical and evidence concepts in worked chapters, ordered by
+//!   difficulty; its [Rust library chapter](https://dietmarwo.github.io/CFD-craft/guide/20-rust-library.html)
 //!   covers this crate.
 //! - The [result contract](https://github.com/dietmarwo/CFD-craft/blob/main/docs/result-contract.md)
 //!   defines termination, assessment, archives and identities; the

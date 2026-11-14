@@ -1,0 +1,32 @@
+# Documentation site: mdBook, built from docs/ and served at
+# https://dietmarwo.github.io/CFD-craft/ (workflow .github/workflows/pages.yml).
+# Pinned tool versions are in that workflow (PIN_MDBOOK, PIN_MDBOOK_MERMAID).
+
+[book]
+title = "CFD-craft"
+description = "Open-source CFD in Rust for agents: documentation"
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "book"
+# A path in docs/SUMMARY.md that does not exist fails the build.
+create-missing = false
+
+[preprocessor.mdbook_links]
+# Sends links to pages that are not in the site to GitHub.
+command = "python3 scripts/mdbook_links.py"
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+site-url = "/CFD-craft/"
+git-repository-url = "https://github.com/dietmarwo/CFD-craft"
+edit-url-template = "https://github.com/dietmarwo/CFD-craft/edit/main/{path}"
+no-section-label = true
+# Written next to this file by `mdbook-mermaid install .` (git-ignored).
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[output.html.search]
+enable = true

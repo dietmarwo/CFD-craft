@@ -136,7 +136,7 @@ model_mismatch 0.059
 - `model_mismatch`: observations from a run with 15 percent more wind give a
   6 percent rate error. A good fit does not prove rates under a wrong model.
 
-These are synthetic rates at known locations, not a posterior. Another preset:
+Synthetic rates, not a posterior. `study` also refines the mismatched run to 48 x 18 x 18:
 
 ```sh
 python tutorials/source_inference.py --preset study --output runs/inference-study

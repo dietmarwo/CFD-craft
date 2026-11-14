@@ -137,7 +137,7 @@ save.
 
 ## Reproduce
 
-With the pinned runtime installed as in [OPENFOAM.md](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/OPENFOAM.md)
+With the pinned runtime installed as in [guide chapter 15](../guide/15-openfoam-first-run.md#install-the-pinned-runtime)
 and a release build:
 
 ```sh

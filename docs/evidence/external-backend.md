@@ -79,7 +79,7 @@ The legacy stall persists with SIMPLEC pressure relaxation 1 as well as 0.2; in 
 
 The native wall roughness and throughput tasks, measured canyon concentrations and an external passive-scalar comparison are separate work. No general urban-model validation or Rust performance advantage is claimed.
 
-Reproduction: [OPENFOAM.md](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/OPENFOAM.md). Assumptions: [external model card](../model-cards/openfoam-backend.md).
+Reproduction: [guide chapter 16](../guide/16-compare-solvers.md#mesh-levels-and-the-study-preset). Assumptions: [external model card](../model-cards/openfoam-backend.md).
 
 ## Implementation identities (SHA-256)
 

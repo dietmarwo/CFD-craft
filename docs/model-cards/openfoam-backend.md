@@ -151,7 +151,7 @@ against nature.
 Measurement screening of the wall-resolved package additionally requires this
 independent audit. A failed numerical/independent gate leaves the screen not
 assessed. Refinement skips finer cases after a coarse case is not accepted.
-The [tutorial](../../tutorials/backstep-resolution-prompt.md) and
+The [tutorial](../guide/18-backstep-resolution.md) and
 [results](../evidence/backstep-resolution.md) retain those failures.
 
 ## Bounded steady field continuation
@@ -195,7 +195,7 @@ A run that stops at its iteration limit writes a final field only when the
 limit is a multiple of the write cadence. Preparation uses the largest divisor
 of the limit up to 250, and rejects limits without a divisor between 50 and 250;
 6000 and 20000 keep cadence 250. See the
-[guide](../../integrations/STEADY_RESTART.md) and
+[guide](../guide/17-continuation-and-mapping.md) and
 [continuation results](../evidence/steady-continuation.md).
 
 ## Coarse-to-fine volume initialization
@@ -234,7 +234,7 @@ After a mapped solve completes, same-mesh continuation uses its actual final
 fields and phi under the existing gate. The new stage's receipt names the mapped
 parent and replaces the mapping receipt; source-grid work is not fine-grid
 work. No source-flux, final nonlinear, wall-y+ or measurement threshold changes.
-See the [guide](../../integrations/MESH_INITIALIZATION.md),
+See the [guide](../guide/17-continuation-and-mapping.md#start-a-finer-mesh),
 [plan](../history/05-mesh-initialization-plan.md) and
 [results](../evidence/mesh-initialization.md). The cavity comparison is
 numerical verification, the SST mapping check uses synthetic fields, and no
@@ -242,7 +242,7 @@ accepted fine backstep is claimed.
 
 ## Bounded mapped refinement campaign
 
-The [campaign driver](../../integrations/REFINEMENT_CAMPAIGN.md) snapshots an
+The [campaign driver](../guide/19-refinement-campaign.md) snapshots an
 accepted cold source that passes its audit and measurement screen, freezes
 producer identities and limits, maps to the next level once, and continues
 eligible completed stages on that same fine mesh. After each stage and at final

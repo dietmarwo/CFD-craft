@@ -208,6 +208,6 @@ directory; they passed on GitHub in run
 - **Native gates.** Native canyon throughput, building-wall treatment and
   measured canyon and gas qualification are separate and unchanged.
 
-The [guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/REFINEMENT_CAMPAIGN.md) and the
-[tutorial prompt](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/refinement-campaign-prompt.md) describe the
+The [guide](../guide/19-refinement-campaign.md) and the
+[tutorial prompt](../guide/19-refinement-campaign.md#a-task-for-an-agent) describe the
 workflow and the meaning of its verdicts.

@@ -3,7 +3,7 @@
 <!-- check: none: record of past runs -->
 
 These results cover same-mesh steady field continuation of the OpenFOAM
-backend ([guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/STEADY_RESTART.md),
+backend ([guide](../guide/17-continuation-and-mapping.md#continue-on-the-same-mesh),
 [plan](../history/04-steady-continuation-plan.md)). The
 [resolution results](backstep-resolution.md) record the wall-resolved reference
 recipe solved in one run. Rerun the commands and read the reports rather than

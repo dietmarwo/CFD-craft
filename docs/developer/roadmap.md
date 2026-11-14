@@ -55,7 +55,7 @@ fine-grid and experimental-validation gates remain open.
 | A development case and held-out geometry and wind cases | Yes, on a coarse grid |
 | Grid, domain and parameter sensitivity | Domain (extended outlet) and parameter (Sc_t 0.5 and 0.9) yes; grid no |
 | Measured-data comparison with a frozen protocol | Blocked: no data |
-| Prompt-driven tutorial with smoke and study presets | Yes ([tutorials](https://github.com/dietmarwo/CFD-craft/blob/main/tutorials/README.md)) |
+| Prompt-driven tutorial with smoke and study presets | Yes ([guide](../guide/README.md)) |
 | Runner integration that keeps CFD evidence | Yes (`integrations/`) |
 | Measured CPU time, peak memory and output size on named hardware | Yes (RESULTS) |
 
@@ -125,7 +125,7 @@ Open: a decision on defaults, masked multigrid P2b and setup costs P2c.
 The [mesh-initialization plan](../history/05-mesh-initialization-plan.md)
 provides an explicit accepted-coarse-to-new-fine start, verified against a cold
 fine cavity ([results](../evidence/mesh-initialization.md)). A bounded
-[refinement campaign](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/REFINEMENT_CAMPAIGN.md) maps once and
+[refinement campaign](../guide/19-refinement-campaign.md) maps once and
 chains eligible fine stages, with complete retained parents and work and
 archive checks; its [results](../evidence/refinement-campaign.md) record
 the declared level-2 backstep campaign: three 4000-iteration stages, each

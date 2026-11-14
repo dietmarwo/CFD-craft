@@ -170,7 +170,7 @@ They belong to the separate external artifact schema. E062/E063 are also used
 for occupied/unavailable external output paths. The external tools exit 0 for
 an accepted result, 2 for a completed, stopped or verified run without accepted
 evidence, and 1 for a failed execution or invalid input
-([backend guide](../integrations/OPENFOAM.md)).
+([backend guide](guide/15-openfoam-first-run.md)).
 
 | Code | Meaning |
 |---|---|

@@ -1,43 +1,35 @@
 # User-manual examples
 
-Start with [the manual](../../docs/USER_MANUAL.md). Run commands from the
-repository root, build with the lockfiles and choose new output names.
+The case and the programs that the [guide](../../docs/guide/README.md) runs.
+Run commands from the repository root, build with the lockfiles and choose new
+output names.
 
 ```sh
 cargo build --release --workspace --locked
 cargo build --release --workspace --examples --locked
 python -m pip install -r requirements-validation.txt
 mkdir -p runs
-python validation/manual_examples.py --output runs/manual-examples
+python scripts/check_docs.py --smoke
 ```
 
-The small suite executes actual native CLI, Rust and Python calls. It verifies
-source-rate units, linear source scaling, named receptor reads, cancelled and
-incomplete results, unchanged physical endpoint on restart, exact resumed/cold
-state equality, preview and VTK output. An incomplete native archive is read
-successfully without becoming numerically accepted. The Python workflow is
-run normally and under -O. This is API/numerical verification, not experimental
-qualification. `manual.<field>` failures carry CFD-U001 and preserve logs.
+The last command runs the code blocks of the guide and the READMEs and compares
+their outputs; [the developer pages](../../docs/developer/README.md) describe it.
+`python validation/manual_examples.py --output NEW_DIRECTORY` still runs these
+files as a fixed suite of 11 native steps, and with `--foam-root ROOT` the 8
+OpenFOAM steps. Both are API and numerical verification, not experimental
+validation.
 
-| File | Standalone command |
-|---|---|
-| [point-source.json](point-source.json) | `target/release/cfd-craft run examples/manual/point-source.json --output runs/point` |
-| [cli_workflow.py](cli_workflow.py) | `python examples/manual/cli_workflow.py --output runs/cli` |
-| [manual_library.rs](../../crates/cfd-craft/examples/manual_library.rs) | `cargo run --release --locked -p cfd-craft --example manual_library` |
-| [manual_control.rs](../../crates/cfd-craft/examples/manual_control.rs) | `cargo run --release --locked -p cfd-craft --example manual_control` |
-| [manual_checkpoint.rs](../../crates/cfd-craft/examples/manual_checkpoint.rs) | `cargo run --release --locked -p cfd-craft --example manual_checkpoint -- runs/checkpoint.json` |
-| [manual_archive.rs](../../crates/cfd-craft/examples/manual_archive.rs) | `cargo run --release --locked -p cfd-craft --example manual_archive -- runs/point` |
-| [openfoam_api.py](openfoam_api.py) | `python examples/manual/openfoam_api.py --foam-root /path/to/openfoam13 --output runs/foam-api` |
+| File | Used in | Standalone command |
+|---|---|---|
+| [point-source.json](point-source.json) | [Chapter 1](../../docs/guide/01-first-run.md), [chapter 3](../../docs/guide/03-cli-and-archive.md) and most native chapters | `target/release/cfd-craft run examples/manual/point-source.json --output runs/point` |
+| [cli_workflow.py](cli_workflow.py) | [Chapter 11](../../docs/guide/11-python.md#the-whole-native-workflow-in-one-script) | `python examples/manual/cli_workflow.py --output runs/cli` |
+| [manual_library.rs](../../crates/cfd-craft/examples/manual_library.rs) | [Chapter 20](../../docs/guide/20-rust-library.md#solve-in-process) | `cargo run --release --locked -p cfd-craft --example manual_library` |
+| [manual_control.rs](../../crates/cfd-craft/examples/manual_control.rs) | [Chapter 20](../../docs/guide/20-rust-library.md#cancellation-and-deadlines) | `cargo run --release --locked -p cfd-craft --example manual_control` |
+| [manual_checkpoint.rs](../../crates/cfd-craft/examples/manual_checkpoint.rs) | [Chapter 20](../../docs/guide/20-rust-library.md#checkpoint-round-trip) | `cargo run --release --locked -p cfd-craft --example manual_checkpoint -- runs/checkpoint.json` |
+| [manual_archive.rs](../../crates/cfd-craft/examples/manual_archive.rs) | [Chapter 20](../../docs/guide/20-rust-library.md#read-a-cli-archive) | `cargo run --release --locked -p cfd-craft --example manual_archive -- runs/point` |
+| [openfoam_api.py](openfoam_api.py) | [Chapter 15](../../docs/guide/15-openfoam-first-run.md#use-the-adapter-from-python) | `python examples/manual/openfoam_api.py --foam-root ROOT --output runs/foam-api` |
 
-The OpenFOAM example is separate and optional. It runs a bounded Foundation-13
-cavity using the real source-checkout adapter API, with prepare/run/verify and
-numerical assessment. Install the pinned runtime as described in
-[OPENFOAM.md](../../integrations/OPENFOAM.md). It does not use the native run
-schema, and its result must be inspected with the external verifier.
-`python validation/manual_examples.py --foam-root <runtime root> --output <new
-directory>` runs it together with the manual's other OpenFOAM recipes.
-
-The Rust library examples configure their own Rayon pool. A bare solver result
-has no CLI source/compiler fingerprint added by the caller; see the manual's
-provenance section before publishing application archives. The checkpoint demo
-writes a checkpoint file only, not a complete native run directory.
+The OpenFOAM example is optional and needs the pinned Foundation 13 runtime of
+[chapter 15](../../docs/guide/15-openfoam-first-run.md). The Rust examples
+configure their own Rayon pool; the checkpoint example writes a checkpoint
+file, not a run directory.

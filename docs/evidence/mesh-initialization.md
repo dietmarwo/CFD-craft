@@ -3,7 +3,7 @@
 <!-- check: none: record of past runs -->
 
 These results cover one-level mesh initialization of the OpenFOAM backend
-([guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/MESH_INITIALIZATION.md),
+([guide](../guide/17-continuation-and-mapping.md#start-a-finer-mesh),
 [plan](../history/05-mesh-initialization-plan.md)). The
 [continuation results](steady-continuation.md) and the
 [resolution results](backstep-resolution.md) record the accepted level-1

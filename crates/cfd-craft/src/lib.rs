@@ -138,10 +138,10 @@
 //!   `report`, `verify`) with checksummed archives, restarts and signals.
 //! - [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/): the Python
 //!   binding (`check`, `simulate`, `describe`), see the
-//!   [Python guide](https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md).
-//! - The [user manual](https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md)
-//!   explains architecture, numerical and evidence concepts and has
-//!   examples; its [Rust library section](https://github.com/dietmarwo/CFD-craft/blob/main/docs/USER_MANUAL.md#rust-library-api)
+//!   [Python chapter](https://dietmarwo.github.io/CFD-craft/guide/11-python.html).
+//! - The [guide](https://dietmarwo.github.io/CFD-craft/guide/) explains the
+//!   numerical and evidence concepts in worked chapters, ordered by
+//!   difficulty; its [Rust library chapter](https://dietmarwo.github.io/CFD-craft/guide/20-rust-library.html)
 //!   covers this crate.
 //! - The [result contract](https://github.com/dietmarwo/CFD-craft/blob/main/docs/result-contract.md)
 //!   defines termination, assessment, archives and identities; the

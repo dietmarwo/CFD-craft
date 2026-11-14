@@ -128,7 +128,7 @@ python validation/compare_backends.py --grid-sweep \
   --foam-iterations 3000 --output runs/accuracy-sweep
 ```
 
-Install the pinned runtime through the [backend guide](https://github.com/dietmarwo/CFD-craft/blob/main/integrations/OPENFOAM.md).
+Install the pinned runtime through the [backend guide](../guide/15-openfoam-first-run.md#install-the-pinned-runtime).
 The sweep keeps one warmup and the requested timed rows for each configuration,
 alternating native/OpenFOAM order within each grid block. It adds a native 12²
 diagnostic. Supported paired levels 1,2,3 mean 24²,48²,72² in the flow plane.

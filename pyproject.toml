@@ -21,7 +21,7 @@ classifiers = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/dietmarwo/CFD-craft/blob/main/docs/PYTHON.md"
+Documentation = "https://dietmarwo.github.io/CFD-craft/"
 Issues = "https://github.com/dietmarwo/CFD-craft/issues"
 Changelog = "https://github.com/dietmarwo/CFD-craft/blob/main/CHANGELOG.md"
 "Optimization ecosystem" = "https://dietmarwo.github.io/optimization-jobs/"

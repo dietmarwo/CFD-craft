@@ -302,13 +302,13 @@ fn check_path_segments(g: &Grid, receptor: &Receptor) -> Result<()> {
     }
     for (segment_index, segment) in polyline_m.windows(2).enumerate() {
         let mut crossings = vec![0.0, 1.0];
-        for axis in 0..2 {
-            let delta = segment[1][axis] - segment[0][axis];
+        for (axis, (&start, &end)) in segment[0].iter().zip(&segment[1]).enumerate() {
+            let delta = end - start;
             if delta == 0.0 {
                 continue;
             }
             for k in 1..g.n[axis] {
-                let t = (k as f64 * g.dx[axis] - segment[0][axis]) / delta;
+                let t = (k as f64 * g.dx[axis] - start) / delta;
                 if t > 0.0 && t < 1.0 {
                     crossings.push(t);
                 }

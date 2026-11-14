@@ -45,6 +45,8 @@
 - [20. The Rust library](guide/20-rust-library.md)
 - [21. Troubleshooting](guide/21-troubleshooting.md)
 
+- [Urban geometry, particles and vegetation (source extension)](guide/22-urban-geometry-particles-vegetation.md)
+
 # Reference
 
 - [Reference](reference/README.md)

@@ -1,5 +1,11 @@
 # CFD-craft, OpenFOAM and Ansys Fluent
 
+The unreleased source adds optional polygon prisms, masked multigrid, particle
+settling/deposition and porous vegetation. These additions are numerically
+verified and experimentally unvalidated; the district throughput/rotation gates
+remain open. The released 0.1.1 comparisons below keep their recorded scope.
+See [the urban evidence](evidence/urban-extension.md) for source-extension results.
+
 Version 0.1.1 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
 This page compares CFD-craft 0.1.1 with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.

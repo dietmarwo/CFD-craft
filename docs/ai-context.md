@@ -148,8 +148,8 @@ pressure preconditioner, and they stay. For a steady run, opt in with
 implicit_projection`, `pressure_relative_tolerance` 0.1, `max_time_step_s` 100
 and, for a two-dimensional problem, one cell on the periodic axis. On the
 cavity this reaches the same accepted steady state in far fewer iterations.
-`pressure_preconditioner = multigrid` is rejected for a case with `geometry`
-(`CFD-E034`). See
+The unreleased source also accepts masked multigrid, preserving connected
+components and separate gauges. See
 [the implicit recipe](guide/09-opt-in-numerics.md#the-implicit-recipe) and the
 [implicit steady results](evidence/implicit-steady.md).
 
@@ -175,8 +175,10 @@ and [19](guide/19-refinement-campaign.md) cover it.
 
 Version 0.1.1 models uniform Cartesian grids with box-shaped solids, laminar
 flow, one neutral k-epsilon package and passive gas. It does not model
-particles, deposition, vegetation, LES, chemistry, stretched grids or GPU
-execution. The fcmaes worker supports prescribed-flow, three-source scalar
+LES, chemistry, stretched grids or GPU execution. This unreleased source
+checkout adds opt-in polygon prisms, particle settling/deposition and vegetation;
+see [the urban guide](guide/22-urban-geometry-particles-vegetation.md) and its open
+performance/rotation gates. The fcmaes worker supports prescribed-flow, three-source scalar
 allocation only. Nothing is experimentally validated; the canyon validation
 gate (measured data and a grid study) is open. The
 [model cards](model-cards/README.md) state the scope of each component.
@@ -186,3 +188,15 @@ gate (measured data and a grid study) is open. The
 Changing the solver: start at the [developer pages](developer/README.md) and
 follow
 [`AGENTS.md`](https://github.com/dietmarwo/CFD-craft/blob/main/AGENTS.md).
+
+
+## Urban source extension
+
+See [chapter22](guide/22-urban-geometry-particles-vegetation.md). `geometry[].footprint_m`,
+`building_roughness_m`, `constituents[].particle` and `vegetation` are optional.
+Use declared budgets and independent archived-field checks. Source-extension
+masked multigrid supports disconnected components. The optional worker adds
+`app.cfd.wind-direction`; full field-retaining campaigns can use the existing
+trusted-command runner with `urban_campaign.py --runner`. G1/G3 and practical
+district qualification remain open; completed orchestration is not accepted
+urban physics. No GPU or new OpenFOAM urban model is implemented.

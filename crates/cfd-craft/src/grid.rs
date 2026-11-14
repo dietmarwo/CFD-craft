@@ -143,6 +143,8 @@ pub struct Grid {
     /// Per geometry box ID, the number of cells whose center lies inside it;
     /// overlapping boxes share cells.
     pub box_cells: BTreeMap<String, usize>,
+    /// Per-shape analytic and represented volumes and adjacent street resolution.
+    pub shape_evidence: BTreeMap<String, ShapeEvidence>,
     /// IC(0) factor of the pressure operator, built by the first IC(0)
     /// pressure solve and reused afterwards. It is only a preconditioner and
     /// is not rebuilt if face coefficients change.
@@ -176,6 +178,24 @@ pub struct GeometryEvidence {
     pub mask_sha256: String,
     /// Cells whose center lies inside each box, by box ID; overlapping boxes share cells.
     pub box_cells: BTreeMap<String, usize>,
+    /// Shape-local discretization evidence; overlaps are counted per shape.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub shapes: BTreeMap<String, ShapeEvidence>,
+}
+/// Discretization of one box or polygon prism, independent of flow acceptance.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ShapeEvidence {
+    /// Number of contained solid cell centers.
+    pub solid_cells: usize,
+    /// Analytic shape volume in m3 (overlaps counted separately).
+    pub exact_volume_m3: f64,
+    /// Contained cell count times uniform cell volume.
+    pub represented_volume_m3: f64,
+    /// Represented minus exact volume in m3.
+    pub volume_error_m3: f64,
+    /// Narrowest horizontal fluid run from this shape to any other solid.
+    /// Null when no such bounded run is represented.
+    pub narrowest_fluid_passage_cells: Option<usize>,
 }
 /// Topology of a case's cell mask, from [`Grid::mask_topology`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -242,6 +262,7 @@ impl Grid {
             face_dims: [n; 3],
             offsets: [0; 3],
             box_cells: BTreeMap::new(),
+            shape_evidence: BTreeMap::new(),
             pressure_factor: std::sync::OnceLock::new(),
             pressure_preconditioner: c.numerics.pressure_preconditioner,
             pressure_multigrid: Default::default(),
@@ -253,7 +274,7 @@ impl Grid {
         for i in 0..count {
             let p = g.center(i);
             for (b, n) in c.geometry.iter().zip(box_cells.iter_mut()) {
-                if (0..3).all(|a| p[a] >= b.min_m[a] && p[a] < b.max_m[a]) {
+                if b.contains(p) {
                     g.fluid[i] = false;
                     *n += 1;
                 }
@@ -273,6 +294,46 @@ impl Grid {
             .map(|b| b.id.clone())
             .zip(box_cells)
             .collect();
+        for b in &c.geometry {
+            let mut passage: Option<usize> = None;
+            for i in 0..count {
+                if !b.contains(g.center(i)) {
+                    continue;
+                }
+                let q = g.coord(i);
+                for axis in 0..2 {
+                    for sign in [-1isize, 1] {
+                        let mut next = q.map(|v| v as isize);
+                        next[axis] += sign;
+                        let mut width = 0;
+                        while (0..n[axis] as isize).contains(&next[axis]) {
+                            let j = Self::index(n, next.map(|v| v as usize));
+                            if !g.fluid[j] {
+                                if width > 0 {
+                                    passage = Some(passage.map_or(width, |old| old.min(width)));
+                                }
+                                break;
+                            }
+                            width += 1;
+                            next[axis] += sign;
+                        }
+                    }
+                }
+            }
+            let cells = g.box_cells[&b.id];
+            let exact = b.volume();
+            let represented = cells as f64 * volume;
+            g.shape_evidence.insert(
+                b.id.clone(),
+                ShapeEvidence {
+                    solid_cells: cells,
+                    exact_volume_m3: exact,
+                    represented_volume_m3: represented,
+                    volume_error_m3: represented - exact,
+                    narrowest_fluid_passage_cells: passage,
+                },
+            );
+        }
         if !g.fluid.iter().any(|b| *b) {
             return Err("CFD-E030: geometry contains no fluid cells".into());
         }
@@ -432,10 +493,7 @@ impl Grid {
         for (i, p) in parent.iter_mut().enumerate() {
             let q = [i % n[0], i / n[0] % n[1], i / (n[0] * n[1])];
             let x: [f64; 3] = std::array::from_fn(|a| (q[a] as f64 + 0.5) * dx[a]);
-            if c.geometry
-                .iter()
-                .any(|b| (0..3).all(|a| x[a] >= b.min_m[a] && x[a] < b.max_m[a]))
-            {
+            if c.geometry.iter().any(|b| b.contains(x)) {
                 *p = SOLID;
                 solid_cells += 1;
             }
@@ -492,6 +550,7 @@ impl Grid {
             solid_volume_m3: (self.count() - fluid_cells) as f64 * self.volume,
             mask_sha256: hash_bytes(&self.fluid.iter().map(|v| u8::from(*v)).collect::<Vec<_>>()),
             box_cells: self.box_cells.clone(),
+            shapes: self.shape_evidence.clone(),
         }
     }
     /// The same-axis neighbors of every face in direction d and side (lower,

@@ -266,3 +266,40 @@ measurement-time checks but fails revalidation after all child runs. The row
 retains `accepted_at_measurement`, gains `collection_verified=false` and is
 excluded from qualifying costs. `sweep.collection.manifest` identifies a changed
 sealed manifest. Collection does not repair files or relax archive checks.
+
+`CFD-E080 constituents[i].particle.<field>` rejects a nonfinite or out-of-range
+spherical aerosol diameter (1e-8..1e-4 m), density (above reference air and at most
+30000 kg/m3), or settling/deposition speed (0..10 m/s). `CFD-E081
+constituents[i].particle.settling_velocity_m_s` rejects a computed
+Stokes–Cunningham speed outside its creeping-flow range (particle Reynolds
+number above 0.1). A separately justified direct speed bypasses that formula;
+it does not validate the particle physics.
+
+`CFD-E082 vegetation[i].<field>` rejects a duplicate/empty canopy ID, an
+invalid box, or nonfinite/out-of-range canopy parameters: LAD 0..100 m2/m3,
+drag coefficient 0..10, leaf collection velocity 0..10 m/s.
+`CFD-E083 vegetation[i].drag_coefficient` rejects positive drag with a
+prescribed velocity, because no momentum response would be solved. Use zero
+drag for a prescribed-flow leaf-collection study, or solve laminar/RANS flow.
+
+## Urban geometry and campaign additions
+
+| Code | Path | Meaning |
+|---|---|---|
+| CFD-E084 | `geometry[i].footprint_m`, `geometry_min_passage_cells` | Invalid/self-intersecting polygon, mismatched footprint bounds or nonpositive passage-resolution request |
+| CFD-E085 | `building_roughness_m` | Building roughness must be finite, positive and used with neutral RANS |
+| CFD-W011 | `geometry_min_passage_cells` | A represented horizontal street between solids has fewer cells than requested |
+| CFD-M001 | `map` | Converter rejected source geometry, coordinates, elevation range, provenance or native case check; the message names the reason |
+| CFD-U001 | `campaign` | Urban campaign input, budget, worker or native archive error; failed rows are retained |
+
+`CFD-E034` now covers invalid multigrid topology/weights; geometry masks and
+multiple fluid components are supported. `CFD-E070` retains its host-memory
+meaning. `CFD-E028` remains an error when a shape vanishes under cell-center
+masking: a warning must never silently remove a building from the physics.
+
+For opt-in particles, `CFD-E020 run.mode` admits a closed-air source only with
+a declared removal candidate, and `CFD-E043 sources[i]` then requires an actual
+positive represented ground/roof/leaf removal mechanism in the same fluid
+component as each source support cell. A sink in another component or a canopy
+volume that misses all fluid-cell centers does not qualify. Passive gases keep
+the original outlet requirement. Admissibility does not establish convergence.

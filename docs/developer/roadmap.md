@@ -1,5 +1,13 @@
 # Roadmap
 
+Source update2026-11-14: the opt-in urban extension implements masked multigrid,
+polygon prisms/map conversion, M5a particle bins/deposition and M5b porous
+vegetation with verification fixtures. These are unreleased and experimentally
+unvalidated. District throughput, rotation/refinement qualification and the
+validation track remain open. Read the [guide](../guide/22-urban-geometry-particles-vegetation.md)
+and [evidence](../evidence/urban-extension.md). Existing release claims below
+refer to their recorded versions.
+
 This page maps the development plan (version 2, which replaces the initial plan) to what 0.1.1 contains, and lists the next steps. The plan's proposed case file is a draft; the schemas from `cfd-craft describe` are authoritative. [RESULTS](../evidence/native-verification.md) holds the numbers.
 
 An [external-backend workstream](../history/02-external-validation-plan.md) runs

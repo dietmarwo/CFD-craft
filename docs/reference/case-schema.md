@@ -17,10 +17,12 @@ Unknown fields are rejected.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `boundaries` | [Boundaries](#boundaries) | required |  |
+| `building_roughness_m` | `number` or `null` | optional | Optional aerodynamic roughness of building walls in meters, independent of cell width. Omission reproduces the legacy wall recipe (CFD-E085). |
 | `constituents` | array of [Constituent](#constituent) | default `[]` | Passive gases transported by the flow. Default: empty, which solves the flow only. |
 | `domain` | [Domain](#domain) | required |  |
 | `flow` | [Flow](#flow) | required |  |
-| `geometry` | array of [Block](#block) | default `[]` | Axis-aligned solid boxes (buildings, obstacles). A cell is solid when its center lies inside a box. Not allowed with `prescribed_uniform` flow (CFD-E013) or with the `multigrid` pressure preconditioner (CFD-E034). Default: empty. |
+| `geometry` | array of [Block](#block) | default `[]` | Axis-aligned solid boxes (buildings, obstacles). A cell is solid when its center lies inside a box. Not allowed with `prescribed_uniform` flow (CFD-E013). Optional footprint_m selects polygon prisms. Masked multigrid is supported. Default: empty. |
+| `geometry_min_passage_cells` | `integer` or `null` (>= 0) | optional | Warn if a represented street between solids is narrower than this number of horizontal cells. Omitted for legacy cases (CFD-W011). |
 | `grid` | [GridSpec](#gridspec) | required |  |
 | `initial_conditions` | array of [Initial](#initial) | default `[]` | Initial concentration fields, at most one per constituent (CFD-E018); a constituent without one starts at zero. Default: empty. |
 | `moving_walls` | array of [MovingWall](#movingwall) | default `[]` | Tangentially moving `wall` faces of the domain, such as a cavity lid; laminar flow only (CFD-E021). Default: empty. |
@@ -31,6 +33,7 @@ Unknown fields are rejected.
 | `run` | [Run](#run) | required |  |
 | `schema_version` | `string` | required | Contract version; must be `cfd-craft.case/0.1` (CFD-E001). |
 | `sources` | array of [Source](#source) | default `[]` | Continuous emissions into the constituents. Default: empty. |
+| `vegetation` | array of [Vegetation](#vegetation) | optional | Opt-in porous canopy boxes; zero leaf density has no numerical effect. |
 
 ### Advection
 
@@ -46,6 +49,7 @@ Unknown fields are rejected.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `footprint_m` | `array` or `null` | optional | Optional simple footprint polygon in local x/y meters. With this field the shape is a prism between min_m[2] and max_m[2]; the other bounds must equal the footprint bounds. Holes and self-intersections are rejected (CFD-E084). Omission selects the original box. |
 | `id` | `string` | required | Unique nonempty ID (CFD-E014); the key of the box's cell count in geometry.json. |
 | `max_m` | array of 3 `number` | required | Upper corner [x, y, z] in meters. |
 | `min_m` | array of 3 `number` | required | Lower corner [x, y, z] in meters. |
@@ -68,6 +72,15 @@ Boundary condition of the pair of domain faces normal to one axis. `periodic` id
 
 Allowed values: `periodic`, `open`, `wall`, `slip`, `ground_open_top`.
 
+### CanopyClosure
+
+Published canopy source-coefficient set; the ambient k-epsilon constants are unchanged. Both alternatives are unvalidated in this urban solver.
+
+| Value | Description |
+|---|---|
+| `green1992` | Green (1992): beta_p=1, beta_d=4, C_e4=C_e5=1.5. |
+| `sanz2003` | Sanz/Katul: beta_p=1, beta_d=5.1, C_e4=C_e5=0.9. |
+
 ### Constituent
 
 A passive gas: transported and diffused by the flow without affecting it. Concentrations are in kg/m3.
@@ -78,6 +91,7 @@ Unknown fields are rejected.
 |---|---|---|---|
 | `diffusivity_m2_s` | `number` | required | Molecular diffusivity in m2/s, finite and nonnegative (CFD-E015). With `neutral_rans` the turbulent diffusivity nu_t/Sc_t is added. |
 | `id` | `string` | required | Unique nonempty ID (CFD-E015), referenced by sources and initial conditions and used in the result. |
+| `particle` | [ParticleBin](#particlebin) or `null` | optional | Optional spherical aerosol bin. Omitted for gases, preserving old hashes. |
 
 ### Domain
 
@@ -240,6 +254,20 @@ Unknown fields are rejected.
 | `fields` | `boolean` | required | Write fields.json, the full final state including the native face velocities. |
 | `max_total_mib` | `integer` (>= 0) | required | Budget for all artifacts in MiB. The preflight estimate must fit (CFD-E007); at publication, fields and checkpoint are omitted and listed in the manifest when they would exceed it (CFD-E061). |
 
+### ParticleBin
+
+Dilute spherical particle bin, with no feedback, chemistry or resuspension. The declared deposition velocities exclude gravitational settling, which is added separately on upward-facing ground and roofs.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `density_kg_m3` | `number` | required | Particle material density in kg/m3, above the reference air density. |
+| `diameter_m` | `number` | required | Geometric diameter in meters (1e-8..1e-4). |
+| `ground_deposition_velocity_m_s` | `number` | default `0.0` | Additional ground deposition speed, in m/s, excluding settling. |
+| `roof_deposition_velocity_m_s` | `number` | default `0.0` | Additional roof deposition speed, in m/s, excluding settling. |
+| `settling_velocity_m_s` | `number` or `null` | optional | Direct nonnegative settling speed, bypassing the Stokes validity gate. |
+
 ### PressurePreconditioner
 
 Preconditioner of the pressure PCG solve. `ic0` (the default) is an incomplete Cholesky factor built once per grid and works on every grid. `multigrid` is a fixed symmetric geometric multigrid cycle for unmasked grids only (CFD-E034); strongly anisotropic spacings select line or plane smoothing and draw warning CFD-W004. Both solve the same equation to the same tolerance and recomputed residual.
@@ -347,3 +375,19 @@ Steady pseudo-time algorithm. `explicit` is the SSPRK2 march of the earlier rele
 | `explicit` | SSPRK2 pseudo-time steps with a projection per stage, limited by advection and diffusion together (default). |
 | `implicit_viscous` | SSPRK2 stages with an implicit viscous term: (I − Δτ L_ν) δ = Δτ R. |
 | `implicit_projection` | One implicit correction per outer iteration, A δ = R with a Picard first-order upwind and viscous Jacobian and a CFL ramp, followed by a projection at the pseudo-time step (a SIMPLEC-type coupling). |
+
+### Vegetation
+
+Flat-ground porous vegetation volume. Box membership uses cell centers, lower-inclusive and upper-exclusive, exactly as building masks.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `drag_coefficient` | `number` | required | Dimensionless form-drag coefficient. |
+| `id` | `string` | required | Unique nonempty volume ID. |
+| `leaf_area_density_m2_m3` | `number` | required | Leaf area per air volume, in m2/m3 (inverse meters). |
+| `leaf_deposition_velocity_m_s` | `number` | default `0.0` | Particle collection velocity per leaf area, m/s; excludes settling. |
+| `max_m` | array of 3 `number` | required | Box upper corner in meters. |
+| `min_m` | array of 3 `number` | required | Box lower corner in meters. |
+| `turbulence_closure` | [CanopyClosure](#canopyclosure) | default `"green1992"` | Canopy k-epsilon source coefficient set. |

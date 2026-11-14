@@ -1,8 +1,9 @@
 # Symmetric pressure multigrid
 
 `numerics.pressure_preconditioner` selects `ic0` (default) or `multigrid`.
-Multigrid currently accepts unmasked Cartesian cases. A geometry mask is a case
-error (`CFD-E034`), with no automatic fallback. Laminar and neutral-RANS pressure
+Multigrid accepts unmasked Cartesian cases and, in the unreleased source
+extension, masked cases with disconnected fluid components. Masked cases use
+the connected-aggregate path below. Laminar and neutral-RANS pressure
 use the same constant-density operator; no flow, scalar or turbulence model is
 changed. Prescribed-flow runs bypass pressure and gain no acceleration from this
 selection. Strong anisotropy now selects exact principal-line/small-plane
@@ -232,8 +233,8 @@ The opt-in **CFD checks** selector `external=pressure` runs this original campai
 and packages evidence with directory entries and archive round-trip checks.
 See [recorded results](../evidence/pressure-multigrid.md) and the
 [plan](../history/18-pressure-multigrid-plan.md). No timing threshold is imposed
-in ordinary CI. Masked-grid multigrid (P2b) and the hierarchy setup cost (P2c)
-remain separate follow-ups; anisotropic line blocks (P2a), second-order momentum
+in ordinary CI. Masked-grid multigrid (P2b) and setup-cost measurements (P2c)
+are now implemented in the source extension, with coupled qualification still open; anisotropic line blocks (P2a), second-order momentum
 and the implicit steady algorithms were added later. This change alone
 does not qualify a canyon model or establish OpenFOAM parity.
 
@@ -255,3 +256,52 @@ records this selection in its immutable accuracy plan. Its default remains
 Hosted runs can select `external=accuracy, native_pressure=multigrid`.
 See the [iteration plan](../history/19-anisotropic-pressure-plan.md) and
 [remaining gap and work](../evidence/performance-gap-status.md).
+
+## Masked connected aggregates (urban U1 / P2b)
+
+The masked path compacts fluid unknowns and leaves solid entries exactly zero.
+Each coarsening step forms geometric 2x2x2 bins, then splits every bin by
+connectivity in the actual fine/coarse face graph. Sharing a bin is not enough
+to aggregate: there must be a fluid path wholly inside it. Coarse coordinates
+retain their geometric bins; thin passages, sealed pockets and outlets remain
+in the graph. This includes periodic wrap faces and single-cell periodic axes.
+
+Prolongation P is piecewise-constant injection, with one unit coefficient per
+fine fluid row. Distinct aggregate columns have disjoint, nonempty support,
+so P has full column rank. Restriction is P transpose. Summing original edge
+energies between distinct aggregates and summing outlet anchors gives exactly
+A_c = P transpose A P. Internal aggregate edges vanish. No rediscretized wider
+face, diagonal shift or solid-cell pressure equation is introduced. This
+coarsening is intentionally different from the existing unmasked linear
+interpolation path; that path and its anisotropic line smoothers remain intact.
+
+Every closed component is centered separately at every cycle stage. Smoothing
+is two forward Gauss–Seidel sweeps before the coarse correction and two backward
+sweeps after it. A zero-diagonal sealed singleton is an entirely null space and
+gets zero correction. Once each component has at most32 unknowns, remove one
+gauge per sealed component and apply a direct Cholesky solve component by
+component. Anchored components keep all their unknowns. The terminal direct
+lookup scales with the component size; many isolated pockets do not cause a
+quadratic all-grid initialization.
+
+The fixed aggregate hierarchy, transpose transfers, positive principal
+Gauss–Seidel factors, orthogonal component gauges and positive coarse inverse
+produce a fixed symmetric positive preconditioner on the compatible pressure
+space. Independent full-cycle matrices, dense Galerkin products and a separate
+pivoted dense reference supplement this argument. Fixtures include mixed
+anchored/sealed components, incompatible tiny singleton flux, barriers, narrow
+passages, projection, changed coefficients and transactional cancellation.
+The fine PCG operator and final face residual use the existing pressure code.
+
+The exact cache signature includes all fluid flags, anchor flags, dimensions,
+spacing bits and pressure face coefficients. Masked aggregate levels are
+irregular, so `level_dimensions` is omitted; actual `level_cells`, nonzeros,
+retained storage and work are reported. The existing conservative per-cell
+memory allowance covers this path. Construction polls cancellation between
+levels and during connectivity and aggregation scans. The first setup is
+measured separately from reused cycles (P2c).
+
+A successful preconditioner verification does not close the coupled performance
+gate. The [urban evidence](../evidence/urban-extension.md) reports both setup and
+whole-run costs and preserves failed93k and district rows. General anisotropic
+masked robustness and practical million-cell throughput remain unqualified.

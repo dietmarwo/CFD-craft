@@ -65,6 +65,7 @@ fn describe() -> Result<()> {
         "name":"CFD-craft","version":env!("CARGO_PKG_VERSION"),
         "source_sha256":source_sha256(),"compiler":env!("CFD_RUSTC"),
         "physics":["prescribed_uniform","laminar","neutral_rans"],
+        "geometry_kinds":["box","polygon_prism"],"urban_extensions":["masked_multigrid","particle_bins","settling","surface_deposition","vegetation_drag","leaf_deposition"],
         "scalar_advection":["linear_upwind","muscl"],"pressure":"matrix_free_ic0_pcg",
         "pressure_preconditioners":["ic0","multigrid"],"default_pressure_preconditioner":"ic0",
         "momentum_advection":["donor_cell","second_order_upwind","limited_upwind"],"default_momentum_advection":"donor_cell",
@@ -79,7 +80,7 @@ fn describe() -> Result<()> {
             "1":"invalid input or an execution/I/O error; check reports are printed on stdout",
             "2":"completed execution with incomplete or failed numerical evidence"},
         "experimental_validation":"not_validated",
-        "limitations":["uniform Cartesian grids","boxes","first-order donor-cell momentum by default; opt-in second-order momentum","explicit diffusion and pseudo-time by default; opt-in implicit steady pseudo-time (implicit_projection also with neutral_rans; constituents in explicit sub-steps)","no particles, vegetation, LES, annual statistics or GPU"]
+        "limitations":["uniform Cartesian grids","box and polygon-prism cell-center masks","first-order donor-cell momentum by default; opt-in second-order momentum","explicit diffusion and pseudo-time by default; opt-in implicit steady pseudo-time (implicit_projection also with neutral_rans; constituents in explicit sub-steps)","opt-in spherical particle bins with settling/deposition and porous vegetation; unvalidated physics","no LES, chemistry, terrain, annual statistics or GPU"]
     }))
 }
 

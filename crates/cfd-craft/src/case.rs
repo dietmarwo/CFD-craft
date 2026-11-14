@@ -106,10 +106,18 @@ pub struct Case {
     pub flow: Flow,
     /// Axis-aligned solid boxes (buildings, obstacles). A cell is solid when
     /// its center lies inside a box. Not allowed with `prescribed_uniform`
-    /// flow (CFD-E013) or with the `multigrid` pressure preconditioner
-    /// (CFD-E034). Default: empty.
+    /// flow (CFD-E013). Optional footprint_m selects polygon prisms.
+    /// Masked multigrid is supported. Default: empty.
     #[serde(default)]
     pub geometry: Vec<Block>,
+    /// Optional aerodynamic roughness of building walls in meters, independent
+    /// of cell width. Omission reproduces the legacy wall recipe (CFD-E085).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub building_roughness_m: Option<f64>,
+    /// Warn if a represented street between solids is narrower than this
+    /// number of horizontal cells. Omitted for legacy cases (CFD-W011).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry_min_passage_cells: Option<usize>,
     /// Tangentially moving `wall` faces of the domain, such as a cavity lid;
     /// laminar flow only (CFD-E021). Default: empty.
     #[serde(default)]
@@ -118,6 +126,9 @@ pub struct Case {
     /// the flow only.
     #[serde(default)]
     pub constituents: Vec<Constituent>,
+    /// Opt-in porous canopy boxes; zero leaf density has no numerical effect.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vegetation: Vec<Vegetation>,
     /// Continuous emissions into the constituents. Default: empty.
     #[serde(default)]
     pub sources: Vec<Source>,
@@ -409,6 +420,30 @@ pub struct Block {
     pub min_m: [f64; 3],
     /// Upper corner [x, y, z] in meters.
     pub max_m: [f64; 3],
+    /// Optional simple footprint polygon in local x/y meters. With this field
+    /// the shape is a prism between min_m[2] and max_m[2]; the other bounds
+    /// must equal the footprint bounds. Holes and self-intersections are
+    /// rejected (CFD-E084). Omission selects the original box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footprint_m: Option<Vec<[f64; 2]>>,
+}
+impl Block {
+    /// Cell-center containment, with lower bounds inclusive and upper exclusive.
+    pub fn contains(&self, p: [f64; 3]) -> bool {
+        (0..3).all(|a| p[a] >= self.min_m[a] && p[a] < self.max_m[a])
+            && self
+                .footprint_m
+                .as_ref()
+                .is_none_or(|v| crate::geometry::contains(v, [p[0], p[1]]))
+    }
+    /// Exact geometric volume of this box or polygon prism in m3.
+    pub fn volume(&self) -> f64 {
+        let area = self.footprint_m.as_ref().map_or(
+            (self.max_m[0] - self.min_m[0]) * (self.max_m[1] - self.min_m[1]),
+            |p| crate::geometry::area(p),
+        );
+        area * (self.max_m[2] - self.min_m[2])
+    }
 }
 /// A tangential velocity of one `wall` face of the domain, such as a cavity
 /// lid. Laminar flow only, at most one per face, and the velocity component
@@ -437,6 +472,113 @@ pub struct Constituent {
     /// Molecular diffusivity in m2/s, finite and nonnegative (CFD-E015).
     /// With `neutral_rans` the turbulent diffusivity nu_t/Sc_t is added.
     pub diffusivity_m2_s: f64,
+    /// Optional spherical aerosol bin. Omitted for gases, preserving old hashes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub particle: Option<ParticleBin>,
+}
+/// Dilute spherical particle bin, with no feedback, chemistry or resuspension.
+/// The declared deposition velocities exclude gravitational settling, which is
+/// added separately on upward-facing ground and roofs.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleBin {
+    /// Geometric diameter in meters (1e-8..1e-4).
+    pub diameter_m: f64,
+    /// Particle material density in kg/m3, above the reference air density.
+    pub density_kg_m3: f64,
+    /// Direct nonnegative settling speed, bypassing the Stokes validity gate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settling_velocity_m_s: Option<f64>,
+    /// Additional ground deposition speed, in m/s, excluding settling.
+    #[serde(default)]
+    pub ground_deposition_velocity_m_s: f64,
+    /// Additional roof deposition speed, in m/s, excluding settling.
+    #[serde(default)]
+    pub roof_deposition_velocity_m_s: f64,
+}
+impl ParticleBin {
+    /// Cunningham-corrected spherical terminal speed at the declared reference
+    /// atmosphere (293.15 K, 101325 Pa): rho_air=1.204 kg/m3,
+    /// mu=1.81e-5 Pa s, lambda=6.6e-8 m, g=9.80665 m/s2.
+    pub fn settling_speed(&self) -> f64 {
+        self.settling_velocity_m_s.unwrap_or_else(|| {
+            (self.density_kg_m3 - 1.204)
+                * 9.80665
+                * self.diameter_m.powi(2)
+                * Self::slip(self.diameter_m)
+                / (18.0 * 1.81e-5)
+        })
+    }
+    /// Particle Reynolds number under the reference atmosphere.
+    pub fn reynolds_number(&self) -> f64 {
+        1.204 * self.settling_speed() * self.diameter_m / 1.81e-5
+    }
+    /// Equivalent unit-density spherical aerodynamic diameter, including slip.
+    /// PM sums use this diameter, not the geometric diameter.
+    pub fn aerodynamic_diameter_m(&self) -> f64 {
+        if self.density_kg_m3 == 1000.0 {
+            return self.diameter_m;
+        }
+        let target = (self.density_kg_m3 - 1.204) / (1000.0 - 1.204)
+            * self.diameter_m.powi(2)
+            * Self::slip(self.diameter_m);
+        let (mut lo, mut hi) = (0.0, self.diameter_m * self.density_kg_m3.sqrt().max(1.0));
+        for _ in 0..80 {
+            let mid = 0.5 * (lo + hi);
+            if mid * mid * Self::slip(mid) < target {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        0.5 * (lo + hi)
+    }
+    fn slip(d: f64) -> f64 {
+        let kn = 2.0 * 6.6e-8 / d;
+        1.0 + kn * (1.257 + 0.4 * (-1.1 / kn).exp())
+    }
+}
+/// Published canopy source-coefficient set; the ambient k-epsilon constants
+/// are unchanged. Both alternatives are unvalidated in this urban solver.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CanopyClosure {
+    /// Green (1992): beta_p=1, beta_d=4, C_e4=C_e5=1.5.
+    #[default]
+    Green1992,
+    /// Sanz/Katul: beta_p=1, beta_d=5.1, C_e4=C_e5=0.9.
+    Sanz2003,
+}
+impl CanopyClosure {
+    /// (beta_p, beta_d, C_e4, C_e5), in the published source-term convention.
+    pub fn coefficients(self) -> [f64; 4] {
+        match self {
+            Self::Green1992 => [1.0, 4.0, 1.5, 1.5],
+            Self::Sanz2003 => [1.0, 5.1, 0.9, 0.9],
+        }
+    }
+}
+/// Flat-ground porous vegetation volume. Box membership uses cell centers,
+/// lower-inclusive and upper-exclusive, exactly as building masks.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Vegetation {
+    /// Unique nonempty volume ID.
+    pub id: String,
+    /// Box lower corner in meters.
+    pub min_m: [f64; 3],
+    /// Box upper corner in meters.
+    pub max_m: [f64; 3],
+    /// Leaf area per air volume, in m2/m3 (inverse meters).
+    pub leaf_area_density_m2_m3: f64,
+    /// Dimensionless form-drag coefficient.
+    pub drag_coefficient: f64,
+    /// Particle collection velocity per leaf area, m/s; excludes settling.
+    #[serde(default)]
+    pub leaf_deposition_velocity_m_s: f64,
+    /// Canopy k-epsilon source coefficient set.
+    #[serde(default)]
+    pub turbulence_closure: CanopyClosure,
 }
 /// A continuous emission into one constituent, selected by `kind`. Rates are
 /// finite and nonnegative (CFD-E016); the support is nondegenerate and inside
@@ -1037,7 +1179,14 @@ impl Case {
             } else {
                 0.0
             };
-        let peak = ((cells as f64) * (880.0 + multigrid_bytes + 96.0 * species) * 1.25
+        // Canopy raster coefficients, cell speeds, staggered drag and four
+        // turbulence source/sink arrays coexist with the ordinary workspaces.
+        let canopy_bytes = if crate::vegetation::active(self) {
+            256.0
+        } else {
+            0.0
+        };
+        let peak = ((cells as f64) * (880.0 + multigrid_bytes + canopy_bytes + 96.0 * species) * 1.25
             + receptor_bytes
             + source_bytes
             + monitor_bytes)
@@ -1072,6 +1221,17 @@ impl Case {
                     .iter()
                     .map(|x| 600.0 + 2.0 * x.id().len() as f64),
             )
+            .chain(
+                self.vegetation
+                    .iter()
+                    .map(|v| 900.0 + 4.0 * v.id.len() as f64),
+            )
+            .chain(
+                self.constituents
+                    .iter()
+                    .filter(|sp| sp.particle.is_some())
+                    .map(|_| 700.0 + 200.0 * self.receptors.len() as f64),
+            )
             .sum();
         let output = (element_text
             + if self.output.fields {
@@ -1105,16 +1265,6 @@ impl Case {
         }
         if self.name.is_empty() {
             add("CFD-E002", "error", "name", "Supply a nonempty case name.");
-        }
-        if self.numerics.pressure_preconditioner == PressurePreconditioner::Multigrid
-            && !self.geometry.is_empty()
-        {
-            add(
-                "CFD-E034",
-                "error",
-                "numerics.pressure_preconditioner",
-                "Multigrid currently requires an unmasked Cartesian grid; use ic0 for geometry masks.",
-            );
         }
         match (
             self.numerics.momentum_advection,
@@ -1447,6 +1597,16 @@ impl Case {
                 );
                 continue;
             }
+            if let Some(polygon) = &b.footprint_m
+                && !crate::geometry::valid_polygon(polygon, &b.min_m, &b.max_m)
+            {
+                add(
+                    "CFD-E084",
+                    "error",
+                    &format!("geometry[{i}].footprint_m"),
+                    "Use a finite, simple, nonzero-area polygon with 3..2048 vertices and matching bounding box; holes and repeated closing vertices are not supported.",
+                );
+            }
             let cells_high = (b.max_m[2] - b.min_m[2])
                 / (self.domain.size_m[2] / self.grid.cells[2].max(1) as f64);
             if cells_high < 10.0 {
@@ -1461,8 +1621,93 @@ impl Case {
                 );
             }
         }
+        if let Some(z0) = self.building_roughness_m
+            && (!z0.is_finite() || z0 <= 0.0 || !self.flow.rans())
+        {
+            add(
+                "CFD-E085",
+                "error",
+                "building_roughness_m",
+                "Building roughness must be finite and positive and requires neutral_rans.",
+            );
+        }
+        if let Some(minimum) = self.geometry_min_passage_cells {
+            if minimum == 0 {
+                add(
+                    "CFD-E084",
+                    "error",
+                    "geometry_min_passage_cells",
+                    "Minimum passage resolution must be positive.",
+                );
+            } else if self.grid.cells.iter().all(|n| *n > 0)
+                && cells <= 10_000_000
+                && let Some(width) = crate::geometry::minimum_passage(self)
+                && width < minimum
+            {
+                add(
+                    "CFD-W011",
+                    "warning",
+                    "geometry_min_passage_cells",
+                    &format!(
+                        "Narrowest represented horizontal passage is {width} cells; requested at least {minimum}."
+                    ),
+                );
+            }
+        }
         if self.flow.rans() {
             self.domain_warnings(&mut add);
+        }
+        let mut vegetation_ids = BTreeSet::new();
+        for (i, v) in self.vegetation.iter().enumerate() {
+            if v.id.is_empty() || !vegetation_ids.insert(v.id.clone()) {
+                add(
+                    "CFD-E082",
+                    "error",
+                    &format!("vegetation[{i}].id"),
+                    "Use unique nonempty canopy IDs.",
+                );
+            }
+            if !(0..3).all(|a| {
+                v.min_m[a].is_finite()
+                    && v.max_m[a].is_finite()
+                    && v.min_m[a] >= 0.0
+                    && v.max_m[a] <= self.domain.size_m[a]
+                    && v.max_m[a] > v.min_m[a]
+            }) {
+                add(
+                    "CFD-E082",
+                    "error",
+                    &format!("vegetation[{i}].min_m"),
+                    "Canopy box must be finite, nondegenerate and inside the domain.",
+                );
+            }
+            if self.flow.prescribed() && v.leaf_area_density_m2_m3 > 0.0 && v.drag_coefficient > 0.0
+            {
+                add(
+                    "CFD-E083",
+                    "error",
+                    &format!("vegetation[{i}].drag_coefficient"),
+                    "Prescribed flow cannot respond to canopy drag; set zero drag for a leaf-only study or solve laminar/RANS flow.",
+                );
+            }
+            for (name, value, max) in [
+                ("leaf_area_density_m2_m3", v.leaf_area_density_m2_m3, 100.0),
+                ("drag_coefficient", v.drag_coefficient, 10.0),
+                (
+                    "leaf_deposition_velocity_m_s",
+                    v.leaf_deposition_velocity_m_s,
+                    10.0,
+                ),
+            ] {
+                if !value.is_finite() || !(0.0..=max).contains(&value) {
+                    add(
+                        "CFD-E082",
+                        "error",
+                        &format!("vegetation[{i}].{name}"),
+                        "Canopy parameters must be finite and within the documented nonnegative limits.",
+                    );
+                }
+            }
         }
         let mut species = BTreeSet::new();
         for (i, s) in self.constituents.iter().enumerate() {
@@ -1481,6 +1726,63 @@ impl Case {
                     &format!("constituents[{i}].diffusivity_m2_s"),
                     "Use a finite nonnegative diffusivity.",
                 );
+            }
+        }
+        for (i, species) in self.constituents.iter().enumerate() {
+            if let Some(p) = &species.particle {
+                let prefix = format!("constituents[{i}].particle");
+                if !p.diameter_m.is_finite() || !(1e-8..=1e-4).contains(&p.diameter_m) {
+                    add(
+                        "CFD-E080",
+                        "error",
+                        &format!("{prefix}.diameter_m"),
+                        "Spherical bin diameter must be finite and in 1e-8..1e-4 m.",
+                    );
+                }
+                if !p.density_kg_m3.is_finite()
+                    || p.density_kg_m3 <= 1.204
+                    || p.density_kg_m3 > 30000.0
+                {
+                    add(
+                        "CFD-E080",
+                        "error",
+                        &format!("{prefix}.density_kg_m3"),
+                        "Density must be finite, above reference air and at most 30000 kg/m3.",
+                    );
+                }
+                for (name, value) in [
+                    (
+                        "settling_velocity_m_s",
+                        p.settling_velocity_m_s.unwrap_or(0.0),
+                    ),
+                    (
+                        "ground_deposition_velocity_m_s",
+                        p.ground_deposition_velocity_m_s,
+                    ),
+                    (
+                        "roof_deposition_velocity_m_s",
+                        p.roof_deposition_velocity_m_s,
+                    ),
+                ] {
+                    if !value.is_finite() || !(0.0..=10.0).contains(&value) {
+                        add(
+                            "CFD-E080",
+                            "error",
+                            &format!("{prefix}.{name}"),
+                            "Use a finite speed in 0..10 m/s.",
+                        );
+                    }
+                }
+                if p.settling_velocity_m_s.is_none()
+                    && (!p.reynolds_number().is_finite() || p.reynolds_number() > 0.1)
+                {
+                    add(
+                        "CFD-E081",
+                        "error",
+                        &format!("{prefix}.settling_velocity_m_s"),
+                        "Stokes-Cunningham requires particle Reynolds number <= 0.1; supply a separately justified direct settling speed.",
+                    );
+                }
             }
         }
         let mut source_ids = BTreeSet::new();
@@ -1604,12 +1906,34 @@ impl Case {
         if self.run.mode == Mode::Steady
             && !self.sources.is_empty()
             && !(0..3).any(|a| self.boundaries.at(a) == Boundary::Open)
+            && !self.sources.iter().all(|source| {
+                self.constituents
+                    .iter()
+                    .find(|sp| sp.id == source.constituent())
+                    .and_then(|sp| sp.particle.as_ref())
+                    .is_some_and(|particle| {
+                        // This is only a candidate screen. The source/grid
+                        // preflight requires a represented positive sink in
+                        // every source-bearing fluid component (CFD-E043).
+                        ((matches!(self.boundaries.z, Boundary::Wall | Boundary::GroundOpenTop)
+                            && particle.settling_speed() + particle.ground_deposition_velocity_m_s
+                                > 0.0)
+                            || (!self.geometry.is_empty()
+                                && particle.settling_speed()
+                                    + particle.roof_deposition_velocity_m_s
+                                    > 0.0))
+                            || self.vegetation.iter().any(|v| {
+                                v.leaf_area_density_m2_m3 > 0.0
+                                    && v.leaf_deposition_velocity_m_s > 0.0
+                            })
+                    })
+            })
         {
             add(
                 "CFD-E020",
                 "error",
                 "run.mode",
-                "Positive continuous sources need an open removal boundary for steady transport.",
+                "Steady sources need an open removal boundary, or for particles a represented deposition sink in their fluid component.",
             );
         }
         CheckReport {

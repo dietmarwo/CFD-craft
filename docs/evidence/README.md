@@ -75,3 +75,5 @@ replaces its rows; a later record that adds to it is named.
   index for either.
 - **Same-case comparison.** There is no OpenFOAM canyon recipe, so no canyon
   comparison between the two solvers exists.
+
+- [Urban source extension: verification, measured failures and open gates](urban-extension.md)

@@ -33,6 +33,7 @@ Unknown fields are rejected.
 | `momentum_residual` | `number` or `null` | optional | Largest normalized momentum residual, null for prescribed flow. |
 | `momentum_solver_iterations` | `integer` or `null` (>= 0) | optional | Inner iterations of implicit momentum-correction solves, when selected. |
 | `name` | `string` | required | The case name. |
+| `particulate_matter` | object with string keys and values of [ParticulateEvidence](#particulateevidence) | optional | PM2.5/PM10 airborne mass and receptor sums for spherical particle bins. No interpolation within a bin: its representative aerodynamic diameter is either below the cutoff or excluded. Omitted without particles. |
 | `physical_time_s` | `number` | required | Time covered in seconds; pseudo-time in steady mode. |
 | `physics_sha256` | `string` | required | Physics hash of the case: the case without `name`, `run` and `output`. Checkpoints are compatible across cases with the same value. |
 | `pressure_iterations` | `integer` (>= 0) | required | Cumulative pressure PCG iterations of the retained steps. |
@@ -45,6 +46,7 @@ Unknown fields are rejected.
 | `threads` | `integer` (>= 0) | required | The case's declared `run.threads`, not a measurement of the pool. |
 | `turbulence_residual` | `number` or `null` | optional | Largest normalized k or epsilon residual, `neutral_rans` only. |
 | `turbulent_floor_events` | `integer` (>= 0) | required | Turbulence updates that hit the k or epsilon floor; any event fails the turbulence checks. |
+| `vegetation` | [Evidence](#evidence) or `null` | optional | Recomputed porous canopy drag/coverage, absent without nonzero LAD. |
 | `velocity_max_m_s` | `number` | required | Largest absolute face velocity in m/s. |
 
 ### Check
@@ -61,6 +63,31 @@ Unknown fields are rejected.
 | `threshold` | `number` | required | Largest accepted value, a fixed gate or the tolerance from the case. |
 | `value` | `number` or `null` | optional | The measured value, or null when it is not finite or not available, such as `monitor_stability` before three full monitor windows. A null value fails. |
 
+### Evidence
+
+Instantaneous canopy evidence; integrated drag is per unit air density.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `drag_power_per_density_m5_s3` | `number` | required | Positive rate of work against canopy drag, divided by density (m5/s3). |
+| `drag_quadrature` | `string` | required | Quadrature of the actual staggered momentum sink over active face dual volumes (area times face gradient distance). |
+| `integrated_drag_acceleration_m4_s2` | array of 3 `number` | required | Integral of drag acceleration over fluid volume (m4/s2), with its sign. |
+| `validation` | `string` | required | The model remains numerically verified and physically unvalidated. |
+| `volume_fluid_cells` | object with string keys and values of `integer` (>= 0) | required | Number of represented fluid cells per vegetation ID; overlaps count twice. |
+
+### ParticulateEvidence
+
+Sum over particle bins passing an aerodynamic-size cutoff.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mass_kg` | `number` | required | Integrated airborne mass, in kg. |
+| `receptors_kg_m3` | object with string keys and values of `number` | required | Local-source concentration increments at receptors, in kg/m3. |
+
 ### ScalarEvidence
 
 Evidence for one constituent at the returned state: mass budget, extrema, the steady residual, instantaneous rates and receptor values. Cumulative quantities are in kg, rates in kg/s, concentrations in kg/m3.
@@ -69,9 +96,12 @@ Unknown fields are rejected.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `aerodynamic_diameter_m` | `number` or `null` | optional | Unit-density equivalent aerodynamic diameter used for PM sums. |
 | `boundary_inflow_rate_kg_s` | `number` | required | Current rate of mass entering through boundary faces. |
 | `boundary_outflow_rate_kg_s` | `number` | required | Current rate of mass leaving through boundary faces. |
 | `budget_defect_kg` | `number` | required | `mass_kg` minus initial, emitted and inflow mass plus outflow mass. |
+| `deposited_kg` | object with string keys and values of `number` | optional | Cumulative particle deposition by surface class, in kg. |
+| `deposition_rate_kg_s` | object with string keys and values of `number` | optional | Current deposition rate by surface class, in kg/s. |
 | `emitted_kg` | `number` | required | Cumulative mass emitted by the sources. |
 | `id` | `string` | required | The constituent ID. |
 | `inflow_kg` | `number` | required | Cumulative mass that entered through boundary faces. |
@@ -82,6 +112,7 @@ Unknown fields are rejected.
 | `outflow_kg` | `number` | required | Cumulative mass that left through boundary faces. |
 | `receptors_kg_m3` | object with string keys and values of `number` | required | Concentration at each receptor, keyed by receptor ID. JSON maps are sorted lexically (`R10` before `R2`), so look values up by ID. |
 | `relative_budget_defect` | `number` | required | Absolute budget defect over the sum of initial, emitted, inflow and outflow mass; the `mass_budget` check requires at most 1e-9. |
+| `settling_velocity_m_s` | `number` or `null` | optional | Resolved particle settling speed; omitted for gases. |
 | `source_rate_kg_s` | `number` | required | Emission rate of the represented sources. |
 | `steady_residual` | `number` | required | Largest steady-equation residual \|dc/dt\| over the cells, normalized by the velocity scale, the length scale and `maximum_kg_m3`. |
 

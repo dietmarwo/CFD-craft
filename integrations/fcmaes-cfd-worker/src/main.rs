@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use cfd_craft::{
-    case::{Case, Source},
+    case::{Case, Flow, Source},
     solver::{self, Control},
 };
 use fcmaes_job_worker::{
@@ -56,6 +56,32 @@ fn registry() -> Registry {
                 include_str!("../../../cases/verification/source-response.json"),
             ),
     );
+    r.scalar("app.cfd.wind-direction", "1", json!({
+        "simulation":true,"dimensions":1,
+        "objective":"maximum receptor concentration / 1e-8 kg/m3 for one declared constituent",
+        "scope":"neutral_rans urban source increments; cold start per evaluation; unvalidated physics; local meteorological wind direction from"
+    }), |model| {
+        model.require_dimension(1..=1)?;
+        let case:Case=serde_json::from_slice(&model.input("case")?).map_err(|e|e.to_string())?;
+        case.validate()?;
+        if !case.flow.rans() || case.constituents.len()!=1 || case.receptors.is_empty() || case.sources.is_empty() {
+            return Err("wind-direction requires neutral_rans, one constituent, local sources and receptors".into());
+        }
+        Ok(Scalar::simulation(move |x,context| {
+            context.checkpoint()?;
+            let mut c=case.clone();c.run.threads=context.threads();
+            if let Flow::NeutralRans {direction_deg_from,..}=&mut c.flow { *direction_deg_from=x[0].rem_euclid(360.); }
+            let ctx=context.clone();
+            let control=Control::with_poll(context.remaining_seconds().min(c.run.wall_time_limit_s),move||ctx.checkpoint());
+            let run=solver::run(&c,&control,None)?;
+            if run.summary.assessment!="steady_discrete_solution" || !run.summary.checks.iter().all(|check|check.passed) {
+                return Err(format!("CFD urban {}: {}; failed row must be retained",run.summary.termination,run.summary.assessment));
+            }
+            let value=run.summary.constituents[0].receptors_kg_m3.values().copied().fold(0.,f64::max)/1e-8;
+            if !value.is_finite(){return Err("nonfinite urban receptor objective".into());}
+            Ok(value)
+        }).domain(vec![0.],vec![360.]))
+    });
     r
 }
 fn main() {

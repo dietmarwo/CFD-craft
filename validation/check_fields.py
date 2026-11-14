@@ -67,6 +67,124 @@ def receptor_weights(receptor, dx, cells, fluid, index):
     return {cell: w / total for cell, w in weights.items()}
 
 
+def inside_polygon(vertices, point):
+    """Independent half-open horizontal ray crossings, local metric x/y."""
+    x, y = point[:2]
+    count = 0
+    for a, b in zip(vertices, vertices[1:] + vertices[:1], strict=True):
+        if (a[1] > y) != (b[1] > y):
+            cross_x = (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]
+            count += x < cross_x
+    return count % 2 == 1
+
+
+def particle_parameters(particle):
+    """Independent spherical aerosol formulas in SI units at 293.15 K/101325 Pa."""
+    diameter = particle["diameter_m"]
+    density = particle["density_kg_m3"]
+
+    def slip(d):
+        kn = 2 * 6.6e-8 / d
+        return 1 + kn * (1.257 + 0.4 * math.exp(-1.1 / kn))
+
+    settling = particle.get("settling_velocity_m_s")
+    if settling is None:
+        settling = (
+            (density - 1.204) * 9.80665 * diameter**2 * slip(diameter) / (18 * 1.81e-5)
+        )
+    target = (density - 1.204) / (1000 - 1.204) * diameter**2 * slip(diameter)
+    lo, hi = 0.0, diameter * max(math.sqrt(density), 1)
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if mid**2 * slip(mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return settling, diameter if density == 1000 else (lo + hi) / 2
+
+
+def canopy_evidence(case, components, fluid, cells, dx, index):
+    """Independent work of the staggered canopy sink in its face inner product."""
+    nx, ny, nz = cells
+    volume = math.prod(dx)
+    cell_drag = [0.0] * len(fluid)
+    coverage = {v["id"]: 0 for v in case["vegetation"]}
+    for k in range(nz):
+        for j in range(ny):
+            for i in range(nx):
+                cell = index(i, j, k)
+                if not fluid[cell]:
+                    continue
+                p = [(i + 0.5) * dx[0], (j + 0.5) * dx[1], (k + 0.5) * dx[2]]
+                coefficient = 0.0
+                for v in case["vegetation"]:
+                    if all(v["min_m"][a] <= p[a] < v["max_m"][a] for a in range(3)):
+                        coverage[v["id"]] += 1
+                        coefficient += (
+                            v["drag_coefficient"] * v["leaf_area_density_m2_m3"]
+                        )
+                velocity = []
+                for a, (dims, face_values) in enumerate(components):
+                    q = [i, j, k]
+                    low = (q[2] * dims[1] + q[1]) * dims[0] + q[0]
+                    q[a] += 1
+                    if case["boundaries"]["xyz"[a]] == "periodic":
+                        q[a] %= cells[a]
+                    high = (q[2] * dims[1] + q[1]) * dims[0] + q[0]
+                    velocity.append(0.5 * (face_values[low] + face_values[high]))
+                cell_drag[cell] = coefficient * math.sqrt(
+                    math.fsum(u * u for u in velocity)
+                )
+    power = 0.0
+    force = [0.0, 0.0, 0.0]
+    flow = case["flow"]
+    if flow["kind"] == "neutral_rans":
+        angle = math.radians(flow["direction_deg_from"])
+        nominal = [-math.sin(angle), -math.cos(angle), 0.0]
+    else:
+        nominal = flow.get("velocity_m_s", flow.get("initial_velocity_m_s"))
+    for a, (dims, face_values) in enumerate(components):
+        periodic = case["boundaries"]["xyz"[a]] == "periodic"
+        for k in range(dims[2]):
+            for j in range(dims[1]):
+                for i in range(dims[0]):
+                    q = [i, j, k]
+                    lo = q.copy()
+                    lo[a] -= 1
+                    hi = q.copy()
+                    if periodic:
+                        lo[a] %= cells[a]
+                        hi[a] %= cells[a]
+                    low = index(*lo) if 0 <= lo[a] < cells[a] else None
+                    high = index(*hi) if 0 <= hi[a] < cells[a] else None
+                    low = low if low is not None and fluid[low] else None
+                    high = high if high is not None and fluid[high] else None
+                    if low is not None and high is not None:
+                        coefficient = 0.5 * (cell_drag[low] + cell_drag[high])
+                        dual_volume = volume
+                    elif (
+                        not periodic
+                        and case["boundaries"]["xyz"[a]] == "open"
+                        and (
+                            (q[a] == 0 and high is not None and nominal[a] < -1e-12)
+                            or (
+                                q[a] == cells[a]
+                                and low is not None
+                                and nominal[a] > 1e-12
+                            )
+                        )
+                    ):
+                        coefficient = cell_drag[low if low is not None else high]
+                        dual_volume = volume * 0.5
+                    else:
+                        continue
+                    fi = (k * dims[1] + j) * dims[0] + i
+                    velocity = face_values[fi]
+                    power += coefficient * velocity * velocity * dual_volume
+                    force[a] -= coefficient * velocity * dual_volume
+    return power, force, coverage
+
+
 def check(path):
     path = Path(path)
     marker = json.loads((path / "complete.json").read_text())
@@ -109,13 +227,83 @@ def check(path):
                         lo <= x < hi
                         for lo, x, hi in zip(b["min_m"], p, b["max_m"], strict=True)
                     )
+                    and ("footprint_m" not in b or inside_polygon(b["footprint_m"], p))
                     for b in c["geometry"]
                 )
     require(
         hashlib.sha256(bytes(int(f) for f in fluid)).hexdigest()
         == geometry["mask_sha256"],
-        "geometry mask differs from the case boxes",
+        "geometry mask differs from the case shapes",
     )
+    for shape in c["geometry"]:
+        if shape["id"] not in geometry.get("shapes", {}):
+            continue  # compatible with archives predating urban geometry evidence
+        record = geometry["shapes"][shape["id"]]
+        vertices = shape.get("footprint_m")
+        area = (
+            abs(
+                math.fsum(
+                    a[0] * b[1] - b[0] * a[1]
+                    for a, b in zip(vertices, vertices[1:] + vertices[:1], strict=True)
+                )
+            )
+            * 0.5
+            if vertices
+            else math.prod(shape["max_m"][a] - shape["min_m"][a] for a in (0, 1))
+        )
+        exact = area * (shape["max_m"][2] - shape["min_m"][2])
+        count = 0
+        members = []
+        for k in range(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    p = [(v + 0.5) * d for v, d in zip((i, j, k), dx, strict=True)]
+                    included = all(
+                        lo <= x < hi
+                        for lo, x, hi in zip(
+                            shape["min_m"], p, shape["max_m"], strict=True
+                        )
+                    ) and (not vertices or inside_polygon(vertices, p))
+                    if included:
+                        count += 1
+                        members.append((i, j, k))
+        minimum_passage = None
+        for q in members:
+            for a in (0, 1):
+                for sign in (-1, 1):
+                    next_cell = list(q)
+                    next_cell[a] += sign
+                    width = 0
+                    while 0 <= next_cell[a] < (nx, ny, nz)[a]:
+                        if not fluid[index(*next_cell)]:
+                            if width > 0:
+                                minimum_passage = (
+                                    width
+                                    if minimum_passage is None
+                                    else min(minimum_passage, width)
+                                )
+                            break
+                        width += 1
+                        next_cell[a] += sign
+        require(
+            record["narrowest_fluid_passage_cells"] == minimum_passage,
+            "per-shape passage resolution",
+        )
+        require(record["solid_cells"] == count, "per-shape solid cells")
+        require(
+            abs(record["exact_volume_m3"] - exact) <= 1e-10 * max(exact, 1.0),
+            "per-shape exact volume",
+        )
+        require(
+            abs(record["represented_volume_m3"] - count * volume)
+            <= 1e-10 * max(exact, 1.0),
+            "per-shape represented volume",
+        )
+        require(
+            abs(record["volume_error_m3"] - (count * volume - exact))
+            <= 1e-10 * max(exact, 1.0),
+            "per-shape volume error",
+        )
     finite(s["velocity"], "velocity")
     for name in ["pressure", "k", "epsilon"]:
         require(len(s[name]) == n, f"{name} has {len(s[name])} values for {n} cells")
@@ -149,6 +337,32 @@ def check(path):
                     abs(v - expected) <= 1e-12 * max(1.0, abs(expected)) for v in values
                 ),
                 "face velocities differ from the prescribed velocity",
+            )
+    if any(v["leaf_area_density_m2_m3"] > 0 for v in c.get("vegetation", [])):
+        drag_power, integrated_drag, coverage = canopy_evidence(
+            c, components, fluid, [nx, ny, nz], dx, index
+        )
+        canopy = summary["vegetation"]
+        require(
+            canopy["drag_quadrature"] == "staggered_active_faces_dual_volumes",
+            "unknown drag work convention",
+        )
+        require(
+            canopy["volume_fluid_cells"] == coverage,
+            "canopy coverage differs from case mask",
+        )
+        require(
+            abs(canopy["drag_power_per_density_m5_s3"] - drag_power)
+            <= 1e-11 * max(drag_power, 1e-300),
+            "canopy drag power differs from fields",
+        )
+        for a in range(3):
+            require(
+                abs(
+                    canopy["integrated_drag_acceleration_m4_s2"][a] - integrated_drag[a]
+                )
+                <= 1e-11 * max(abs(integrated_drag[a]), 1e-300),
+                "canopy integrated drag differs from fields",
             )
     max_div = 0.0
     for k in range(nz):
@@ -210,11 +424,27 @@ def check(path):
                 f"receptor {rid} of {sp['id']} differs from its field value",
             )
         mass = math.fsum(v for v, f in zip(values, fluid, strict=True) if f) * volume
+        deposited = budget.get("deposited_kg", {})
+        require(
+            all(
+                surface in {"ground", "roof", "vegetation"}
+                and math.isfinite(value)
+                and value >= 0
+                for surface, value in deposited.items()
+            ),
+            "invalid cumulative deposition",
+        )
+        require(
+            record.get("deposited_kg", {}) == deposited,
+            "reported cumulative deposition mismatch",
+        )
+        deposited_mass = math.fsum(deposited.values())
         scale = max(
             budget["initial_kg"]
             + budget["emitted_kg"]
             + budget["inflow_kg"]
-            + budget["outflow_kg"],
+            + budget["outflow_kg"]
+            + deposited_mass,
             1e-30,
         )
         defect = (
@@ -223,6 +453,7 @@ def check(path):
             - budget["emitted_kg"]
             - budget["inflow_kg"]
             + budget["outflow_kg"]
+            + deposited_mass
         )
         require(abs(mass - record["mass_kg"]) < 1e-11 * scale, "reported mass mismatch")
         require(abs(defect) < 1e-9 * scale, "independent mass accounting")
@@ -307,6 +538,89 @@ def check(path):
                                 )
                             outgoing += max(flux, 0.0)
                             incoming += max(-flux, 0.0)
+        particle = sp.get("particle")
+        deposition_rates = {}
+        if particle is not None:
+            settling, aerodynamic = particle_parameters(particle)
+            require(
+                abs(record["settling_velocity_m_s"] - settling)
+                <= 1e-13 * max(settling, 1e-300),
+                "settling formula mismatch",
+            )
+            require(
+                abs(record["aerodynamic_diameter_m"] - aerodynamic)
+                <= 1e-13 * max(aerodynamic, 1e-300),
+                "aerodynamic size mismatch",
+            )
+            ground_extra = particle.get("ground_deposition_velocity_m_s", 0)
+            roof_extra = particle.get("roof_deposition_velocity_m_s", 0)
+            for k in range(nz):
+                for j in range(ny):
+                    for i in range(nx):
+                        cell = index(i, j, k)
+                        if not fluid[cell]:
+                            continue
+                        if k == 0:
+                            if c["boundaries"]["z"] == "open":
+                                outgoing += settling * values[cell] * volume / dx[2]
+                            elif c["boundaries"]["z"] in {"wall", "ground_open_top"}:
+                                flux = (
+                                    (settling + ground_extra)
+                                    * values[cell]
+                                    * volume
+                                    / dx[2]
+                                )
+                                deposition_rates["ground"] = (
+                                    deposition_rates.get("ground", 0) + flux
+                                )
+                            elif (
+                                c["boundaries"]["z"] == "periodic"
+                                and not fluid[index(i, j, nz - 1)]
+                            ):
+                                flux = (
+                                    (settling + roof_extra)
+                                    * values[cell]
+                                    * volume
+                                    / dx[2]
+                                )
+                                deposition_rates["roof"] = (
+                                    deposition_rates.get("roof", 0) + flux
+                                )
+                        elif not fluid[index(i, j, k - 1)]:
+                            flux = (
+                                (settling + roof_extra) * values[cell] * volume / dx[2]
+                            )
+                            deposition_rates["roof"] = (
+                                deposition_rates.get("roof", 0) + flux
+                            )
+            leaf_rate = 0.0
+            for cell in range(n):
+                if not fluid[cell]:
+                    continue
+                p = [
+                    ((cell % nx) + 0.5) * dx[0],
+                    ((cell // nx % ny) + 0.5) * dx[1],
+                    ((cell // (nx * ny)) + 0.5) * dx[2],
+                ]
+                loss = math.fsum(
+                    v["leaf_area_density_m2_m3"]
+                    * v.get("leaf_deposition_velocity_m_s", 0)
+                    for v in c.get("vegetation", [])
+                    if all(v["min_m"][a] <= p[a] < v["max_m"][a] for a in range(3))
+                )
+                leaf_rate += loss * values[cell] * volume
+            if leaf_rate:
+                deposition_rates["vegetation"] = leaf_rate
+            reported = record.get("deposition_rate_kg_s", {})
+            for surface in {"ground", "roof", "vegetation"}:
+                expected = deposition_rates.get(surface, 0)
+                require(
+                    abs(reported.get(surface, 0) - expected)
+                    <= 1e-12 * max(expected, 1e-300),
+                    f"{surface} deposition rate differs from field flux",
+                )
+        else:
+            require(not deposited, "passive gas has cumulative particle deposition")
         flux_scale = max(rate + outgoing + incoming, 1e-30)
         require(
             abs(record["source_rate_kg_s"] - rate) < 1e-9 * flux_scale,
@@ -323,6 +637,33 @@ def check(path):
         scalar_results.append(
             dict(id=sp["id"], mass_kg=mass, relative_defect=abs(defect) / scale)
         )
+    if any(sp.get("particle") is not None for sp in c["constituents"]):
+        pm = summary["particulate_matter"]
+        require(set(pm) == {"PM2.5", "PM10"}, "particulate cutoff set")
+        for name, cutoff in [("PM2.5", 2.5e-6), ("PM10", 10e-6)]:
+            selected = [
+                record
+                for sp, record in zip(
+                    c["constituents"], summary["constituents"], strict=True
+                )
+                if sp.get("particle") is not None
+                and particle_parameters(sp["particle"])[1] <= cutoff
+            ]
+            expected_mass = math.fsum(record["mass_kg"] for record in selected)
+            require(
+                abs(pm[name]["mass_kg"] - expected_mass)
+                <= 1e-12 * max(expected_mass, 1e-300),
+                "PM bin mass sum",
+            )
+            for rid in weights:
+                expected = math.fsum(
+                    record["receptors_kg_m3"][rid] for record in selected
+                )
+                require(
+                    abs(pm[name]["receptors_kg_m3"][rid] - expected)
+                    <= 1e-12 * max(expected, 1e-300),
+                    "PM receptor bin sum",
+                )
     return dict(
         schema_version="cfd-craft.independent-check/0.1",
         passed=True,

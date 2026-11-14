@@ -69,6 +69,18 @@ optional OpenFOAM Foundation 13 backend for two generated cases (a laminar
 cavity and a turbulent backward-facing step). It does not contain particles,
 vegetation, LES, chemistry, stretched grids or GPU execution.
 
+## Urban extension in this source checkout
+
+The unreleased source adds component-preserving masked pressure multigrid,
+polygon prisms and explicit non-ground wall roughness, an optional GeoJSON /
+CityJSON converter, spherical particle settling/deposition, porous vegetation,
+and bounded cold-start district campaigns. Legacy defaults are retained.
+See guide chapter22 and the urban extension evidence record, available through
+the Guide and Evidence links above.
+These additions are numerically verified research features; urban physical
+validation and practical district throughput remain open. Installed 0.1.1
+packages have the earlier scope above.
+
 ## Command line and source build
 
 The `cfd-craft` command keeps fields, verified run archives, restart, preview

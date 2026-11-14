@@ -130,7 +130,8 @@ pub(crate) fn ghost_values<const N: usize>(
             let z0 = if d == 2 && side < 0 && at_domain {
                 *roughness_m
             } else {
-                roughness_m.min(0.001 * g.dx[d])
+                c.building_roughness_m
+                    .unwrap_or_else(|| roughness_m.min(0.001 * g.dx[d]))
             };
             let us = 0.4 * speed / ((z + z0) / z0).ln();
             let mu = c.flow.viscosity() + adjacent_mean(f, nut);
@@ -427,6 +428,7 @@ fn flux_form_advection_with(
 pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
     let reconstruction = Reconstruction::of(&c.numerics);
     let cell_u = g.cell_velocity(u);
+    let canopy_drag = crate::vegetation::face_drag(c, g, u);
     let advection = reconstruction.map(|r| flux_form_advection_with(c, g, u, nut, &cell_u, r));
     // Remaining variable-viscosity symmetric-stress term:
     // div(mu grad(u)^T)_a = sum_d (d_d mu)(d_a u_d), for divergence-free flow.
@@ -509,6 +511,9 @@ pub fn momentum_rhs(c: &Case, g: &Grid, u: &[f64], nut: &[f64]) -> Vec<f64> {
                 (Some(i), None) | (None, Some(i)) => cross[i][f.axis],
                 _ => 0.0,
             };
+            if !canopy_drag.is_empty() {
+                rhs -= canopy_drag[fi] * u[fi];
+            }
             rhs
         })
         .collect()
@@ -566,7 +571,8 @@ pub fn production(
                     let z0 = if ground {
                         *roughness_m
                     } else {
-                        roughness_m.min(0.001 * g.dx[d])
+                        c.building_roughness_m
+                            .unwrap_or_else(|| roughness_m.min(0.001 * g.dx[d]))
                     };
                     let distance = 0.5 * g.dx[d] + z0;
                     let us = 0.4 * speed / (distance / z0).ln();
@@ -589,6 +595,7 @@ pub fn production(
 /// The k and epsilon transport parts of the turbulence equations, and the
 /// terms they need: production, wall epsilon and the diffusivities.
 pub(crate) struct TurbulenceTerms {
+    pub(crate) canopy: Option<crate::vegetation::TurbulenceSources>,
     pub(crate) production: Vec<f64>,
     pub(crate) wall_epsilon: Vec<Option<f64>>,
     pub(crate) dk: Vec<f64>,
@@ -648,6 +655,7 @@ pub(crate) fn turbulence_terms(
         }
     }
     TurbulenceTerms {
+        canopy: crate::vegetation::turbulence(c, g, u, k, eps),
         production: p,
         wall_epsilon: walls,
         dk,
@@ -675,6 +683,7 @@ pub fn turbulence_step(
     dt: f64,
 ) -> usize {
     let TurbulenceTerms {
+        canopy,
         production: p,
         wall_epsilon: walls,
         k_transport,
@@ -688,9 +697,20 @@ pub fn turbulence_step(
         }
         let oldk = k[i].max(1e-14);
         let olde = eps[i].max(1e-14);
-        let nk = (k[i] + dt * (k_transport[i] + p[i])) / (1.0 + dt * olde / oldk);
-        let ne = (eps[i] + dt * (e_transport[i] + C1 * p[i] * olde / oldk))
-            / (1.0 + dt * C2 * olde / oldk);
+        let (nk, ne) = if let Some(canopy) = &canopy {
+            (
+                (k[i] + dt * (k_transport[i] + p[i] + canopy.k_source[i]))
+                    / (1.0 + dt * (olde / oldk + canopy.k_sink[i])),
+                (eps[i] + dt * (e_transport[i] + C1 * p[i] * olde / oldk + canopy.e_source[i]))
+                    / (1.0 + dt * (C2 * olde / oldk + canopy.e_sink[i])),
+            )
+        } else {
+            (
+                (k[i] + dt * (k_transport[i] + p[i])) / (1.0 + dt * olde / oldk),
+                (eps[i] + dt * (e_transport[i] + C1 * p[i] * olde / oldk))
+                    / (1.0 + dt * C2 * olde / oldk),
+            )
+        };
         if !nk.is_finite() || !ne.is_finite() {
             k[i] = f64::NAN;
             eps[i] = f64::NAN;

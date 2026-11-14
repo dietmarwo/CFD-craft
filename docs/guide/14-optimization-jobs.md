@@ -44,7 +44,9 @@ d = json.load(open("runs/worker-description.json"))
 print(sorted(x["profile"] for x in d["examples"]))
 ```
 
-The worker registers one model, `app.cfd.source-allocation`, version 1. It consumes a hashed case and requires prescribed flow, exactly three sources with equal positive base rates, one constituent and at least one receptor. Its built-in example uses `cases/verification/source-response.json`.
+The worker registers `app.cfd.source-allocation`, version 1, and the source
+extension adds `app.cfd.wind-direction`, version1. The following allocation
+examples and their two-dimensional domain are unchanged. The allocation model It consumes a hashed case and requires prescribed flow, exactly three sources with equal positive base rates, one constituent and at least one receptor. Its built-in example uses `cases/verification/source-response.json`.
 
 It exposes two box-bounded parameters, `x0` and `x1` in [0.1, 1.4]. The three source multipliers are `x0`, `x1` and `3 - x0 - x1`; the third lies in [0.2, 2.8], so every source stays positive and the total emission is preserved for equal base rates. The objective is the largest receptor concentration divided by 1e-8 kg/m3. Lesson F1 of [chapter 13](13-optimization-lessons.md) solves the same problem as a linear program.
 
@@ -120,3 +122,20 @@ For a new application, define the objective and the conservation constraints bef
 
 - [Chapter 15](15-openfoam-first-run.md): Part IV, the OpenFOAM backend, starting with install and a first cavity.
 - [Chapter 13](13-optimization-lessons.md): the same allocation problem solved as a linear program.
+
+## Urban cold-direction jobs (source extension)
+
+`app.cfd.wind-direction` consumes a checked neutral-RANS case with one
+constituent, local sources and receptors. Its single parameter is a model-local
+meteorological wind direction from, in [0,360]. Each call starts cold and must
+reach the existing steady checks; failures propagate to the worker. This scalar
+application reports a receptor objective, not a native field archive.
+
+For a full native archive and independent audit use the chapter22 campaign's
+`--runner PATH/optimization-run` option. It submits existing
+`execution.command/0.1` envelopes with hashed case, job, launcher, worker,
+checker and solver inputs. The node permits trusted commands explicitly.
+Outputs include a result JSON and a zipped native archive; runner output files
+are capped at64MiB. Command/manifest acceptance, native numerical acceptance
+and physical validation remain separate. The default local process backend is
+also available, and all failed/time-limited rows are kept.

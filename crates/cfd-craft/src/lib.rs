@@ -22,9 +22,11 @@
 //! experimentally validated urban CFD, and every result says so in
 //! [`Summary::experimental_validation`](solver::Summary::experimental_validation).
 //!
-//! The release scope is uniform grids, box geometry, passive gas and CPU
+//! The released 0.1.1 scope is uniform grids, box geometry, passive gas and CPU
 //! execution. Particles, vegetation, LES, chemistry, annual statistics,
-//! stretched grids, masked multigrid and GPU execution are not implemented.
+//! stretched grids and GPU execution are not implemented. This unreleased source
+//! extension adds masked multigrid, polygon prisms, spherical particle settling
+//! and porous vegetation; these physics remain experimentally unvalidated.
 //! See the [roadmap](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/roadmap.md),
 //! the [recorded results](https://github.com/dietmarwo/CFD-craft/blob/main/docs/evidence/native-verification.md)
 //! and the [model cards](https://github.com/dietmarwo/CFD-craft/blob/main/docs/model-cards/README.md).
@@ -153,6 +155,8 @@
 //!   verification cases, independent checkers and recorded evidence.
 pub mod case;
 pub mod flow;
+/// Polygon-prism geometry and grid-resolution evidence.
+pub mod geometry;
 pub mod grid;
 pub mod momentum_solve;
 pub mod multigrid;
@@ -162,6 +166,8 @@ pub mod profiling;
 pub mod solver;
 pub mod transport;
 pub mod turbulence_solve;
+/// Opt-in porous vegetation drag, canopy turbulence and leaf deposition.
+pub mod vegetation;
 pub mod verification;
 
 /// Result of the fallible library functions. The error is a message that

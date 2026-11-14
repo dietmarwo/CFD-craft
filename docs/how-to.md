@@ -140,3 +140,6 @@ the setup of its chapter.
 | find what a diagnostic code means? | [Diagnostics](diagnostics.md); 21 [By symptom](guide/21-troubleshooting.md#by-symptom) |
 | find the measurement behind a number? | [Evidence](evidence/README.md); [comparison](comparison.md) |
 | run the documentation check myself? | [Run the documentation check](developer/documentation.md#run-the-documentation-check) |
+
+For source-checkout urban geometry, map import, particle bins, vegetation and
+bounded wind-direction jobs, see [chapter 22](guide/22-urban-geometry-particles-vegetation.md).

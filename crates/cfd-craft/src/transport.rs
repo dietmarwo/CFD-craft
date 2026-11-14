@@ -26,6 +26,55 @@ pub fn cell_at(g: &Grid, p: [f64; 3]) -> usize {
         std::array::from_fn(|a| ((p[a] / g.dx[a]).floor() as usize).min(g.n[a] - 1)),
     )
 }
+/// Whether a particle has a represented positive removal mechanism in each
+/// fluid component. This is a connectivity/admissibility screen, not proof of
+/// scalar reachability or numerical convergence. Gases keep the outlet rule.
+fn particle_component_sinks(c: &Case, g: &Grid, particle: &ParticleBin) -> Vec<bool> {
+    let mut sinks = vec![false; g.components.len()];
+    let settling = particle.settling_speed();
+    for face in &g.faces {
+        if face.axis != 2 || face.lo.is_some() {
+            continue;
+        }
+        let Some(cell) = face.hi else {
+            continue;
+        };
+        let rate = match face.kind {
+            FaceKind::Wall => {
+                let ground = face.coord[2] == 0 && c.boundaries.z != Boundary::Periodic;
+                settling
+                    + if ground {
+                        particle.ground_deposition_velocity_m_s
+                    } else {
+                        particle.roof_deposition_velocity_m_s
+                    }
+            }
+            FaceKind::Inlet | FaceKind::Outlet | FaceKind::Slip
+                if c.boundaries.z == Boundary::Open && face.coord[2] == 0 =>
+            {
+                settling
+            }
+            _ => 0.0,
+        };
+        if rate > 0.0 {
+            sinks[g.component[cell]] = true;
+        }
+    }
+    for (cell, fluid) in g.fluid.iter().enumerate() {
+        if !fluid {
+            continue;
+        }
+        let point = g.center(cell);
+        if c.vegetation.iter().any(|v| {
+            v.leaf_area_density_m2_m3 > 0.0
+                && v.leaf_deposition_velocity_m_s > 0.0
+                && (0..3).all(|axis| v.min_m[axis] <= point[axis] && point[axis] < v.max_m[axis])
+        }) {
+            sinks[g.component[cell]] = true;
+        }
+    }
+    sinks
+}
 /// The represented source density of each constituent, in kg/(m3 s) per
 /// cell and in case order. Each source's integrated [`Source::rate`] is
 /// distributed over its support (the point's cell, the cells a line crosses,
@@ -92,15 +141,26 @@ pub fn source_fields(c: &Case, g: &Grid) -> Result<Vec<Vec<f64>>> {
                 s.id()
             ));
         }
+        let particle_sinks = if c.run.mode == Mode::Steady && s.rate() > 0.0 {
+            c.constituents[si]
+                .particle
+                .as_ref()
+                .map(|particle| particle_component_sinks(c, g, particle))
+        } else {
+            None
+        };
         if c.run.mode == Mode::Steady
             && s.rate() > 0.0
-            && weights
-                .iter()
-                .enumerate()
-                .any(|(i, w)| *w > 1e-14 && !g.anchored[g.component[i]])
+            && weights.iter().enumerate().any(|(i, w)| {
+                *w > 1e-14
+                    && !g.anchored[g.component[i]]
+                    && !particle_sinks
+                        .as_ref()
+                        .is_some_and(|sinks| sinks[g.component[i]])
+            })
         {
             return Err(format!(
-                "CFD-E043: steady source {} has no outlet in its fluid component",
+                "CFD-E043: steady source {} has no outlet or represented particle deposition sink in its fluid component",
                 s.id()
             ));
         }
@@ -467,6 +527,68 @@ pub(crate) fn rhs_into(
     (source.iter().sum::<f64>() * g.volume, inflow, outflow)
 }
 
+/// Add conservative downward settling and absorbing ground/roof fluxes to an
+/// already evaluated gas RHS. Returns additional open-boundary outflow and
+/// deposition rates by surface. Interior settling uses first-order upwind;
+/// the same flux is applied with opposite signs to neighboring fluid cells.
+pub fn particle_terms(
+    case: &Case,
+    g: &Grid,
+    particle: &ParticleBin,
+    concentrations: &[f64],
+    values: &mut [f64],
+) -> (f64, std::collections::BTreeMap<String, f64>) {
+    let settling = particle.settling_speed();
+    let mut outflow = 0.0;
+    let mut deposited = std::collections::BTreeMap::new();
+    for f in &g.faces {
+        if f.axis != 2 {
+            continue;
+        }
+        match f.kind {
+            FaceKind::Interior => {
+                let (Some(lo), Some(hi)) = (f.lo, f.hi) else {
+                    continue;
+                };
+                if lo == hi {
+                    continue; // one-cell periodic axis: exactly zero drift operator
+                }
+                let flux = settling * concentrations[hi] * f.area / g.volume;
+                values[lo] += flux;
+                values[hi] -= flux;
+            }
+            FaceKind::Inlet | FaceKind::Outlet | FaceKind::Slip
+                if case.boundaries.z == Boundary::Open =>
+            {
+                // Downward drift carries zero incremental concentration into the
+                // upper boundary, and removes mass at an open lower boundary.
+                if let (None, Some(hi)) = (f.lo, f.hi) {
+                    let flux = settling * concentrations[hi] * f.area;
+                    values[hi] -= flux / g.volume;
+                    outflow += flux;
+                }
+            }
+            FaceKind::Wall => {
+                if let (None, Some(hi)) = (f.lo, f.hi) {
+                    let (name, extra) =
+                        if f.coord[2] == 0 && case.boundaries.z != Boundary::Periodic {
+                            ("ground", particle.ground_deposition_velocity_m_s)
+                        } else {
+                            ("roof", particle.roof_deposition_velocity_m_s)
+                        };
+                    let flux = (settling + extra) * concentrations[hi] * f.area;
+                    values[hi] -= flux / g.volume;
+                    if flux != 0.0 {
+                        *deposited.entry(name.to_string()).or_insert(0.0) += flux;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    (outflow, deposited)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,6 +608,7 @@ mod tests {
         let mut masked = canyon.clone();
         masked.boundaries.y = Boundary::Periodic;
         masked.geometry.push(Block {
+            footprint_m: None,
             id: "extra".into(),
             min_m: [12.0, 0.0, 0.0],
             max_m: [13.0, 16.0, 2.0],

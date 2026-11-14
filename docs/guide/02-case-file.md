@@ -92,9 +92,11 @@ import copy
 import json
 import cfd_craft as cfd
 
+
 def r_down(result):
     tracer = next(c for c in result["constituents"] if c["id"] == "tracer")
     return tracer["receptors_kg_m3"]["R_down"]
+
 
 case = json.load(open("point-source.json"))
 half = copy.deepcopy(case)
@@ -120,11 +122,10 @@ True
 ```
 
 Half the rate gives half the concentration, and the run is numerically
-accepted. Every result carries `physics_sha256`, a hash of the physical
-problem: grid, flow, sources, receptors and numerics. A changed source is a
-different problem (`False`). A changed budget is not (`True`): `name`, `run`
-and `output` are not part of the hash, which is what lets a checkpoint continue
-under another budget ([chapter 8](08-checkpoint-restart.md)).
+accepted. Every result carries `physics_sha256`, a hash of grid, flow,
+sources, receptors and numerics. A changed source is a different problem
+(`False`). A changed budget is not (`True`): `name`, `run` and `output` are
+outside the hash ([chapter 8](08-checkpoint-restart.md) builds on this).
 
 ## A wrong field is an error
 
@@ -180,9 +181,8 @@ True
 
 These are the three flow kinds, the two schemes of `numerics.transport`, and a
 test that the result schema describes the summary. Both are JSON Schema
-(draft-07): with the `jsonschema` package, `jsonschema.validate(case, schema)`
-checks names and types in your own tool. Ranges, units, geometry and budgets
-are checked only by `check`.
+(draft-07): `jsonschema.validate(case, schema)` checks names and types in your
+own tool. Ranges, units, geometry and budgets are checked only by `check`.
 
 ## Next
 

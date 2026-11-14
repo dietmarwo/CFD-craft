@@ -65,7 +65,7 @@ import json
 s = json.load(open("runs/point/summary.json"))
 print(s["termination"], s["assessment"])
 for check in s["checks"]:
-    print(f'{check["name"]:27} {check["passed"]}  limit {check["threshold"]:g}')
+    print(f"{check['name']:27} {check['passed']}  limit {check['threshold']:g}")
 ```
 
 ```text
@@ -138,7 +138,7 @@ report: exit 0
 ```python
 s = json.load(open("runs/point-5/summary.json"))
 print(s["steps"], s["termination"], s["assessment"])
-print(f'physical time {s["physical_time_s"]:g} s, error: {s["error"]}')
+print(f"physical time {s['physical_time_s']:g} s, error: {s['error']}")
 ```
 
 ```text

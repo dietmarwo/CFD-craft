@@ -75,7 +75,8 @@ from pathlib import Path
 
 resumed, cold = Path("runs/resumed"), Path("runs/cold")
 print((resumed / "fields.json").read_bytes() == (cold / "fields.json").read_bytes())
-first, second = (json.loads((run / "summary.json").read_text()) for run in (resumed, cold))
+first = json.loads((resumed / "summary.json").read_text())
+second = json.loads((cold / "summary.json").read_text())
 print(first["physics_sha256"] == second["physics_sha256"])
 print(first["initial_state_sha256"] != second["initial_state_sha256"])
 ```

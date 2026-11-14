@@ -26,6 +26,7 @@ case of [chapter 1](01-first-run.md) and makes a directory for outputs:
 ```python
 import os
 import urllib.request
+
 URL = "https://raw.githubusercontent.com/dietmarwo/CFD-craft/main/examples/manual/point-source.json"
 urllib.request.urlretrieve(URL, "point-source.json")
 os.makedirs("runs", exist_ok=True)
@@ -40,6 +41,7 @@ documentation check requires an exact match.
 import json
 import math
 import cfd_craft as cfd
+
 text = open("point-source.json").read()
 case = json.loads(text)
 print([cfd.check(value)["valid"] for value in (case, text, text.encode())])
@@ -59,15 +61,15 @@ except cfd.CfdError as error:
 ```
 
 `check` and `simulate` take a dictionary, JSON text or bytes. Text and bytes
-reach the native parser unchanged, so it can reject what a dictionary would
-hide: a key that occurs twice (`CFD-E000`), or trailing data. A dictionary is
-serialized as strict JSON; NaN or infinity raises `CfdError` with `CFD-P001`.
+reach the native parser unchanged, so it can reject a key that occurs twice
+(`CFD-E000`). NaN or infinity in a dictionary raises `CfdError` (`CFD-P001`).
 
 ## Errors carry diagnostics
 
 ```python
 import json
 import cfd_craft as cfd
+
 case = json.load(open("point-source.json"))
 case["run"]["threads"] = 0
 try:
@@ -91,52 +93,52 @@ report and `error.diagnostics` its findings. Branch on code and path.
 ```python
 import json
 import cfd_craft as cfd
+
 case = json.load(open("point-source.json"))
 case["run"]["max_steps"] = 5
 result = cfd.simulate(case)
-print(result["schema_version"], result["termination"], result["assessment"], result["steps"])
+print(result["termination"], result["assessment"], result["steps"])
 print(set(result) <= set(cfd.describe()["result_schema"]["properties"]))
 ```
 
 ```text
-cfd-craft.result/0.1 iteration_limit incomplete 5
+iteration_limit incomplete 5
 True
 ```
 
-`check` returns the check report; the `cfd-craft check` command wraps the same
-report as `{"check": ..., "geometry": ...}` and adds geometry counts.
-`simulate` returns the summary that the command writes as `summary.json`;
-`describe()["result_schema"]` describes its fields. A run that stops early is
-returned, not raised, so test the assessment before you use a value
-([chapter 4](04-reading-a-result.md)).
+`check` returns the check report; the `cfd-craft check` command wraps it as
+`{"check": ..., "geometry": ...}` and adds geometry counts. `simulate` returns
+the summary that the command writes as `summary.json`, schema
+`cfd-craft.result/0.1`; `describe()["result_schema"]` lists its fields. A run
+that stops early is returned, not raised, so test the assessment first.
 
 ## Threads, the GIL and concurrent calls
 
 A call releases the GIL while it solves and has its own state and its own
 pool of `run.threads` threads. Concurrent calls are safe; limit their number
-so the pools do not oversubscribe the cores. `run.memory_limit_mib` bounds an
-estimate calibrated on the command, not the memory of the Python process, and
-the host-memory refusal (`CFD-E070`) works on Linux only.
+so the pools fit the cores. `run.memory_limit_mib` bounds an estimate, not
+the Python process, and the host-memory refusal (`CFD-E070`) is Linux only.
 
 ## Cancel from Python
 
 `simulate(case, cancel_file=PATH)` stops when another thread or process
-creates the file (polled at most every 20 ms). Here it exists from the start:
+creates the file (polled at most every 20 ms). Ctrl-C in the main thread also
+cancels, then raises `KeyboardInterrupt`. Here the file exists from the start:
 
 ```python
 import json
 from pathlib import Path
 import cfd_craft as cfd
+
+case = json.load(open("point-source.json"))
 Path("runs/cancel").touch()
-result = cfd.simulate(json.load(open("point-source.json")), cancel_file=Path("runs/cancel"))
+result = cfd.simulate(case, cancel_file=Path("runs/cancel"))
 print(result["termination"], result["assessment"], result["steps"])
 ```
 
 ```text
 cancelled incomplete 0
 ```
-
-Ctrl-C in the main thread also cancels, then raises `KeyboardInterrupt`.
 
 ## The console script
 
@@ -156,8 +158,7 @@ simulate: exit 2
 ```
 
 Exit 0 is a valid case or an accepted run, 1 invalid input or an error, 2 a
-run without numerical acceptance. The script has its own name so that it never
-hides the `cfd-craft` command, the tool for archives, fields and restart.
+run without numerical acceptance. The name never hides the `cfd-craft` command.
 
 ## Drive the CLI from Python
 
@@ -166,9 +167,9 @@ For fields or an archive, call the command with `subprocess`:
 ```python
 import json
 import subprocess
-checked = subprocess.run(
-    ["cfd-craft", "check", "point-source.json"], capture_output=True, text=True, timeout=20
-)
+
+command = ["cfd-craft", "check", "point-source.json"]
+checked = subprocess.run(command, capture_output=True, text=True, timeout=20)
 body = json.loads(checked.stdout)
 if checked.returncode != 0 or not body["check"]["valid"]:
     raise RuntimeError(body["check"]["diagnostics"])
@@ -185,9 +186,9 @@ Pass the arguments as a list and leave `shell` off. An I/O error exits 1 with
 ## The whole native workflow in one script
 
 `examples/manual/cli_workflow.py` does all of this in one script: schemas,
-check, run, report and audit, doubled sources, an invalid case, an incomplete
-archive, a restart from its checkpoint, a preview and a VTK export. Its checks
-raise explicit exceptions, so they also hold under `python -O`:
+check, run, report, audit, doubled sources, an invalid case, an incomplete
+archive, a restart, a preview and a VTK export. Its checks raise explicit
+exceptions, so they also hold under `python -O`:
 
 ```bash
 python examples/manual/cli_workflow.py --output runs/manual-cli > /dev/null
@@ -196,6 +197,7 @@ python -O examples/manual/cli_workflow.py --output runs/manual-cli-optimized > /
 
 ```python
 import json
+
 for name in ("manual-cli", "manual-cli-optimized"):
     report = json.load(open(f"runs/{name}/report.json"))
     print(name, report["passed"], report["resumed_equals_cold"])
@@ -210,8 +212,7 @@ manual-cli-optimized True True
 
 Every summary carries `source_sha256` and `build_version`. The binding hashes
 its own Rust sources and lockfile with those of the core library, so a wheel
-and a checkout build can differ in identity with the same numerics. Compare
-results by their fields. `cfd_craft.__version__` is the installed version.
+and a checkout build can differ in identity with the same numerics.
 
 ## Next
 

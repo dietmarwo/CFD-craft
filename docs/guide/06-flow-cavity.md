@@ -79,7 +79,7 @@ import json
 s = json.load(open("runs/cavity-steady/summary.json"))
 print(s["termination"], s["assessment"], s["model_scope"])
 print([check["name"] for check in s["checks"]])
-print(f'velocity_max = {s["velocity_max_m_s"]:.6g} m/s')
+print(f"velocity_max = {s['velocity_max_m_s']:.6g} m/s")
 print(s["steps"] > 1000, s["pressure_iterations"] > s["steps"])
 ```
 
@@ -128,7 +128,7 @@ import json
 
 report = json.load(open("runs/cavity-ghia/report.json"))
 print(report["passed"], report["grid"], report["target_max"])
-print(f'largest difference = {report["maximum_centerline_absolute_error"]:.4g}')
+print(f"largest difference = {report['maximum_centerline_absolute_error']:.4g}")
 ```
 
 ```text

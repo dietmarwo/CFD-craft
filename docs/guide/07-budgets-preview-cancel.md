@@ -17,6 +17,7 @@ mkdir -p runs
 
 ```python
 import json
+
 case = json.load(open("cases/verification/lid-cavity.json"))
 case["name"] = "cavity-steady"
 case["run"]["mode"] = "steady"
@@ -41,9 +42,11 @@ cfd-craft check runs/cavity-steady.json > runs/check.json
 
 ```python
 import json
+
 report = json.load(open("runs/check.json"))["check"]
 print(report["valid"], report["cells"])
-print(f'peak {report["estimated_peak_mib"]:.3g} MiB, output {report["estimated_output_mib"]:.3g} MiB')
+peak, output = report["estimated_peak_mib"], report["estimated_output_mib"]
+print(f"peak {peak:.3g} MiB, output {output:.3g} MiB")
 ```
 
 ```text
@@ -72,8 +75,8 @@ exit 1
 
 An output estimate above `output.max_total_mib` is rejected the same way
 (`CFD-E007`). `run` also refuses a case whose estimate exceeds 80 percent of
-the memory available on this host (`CFD-E070`). `check` on such a host only
-warns (`CFD-W070`) and skips the checks that need the grid.
+the memory available on this host (`CFD-E070`); `check` then only warns
+(`CFD-W070`) and skips the checks that need the grid.
 
 ## Budgets are part of the case
 
@@ -86,15 +89,13 @@ warns (`CFD-W070`) and skips the checks that need the grid.
 | `output.max_total_mib` | The estimated and the actual size of the run directory |
 | `output.fields`, `output.checkpoint` | Whether the two large files are written at all |
 
-Every case states all of them, so there is no unbounded run. If the fields or
-the checkpoint would exceed the output budget after all, they are left out and
-listed in the manifest, the small files are still written, and the run exits 2
-with `CFD-E061`.
+Every case states all of them, so there is no unbounded run. Fields or a
+checkpoint that would exceed the output budget after all are left out and
+listed in the manifest, and the run exits 2 with `CFD-E061`.
 
 ## Preview on a coarser grid
 
-`preview` runs the case in the same domain with every cell count divided by 2,
-or by `--factor N`.
+`preview` runs the case with every cell count divided by 2, or by `--factor N`.
 
 ```bash
 cfd-craft preview examples/manual/point-source.json --output runs/preview > /dev/null
@@ -102,11 +103,12 @@ cfd-craft preview examples/manual/point-source.json --output runs/preview > /dev
 
 ```python
 import json
+
 s = json.load(open("runs/preview/summary.json"))
 tracer = next(c for c in s["constituents"] if c["id"] == "tracer")
 print(s["name"], s["fluid_cells"], s["assessment"])
 print(s["model_scope"])
-print(f'R_down = {tracer["receptors_kg_m3"]["R_down"] * 1e9:.6g} micrograms/m3')
+print(f"R_down = {tracer['receptors_kg_m3']['R_down'] * 1e9:.6g} micrograms/m3")
 ```
 
 ```text
@@ -183,15 +185,14 @@ cancelled incomplete
 ```
 
 The run ends as `cancelled / incomplete` and exits 2. Its archive is complete
-and verified, with a checkpoint to continue from
-([chapter 8](08-checkpoint-restart.md)). From Python, `cfd.simulate(case,
-cancel_file=PATH)` stops when the file appears ([chapter 11](11-python.md)).
+and verified, with a checkpoint ([chapter 8](08-checkpoint-restart.md)). From
+Python, `cfd.simulate(case, cancel_file=PATH)` does the same
+([chapter 11](11-python.md)).
 
 ## Threads
 
 The command and the Python binding build a pool of exactly `run.threads`
-threads per run. For several runs at once, keep runs times threads within the
-number of cores.
+threads per run. Keep runs times threads within the number of cores.
 
 ## Next
 

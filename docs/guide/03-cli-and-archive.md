@@ -67,7 +67,7 @@ import json
 s = json.load(open("runs/point/summary.json"))
 print(s["termination"], s["assessment"])
 tracer = next(c for c in s["constituents"] if c["id"] == "tracer")
-print(f'R_down = {tracer["receptors_kg_m3"]["R_down"] * 1e9:.6g} micrograms/m3')
+print(f"R_down = {tracer['receptors_kg_m3']['R_down'] * 1e9:.6g} micrograms/m3")
 ```
 
 ```text

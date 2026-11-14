@@ -18,12 +18,17 @@ mkdir -p runs
 ```python
 import json
 
+
 def variant(name, change):
     case = json.load(open("examples/manual/point-source.json"))
     change(case)
     json.dump(case, open(f"runs/{name}.json", "w"), indent=2)
 
-variant("unknown-field", lambda c: c["sources"][0].update(position_m=c["sources"][0].pop("point_m")))
+
+variant(
+    "unknown-field",
+    lambda c: c["sources"][0].update(position_m=c["sources"][0].pop("point_m")),
+)
 variant("no-outlet", lambda c: c["boundaries"].update(x="periodic"))
 variant("five-steps", lambda c: c["run"].update(max_steps=5))
 ```

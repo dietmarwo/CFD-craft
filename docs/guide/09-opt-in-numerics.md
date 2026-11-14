@@ -35,8 +35,7 @@ for name, options in copies.items():
     json.dump(case, open(f"runs/{name}.json", "w"), indent=2)
 ```
 
-The setup also makes the explicit second-order run that three sections compare
-with (8 to 11 s on the documentation host):
+The setup also runs the second-order copy (8 to 11 s on the documentation host):
 
 ```bash
 cfd-craft run runs/second.json --output runs/second > /dev/null
@@ -56,24 +55,23 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
 
 A case that names none of these fields runs exactly as it did before they
 existed, and its hashes and checkpoints stay valid. Every option is part of
-the physics hash, so a result shows which numerics produced it. The options
-are opt-in: nothing selects them for you, and whether a default should change
-is an open item of the [roadmap](../developer/roadmap.md).
+the physics hash. The options are opt-in: nothing selects them for you, and a
+change of defaults is an open item of the [roadmap](../developer/roadmap.md).
 
 ## Second-order momentum advection
 
 `limited_upwind` replaces the first-order donor-cell flux of the momentum
 equations with a conservative second-order upwind flux and a slope limiter;
-`second_order_upwind` is the same flux without a limiter. The limiter is
-required with `limited_upwind` and not allowed otherwise (`CFD-E037`). The run
-the setup made:
+`second_order_upwind` has no limiter. A limiter is required with
+`limited_upwind` and not allowed otherwise (`CFD-E037`). The setup's run:
 
 ```python
 import json
+
 s = json.load(open("runs/second/summary.json"))
 print(s["termination"], s["assessment"])
 print([check["name"] for check in s["checks"]])
-print(f'velocity_max = {s["velocity_max_m_s"]:.5g} m/s', s["steps"] > 2000)
+print(f"velocity_max = {s['velocity_max_m_s']:.5g} m/s", s["steps"] > 2000)
 ```
 
 ```text
@@ -83,13 +81,11 @@ velocity_max = 0.86857 m/s True
 ```
 
 It is accepted by the same four checks as the default run of chapter 6. The
-solution differs: the maximum speed is 0.86857 m/s where the first-order
-scheme gives 0.85856 m/s. The committed
-[matched accuracy](../evidence/matched-accuracy.md) record measures the
-difference from the Ghia reference as 0.0276 for the default and 0.0054 for
-`limited_upwind` with `van_leer` on this 24 x 24 grid. The scheme works with
-walls, moving walls, slip, periodic and open boundaries, buildings and
-`neutral_rans`. The constituents keep their own scheme, `numerics.transport`.
+solution differs: the maximum speed is 0.86857 m/s, against 0.85856 m/s first
+order. The committed [matched accuracy](../evidence/matched-accuracy.md)
+record gives the difference from the Ghia reference as 0.0276 for the default
+and 0.0054 for this scheme on a 24 x 24 grid. It works with all boundary
+kinds, buildings and `neutral_rans`, and leaves `numerics.transport` alone.
 
 ## Implicit steady iteration
 
@@ -102,27 +98,29 @@ cfd-craft run runs/implicit.json --output runs/implicit > /dev/null
 
 ```python
 import json
-explicit, implicit = (json.load(open(f"runs/{n}/summary.json")) for n in ("second", "implicit"))
+
+explicit = json.load(open("runs/second/summary.json"))
+implicit = json.load(open("runs/implicit/summary.json"))
 print(implicit["termination"], implicit["assessment"])
 print(explicit["steps"] > 2000, implicit["steps"] < 400)
-print(explicit.get("momentum_solver_iterations"), implicit["momentum_solver_iterations"] > 0)
+key = "momentum_solver_iterations"
+print(key in explicit, key in implicit)
 ```
 
 ```text
 completed steady_discrete_solution
 True True
-None True
+False True
 ```
 
 The implicit run is accepted by the same checks after a few hundred outer
 iterations, where the explicit run needs more than 2,000 steps: about 0.5 s
-against 8 to 11 s on the documentation host. The committed measurement is in
-[implicit steady results](../evidence/implicit-steady.md). With an implicit
-algorithm `steps` counts outer iterations and `momentum_solver_iterations` the
-inner iterations of the momentum solves; an explicit run omits that field.
-The implicit algorithms are for steady mode (`CFD-E045` otherwise) and
-computed flow (`CFD-E047` with prescribed flow). `implicit_viscous` is a
-smaller change, implicit viscosity only, for laminar flow.
+against 8 to 11 s on the documentation host
+([implicit steady results](../evidence/implicit-steady.md)). `steps` now
+counts outer iterations and `momentum_solver_iterations` the inner iterations
+of the momentum solves; an explicit run omits that field. The implicit
+algorithms need steady mode (`CFD-E045`) and a computed flow (`CFD-E047`).
+`implicit_viscous` treats only viscosity implicitly, for laminar flow.
 
 ## The implicit recipe
 
@@ -137,11 +135,12 @@ cfd-craft run runs/recipe.json --output runs/recipe > /dev/null
 
 ```python
 import json
+
 speeds = []
 for name in ("second", "implicit", "recipe"):
     s = json.load(open(f"runs/{name}/summary.json"))
     speeds.append(s["velocity_max_m_s"])
-    print(f'{name:8} {s["assessment"]}  velocity_max = {speeds[-1]:.5g} m/s')
+    print(f"{name:8} {s['assessment']}  velocity_max = {speeds[-1]:.5g} m/s")
 print((max(speeds) - min(speeds)) / min(speeds) < 1e-4)
 ```
 
@@ -153,12 +152,11 @@ True
 ```
 
 All three runs are accepted and agree within the tolerance of this page. The
-recipe changes the path of the iteration, not the steady state and not the
-checks. It takes about 0.1 s on the documentation host. Two cautions. While
-such a run is still iterating, its velocity is only loosely divergence free,
-so the archive of a stopped recipe run fails `check_fields.py`. And the gain
-is measured on this cavity and on the coarse canyon of chapter 10
-([implicit RANS results](../evidence/implicit-rans.md)), not in general.
+recipe changes the path of the iteration, not the steady state or the checks.
+It takes about 0.1 s on the documentation host. Two cautions: a recipe run
+that is stopped early is only loosely divergence free and fails
+`check_fields.py`, and the gain is measured on this cavity and the coarse
+canyon of chapter 10 ([implicit RANS results](../evidence/implicit-rans.md)).
 
 ## Multigrid for the pressure equation
 
@@ -169,9 +167,11 @@ cfd-craft run runs/recipe-mg.json --output runs/recipe-mg > /dev/null
 
 ```python
 import json
-ic0, multigrid = (json.load(open(f"runs/{n}/summary.json")) for n in ("recipe", "recipe-mg"))
-print(multigrid["assessment"], multigrid["pressure_iterations"] < ic0["pressure_iterations"])
-print(abs(multigrid["velocity_max_m_s"] / ic0["velocity_max_m_s"] - 1) < 1e-4)
+
+ic0 = json.load(open("runs/recipe/summary.json"))
+mg = json.load(open("runs/recipe-mg/summary.json"))
+print(mg["assessment"], mg["pressure_iterations"] < ic0["pressure_iterations"])
+print(abs(mg["velocity_max_m_s"] / ic0["velocity_max_m_s"] - 1) < 1e-4)
 ```
 
 ```text
@@ -179,11 +179,10 @@ steady_discrete_solution True
 True
 ```
 
-`multigrid` preconditions the same pressure equation with a multigrid cycle
-and needs fewer pressure iterations for the same result. It costs setup time
-and memory, so compare total run times; on this small grid the two runs take
-the same time on the documentation host. It works without buildings only: a
-case with `geometry` is rejected (`CFD-E034`), with no silent fallback. See
+`multigrid` preconditions the same pressure equation and needs fewer pressure
+iterations for the same result. It costs setup time and memory, so compare
+total run times; on this small grid they are equal on the documentation host.
+A case with `geometry` is rejected (`CFD-E034`), with no silent fallback. See
 [pressure multigrid](../developer/pressure-multigrid.md), also for `CFD-W004`.
 
 ## Where the time goes: `profile`
@@ -197,34 +196,35 @@ python validation/check_profile.py runs/profile > runs/profile-check.json
 
 ```python
 import json
+
 checked = json.load(open("runs/profile-check.json"))
-print(checked["integrity_passed"], checked["numerical_accepted"], checked["physical_qualification"])
+for key in ("integrity_passed", "numerical_accepted", "physical_qualification"):
+    print(key, checked[key])
 timing = json.load(open("runs/profile/profile.json"))["timing"]
-print("pressure_solve" in timing["phases"], timing["accounted_exclusive_s"] <= timing["elapsed_s"])
+print(timing["accounted_exclusive_s"] <= timing["elapsed_s"])
 ```
 
 ```text
-True True False
-True True
+integrity_passed True
+numerical_accepted True
+physical_qualification False
+True
 ```
 
 `runs/profile` holds the ordinary run archive in `run/` and `profile.json`.
-Each phase has calls, inclusive seconds and exclusive seconds. Phases nest
-(`pressure_projection` contains `pressure_solve`), so add exclusive times
-only. `check_profile.py` ties the profile to its archive and runs the field
-audit. `physical_qualification` is always `false`: a timing is not a
-validation. See [profiling](../developer/profiling.md).
+Each phase has calls, inclusive and exclusive seconds. Phases nest, so add
+exclusive times only. `check_profile.py` ties the profile to its archive and
+runs the field audit. `physical_qualification` is always `false`: a timing is
+not a validation. See [profiling](../developer/profiling.md).
 
 ## With turbulence and a tracer
 
 `implicit_projection` also runs `neutral_rans` cases and constituents
 ([chapter 10](10-street-canyon.md)). Constituents advance in at most 16
-explicit sub-steps per outer iteration, so with a large step cap they cover
-less pseudo-time than the flow; the archived state records theirs as
-`scalar_time_s`. Their steady state and its checks are unchanged.
+explicit sub-steps per outer iteration and can cover less pseudo-time than the
+flow (`scalar_time_s`). Their steady state and its checks are unchanged.
 
 ## Next
 
 - [Chapter 10](10-street-canyon.md): buildings, turbulence and a line source.
-- [Flow model card](../model-cards/flow.md) for the schemes and algorithms;
-  [comparison](../comparison.md) for measurements against OpenFOAM.
+- [Flow model card](../model-cards/flow.md) and [comparison](../comparison.md).

@@ -20,14 +20,16 @@ Commands run from the root of a checkout, with the built command on `PATH`
 ([chapter 1](guide/01-first-run.md)), but no fields or archives.
 
 1. **Discover.** `cfd-craft describe` prints the schemas, the allowed values
-   and the exit codes. Use only fields it lists.
+   and the exit codes.
 2. **Choose or edit a case.** Start from a committed case under
    [`cases/`](https://github.com/dietmarwo/CFD-craft/blob/main/cases) or
    [`examples/manual/`](https://github.com/dietmarwo/CFD-craft/blob/main/examples/manual);
    write edits to a new file.
-3. **Check.** `cfd-craft check CASE` exits 1 on invalid input and prints every
+3. **Check.** `cfd-craft check CASE` exits 1 on invalid input and prints each
    diagnostic with a `code` and the `path` of the offending field. Read all of
-   them, warnings included, before you spend compute.
+   them, warnings included, and check again after a fix: a parse error is
+   reported alone, and the checks that need the grid run only when no other
+   error is left.
 4. **Bound the run.** Set `run.max_steps`, `run.wall_time_limit_s`,
    `run.threads`, `run.memory_limit_mib` and `output.max_total_mib`. Choose a
    new output directory whose parent exists.
@@ -90,7 +92,7 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
 | Entry point | What it gives |
 |---|---|
 | `cfd-craft describe` | JSON with `case_schema`, `result_schema`, `phase_profile_schema`, `exit_codes`, the allowed `physics`, `scalar_advection`, `momentum_advection`, `steady_algorithms` and `pressure_preconditioners`, the defaults, `limitations` and the build identity |
-| `python -m cfd_craft describe` | The same description from the Python package |
+| `python -m cfd_craft describe` | From the Python package: the same `case_schema` and `result_schema`, the binding's `capabilities` and its build identity. It has no `exit_codes`, value lists or `limitations` |
 | `cfd-craft check CASE` | `cfd-craft.check/0.1`: `valid`, `cells`, size estimates and `diagnostics`, each with `code`, `severity` and `path` |
 | `summary.json` of a run | `cfd-craft.result/0.1`: `termination`, `assessment`, `checks`, `model_scope`, `experimental_validation`, work counts, receptor values in kg/m3 |
 | Exit codes | 0 success (valid case, accepted run, intact archive); 1 invalid input or an execution or I/O error; 2 a run without numerical acceptance, or an accepted run that omitted files over its output budget |

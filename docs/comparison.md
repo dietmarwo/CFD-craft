@@ -1,8 +1,8 @@
 # CFD-craft, OpenFOAM and Ansys Fluent
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
+Version 0.1.1 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
-This page compares CFD-craft 0.1.0 with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
+This page compares CFD-craft 0.1.1 with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
 
 The short answer: OpenFOAM and Fluent cover far more physics, far more mesh and geometry types and far larger problems. CFD-craft covers one narrow task, neutral passive-gas dispersion on uniform grids around boxes, and puts its effort into checked input, stated stopping reasons and recomputed evidence.
 
@@ -24,7 +24,7 @@ These properties can be checked in this repository:
 
 Cells about other tools are facts from their current public documentation (sources at the end). "None documented" names the pages read that do not describe the feature; it says nothing about features those pages do not cover. The Fluent column is features only: this repository has no Fluent measurement.
 
-| Feature | CFD-craft 0.1.0 | OpenFOAM Foundation 13 | Ansys Fluent 2026 R1 |
+| Feature | CFD-craft 0.1.1 | OpenFOAM Foundation 13 | Ansys Fluent 2026 R1 |
 |---|---|---|---|
 | License and source | MIT, source on GitHub ([LICENSE](https://github.com/dietmarwo/CFD-craft/blob/main/LICENSE)) | GNU GPL version 3, source pack published [O1] | Licensed product; PyFluent needs a licensed local Fluent installation [F8] |
 | Install | `pip install cfd-craft` (Python binding) or `cargo install cfd-craft-cli` ([releasing](developer/releasing.md)) | Packages for Ubuntu 22.04, 24.04 and 25.04; Windows through WSL; macOS through Multipass; source pack [O1] | Installers for Linux x64 (Red Hat, SUSE, Ubuntu 22.04 and 24.04, Rocky) and Windows 11 or Server 2022 and 2025 [F13, F14]; a license is required [F8] |
@@ -93,11 +93,11 @@ Practitioners in urban air quality also use dedicated tools. PALM is a large-edd
 - **Physics.** OpenFOAM and Fluent model heat transfer, compressible and multiphase flow, particles and combustion [O3, F1]. CFD-craft has none of these.
 - **Turbulence.** They offer many RANS models plus LES and DES [O4, F3]. CFD-craft has one neutral k-epsilon package.
 - **Geometry and meshing.** They use unstructured and polyhedral meshes fitted to surface geometry [O2, O6, F2]. CFD-craft has uniform Cartesian grids and boxes.
-- **Validation.** Fluent publishes a verification manual with cases against published experiments [F11]; the OpenFOAM v13 tutorial pages do not document a comparison with measurements [O14, O15]. CFD-craft 0.1.0 has no experimental validation.
+- **Validation.** Fluent publishes a verification manual with cases against published experiments [F11]; the OpenFOAM v13 tutorial pages do not document a comparison with measurements [O14, O15]. CFD-craft 0.1.1 has no experimental validation.
 - **Community and maturity.** OpenFOAM has released a major version every year since at least 2017 [O13], and Fluent names an R1 and an R2 release in each of 2025 and 2026 [F8]. CFD-craft had its first release on 4 November 2026.
 - **Parallel scaling.** Both run in parallel with MPI [O10, F9]; Fluent also on GPUs [F10]. CFD-craft uses threads on one machine.
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
+Version 0.1.1 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
 ## When to use which
 

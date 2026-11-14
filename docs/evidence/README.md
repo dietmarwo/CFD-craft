@@ -1,6 +1,6 @@
 # About the evidence
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an
+Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 These pages are the committed records of measurements: what was run, on which

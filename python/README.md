@@ -61,7 +61,7 @@ JSON; the `cfd-craft-python` console script does the same. Fields,
 checksummed archives, restarts and profiles belong to the Rust CLI
 (`cargo install cfd-craft-cli --locked`).
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an
+Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction. Experimental canyon validation and a
 successful fine-grid resolution study remain open.
 

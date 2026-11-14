@@ -20,7 +20,7 @@ failures as `CFD-R001 release.<field>`. Publication is irreversible: never
 reuse a version. MIT project licensing does not relicense dependencies or
 reference data.
 
-A package release is not physical qualification. 0.1.0 is a research
+A package release is not physical qualification. 0.1.1 is a research
 prototype: experimental canyon validation (blocked by access to raw benchmark
 data) and a successful fine-grid resolution study remain open.
 

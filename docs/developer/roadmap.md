@@ -1,6 +1,6 @@
 # Roadmap
 
-This page maps the development plan (version 2, which replaces the initial plan) to what 0.1.0 contains, and lists the next steps. The plan's proposed case file is a draft; the schemas from `cfd-craft describe` are authoritative. [RESULTS](../evidence/native-verification.md) holds the numbers.
+This page maps the development plan (version 2, which replaces the initial plan) to what 0.1.1 contains, and lists the next steps. The plan's proposed case file is a draft; the schemas from `cfd-craft describe` are authoritative. [RESULTS](../evidence/native-verification.md) holds the numbers.
 
 An [external-backend workstream](../history/02-external-validation-plan.md) runs
 OpenFOAM Foundation 13 next to the native solver: a same-Re cavity cross-check
@@ -13,7 +13,7 @@ wall and throughput tasks below remain.
 
 ## Milestones
 
-| Milestone | Exit gate in the plan | State in 0.1.0 |
+| Milestone | Exit gate in the plan | State in 0.1.1 |
 |---|---|---|
 | M0 Contracts and evidence skeleton | Case/result schemas, diagnostics, resource estimator, data inventory, proposed protocols | Done. Diagnostics carry codes and field paths ([catalog](../diagnostics.md)). The memory and output estimates bound the measured peak and the written artifacts. `validation/data-inventory.json` lists each dataset's access status. The CODASC protocol is `blocked_data` |
 | M1a Grid and elliptic operators | Uniform staggered grid, mask topology, pressure reference, projection identities, manufactured Poisson | Done. The matrix-free operator matches an independently assembled reference on a masked grid with an outlet, a sealed pocket and a periodic axis (products to 1e-12, solutions to 1e-10). One gauge per closed component; projection and adjoint identities; second-order Poisson convergence |
@@ -59,14 +59,14 @@ fine-grid and experimental-validation gates remain open.
 | Runner integration that keeps CFD evidence | Yes (`integrations/`) |
 | Measured CPU time, peak memory and output size on named hardware | Yes (RESULTS) |
 
-0.1.0 is therefore a research prototype with the verification evidence recorded above.
+0.1.1 is therefore a research prototype with the verification evidence recorded above.
 The experimental package release is independent of physical qualification; a
 physically qualified canyon release still requires the grid study and measured data.
 See [Releasing](releasing.md).
 
 ## Numeric targets of the plan
 
-| Target | Plan | 0.1.0 |
+| Target | Plan | 0.1.1 |
 |---|---|---|
 | Assembled versus matrix-free pressure | ≤ 1e-10 | Products ≤ 1e-12 relative, solutions ≤ 1e-10 |
 | Spatial order of the second-order modes | ≥ 1.8 | 2.00 (flow), 2.32 (MUSCL transport, gated at 1.8) |

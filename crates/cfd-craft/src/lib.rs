@@ -13,7 +13,7 @@
 //!
 //! # Status
 //!
-//! Version 0.1.0 is a **research prototype**. The coarse finite-canyon
+//! Version 0.1.1 is a **research prototype**. The coarse finite-canyon
 //! examples converge under independent continuity and mass checks.
 //! Experimental canyon validation (blocked by access to raw benchmark data)
 //! and a successful fine-grid resolution study remain open; the first

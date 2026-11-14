@@ -187,8 +187,8 @@ not_validated; see validation/data-inventory.json
 prescribed_flow_passive_transport
 ```
 
-Every result of version 0.1.0 carries this label, whatever its assessment.
-Version 0.1.0 is a research prototype. A numerically accepted run is not an
+Every result of version 0.1.1 carries this label, whatever its assessment.
+Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 - What exists is verification: comparison with analytic solutions and with

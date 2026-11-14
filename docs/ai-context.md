@@ -7,7 +7,7 @@ JSON file; a run is bounded and reports why it stopped, what its numerical
 checks support and an experimental-validation label. An optional adapter runs
 two generated cases on OpenFOAM Foundation 13 for cross-checks.
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an
+Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 ## The run loop
@@ -173,7 +173,7 @@ and [19](guide/19-refinement-campaign.md) cover it.
 
 ## Scope
 
-Version 0.1.0 models uniform Cartesian grids with box-shaped solids, laminar
+Version 0.1.1 models uniform Cartesian grids with box-shaped solids, laminar
 flow, one neutral k-epsilon package and passive gas. It does not model
 particles, deposition, vegetation, LES, chemistry, stretched grids or GPU
 execution. The fcmaes worker supports prescribed-flow, three-source scalar

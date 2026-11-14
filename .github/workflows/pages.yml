@@ -1,0 +1,68 @@
+name: Documentation site
+"on":
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  # Not named MDBOOK_*: mdBook reads every MDBOOK_* variable as a
+  # configuration key. These two versions are built for each other
+  # (mdbook-mermaid 0.17.1 uses the mdbook 0.5.0 preprocessor interface; a
+  # different pair prints a warning, which fails this job).
+  PIN_MDBOOK: "0.5.0"
+  PIN_MDBOOK_MERMAID: "0.17.1"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - id: cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/mdbook-tools
+          key: mdbook-${{ env.PIN_MDBOOK }}-${{ env.PIN_MDBOOK_MERMAID }}-${{ runner.os }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked --version "$PIN_MDBOOK" --root ~/mdbook-tools mdbook
+          cargo install --locked --version "$PIN_MDBOOK_MERMAID" --root ~/mdbook-tools mdbook-mermaid
+      - run: echo "$HOME/mdbook-tools/bin" >> "$GITHUB_PATH"
+      - name: Write the mermaid scripts next to book.toml
+        run: mdbook-mermaid install .
+      - name: Build with warnings as errors
+        run: |
+          mdbook --version
+          mdbook-mermaid --version
+          mdbook build 2>&1 | tee build.log
+          if grep -Eq '^(Warning|WARN|ERROR)|[[:space:]](WARN|ERROR)[[:space:]]' build.log; then
+            echo "mdBook printed a warning or an error" >&2
+            exit 1
+          fi
+      - name: Check internal references in the built HTML
+        run: python scripts/check_site.py book
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: book
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

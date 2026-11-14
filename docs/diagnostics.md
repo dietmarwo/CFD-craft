@@ -61,6 +61,16 @@ The line is the line of the opening fence, or of the differing output line; it
 is 0 for `docs.counts`. These are checks of the
 documentation, not solver tolerances.
 
+The documentation site tools (`scripts/mdbook_links.py`, the mdBook
+preprocessor, and `scripts/check_site.py`, the check of the built `book/`
+directory) report `CFD-R004 site.<field>`: `site.link` for a link in a page
+under `docs/` whose target does not exist or leaves the repository,
+`site.book` or `site.protocol` for input that mdBook should not send,
+`site.directory` for a missing or empty site directory, `site.reference` for an
+internal `href` or `src` in the built HTML that resolves to no file, and
+`site.anchor` for a fragment that names no `id` on the target page. These are
+checks of the documentation site, not solver tolerances.
+
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe
 arguments, case or output, missing input files, nonfinite or null results,
 repetitions that disagree, changed binary/case/producer identities, a child that

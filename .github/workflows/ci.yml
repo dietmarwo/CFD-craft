@@ -133,9 +133,10 @@ jobs:
           code=$?
           test ! -f runs/mapping-cavity/report.json || python validation/external_notices.py runs/mapping-cavity/report.json "mapping cavity"
           test "$code" -eq 0 -o "$code" -eq 2
-      # The user manual's OpenFOAM recipes (Examples 21, 22, 24 and 25, and the run of
-      # the mapped case) with the manual's relative runtime path. Every step must exit
-      # 0; the notice lists each step's exit code and result.
+      # The OpenFOAM recipes of guide chapters 15 and 17 (the old manual's Examples 21,
+      # 22, 24 and 25, and the run of the mapped case) with the guide's relative
+      # runtime path. Every step must exit 0; the notice lists each step's exit code
+      # and result.
       - run: |
           set +e
           python validation/manual_examples.py --foam-root runs/openfoam13/runtime/opt/openfoam13 --output runs/manual-foam > /dev/null
@@ -179,6 +180,15 @@ jobs:
             runs/mapping-cavity/**
             runs/manual-foam/report.json
             runs/manual-foam/*.log
+      # The code blocks of guide chapters 15 to 19 with the runtime, after the steps
+      # above. Smoke mode: chapters 18 and 19 and the long sections of chapter 16
+      # take hours and are syntax-checked only; the rest runs.
+      - run: python scripts/check_docs.py --smoke --foam-root runs/openfoam13/runtime/opt/openfoam13 docs/guide/15-openfoam-first-run.md docs/guide/16-compare-solvers.md docs/guide/17-continuation-and-mapping.md docs/guide/18-backstep-resolution.md docs/guide/19-refinement-campaign.md > runs/docs-openfoam.json
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-openfoam
+          path: runs/docs-openfoam.json
   # Same-host timing of the cavity with both backends; explicit opt-in only.
   backend-comparison:
     if: github.event_name == 'workflow_dispatch' && inputs.external == 'comparison'
@@ -604,6 +614,44 @@ jobs:
             runs/**/report.json
             runs/**/summary.json
             runs/**/*.png
+  docs:
+    # The code blocks of the guide, the reference, the entry pages and the
+    # READMEs (scripts/check_docs.py, smoke mode: sections marked `long` are
+    # syntax-checked only), the generated reference pages and the tests of
+    # both scripts. About 2.5 minutes of checks after the builds.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: cargo build --release --workspace --locked
+      - run: cargo build --release --workspace --examples --locked
+      - run: python -m pip install maturin==1.9.6
+      - run: maturin build --release --locked --out dist
+      - run: python -m pip install dist/*.whl
+      - run: python -m pip install -r requirements-validation.txt
+      # The versions of guide chapter 13.
+      - run: python -m pip install fcmaes-rust==0.2.1 lp-ip-craft==0.29.0
+      - run: python scripts/generate_reference.py --check
+      - run: python validation/test_check_docs.py -v
+      - run: python -O validation/test_check_docs.py -v
+      - run: python validation/test_generate_reference.py -v
+      - run: python -O validation/test_generate_reference.py -v
+      - run: mkdir -p runs
+      - run: python scripts/check_docs.py --smoke > runs/docs-check.json
+      - run: python -O scripts/check_docs.py --smoke > runs/docs-check-optimized.json
+      - run: diff runs/docs-check.json runs/docs-check-optimized.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: docs-check
+          path: runs/docs-check*.json
   native-adapter:
     runs-on: ubuntu-latest
     strategy:
@@ -642,8 +690,12 @@ jobs:
       - run: cargo build --release --locked --manifest-path optimization-jobs/Cargo.toml -p optimization-runner
       - run: python -m pip install -r requirements-validation.txt
       - run: mkdir -p runs && python integrations/run_jobs.py --runner optimization-jobs/target/release/optimization-run --output runs/jobs
+      # The code blocks of guide chapter 14 with the worker and the runner.
+      - run: python scripts/check_docs.py --runner optimization-jobs/target/release/optimization-run docs/guide/14-optimization-jobs.md > runs/docs-jobs.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: runner-integration
-          path: runs/jobs/report.json
+          path: |
+            runs/jobs/report.json
+            runs/docs-jobs.json

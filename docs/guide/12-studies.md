@@ -186,5 +186,5 @@ Give this to a coding agent that has the checkout:
 
 ## Next
 
-Chapter 13 builds optimization lessons on this chapter. The
+[Chapter 13](13-optimization-lessons.md) builds optimization lessons on this chapter. The
 [transport model card](../model-cards/transport.md) states the model's limits.

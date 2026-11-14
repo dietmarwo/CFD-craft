@@ -161,12 +161,17 @@ def receptor_weights(receptor, dx, cells, fluid, index):
 
 
 def inside_polygon(vertices, point):
-    """Independent half-open horizontal ray crossings, local metric x/y."""
+    """Independent half-open horizontal ray crossings, local metric x/y.
+
+    Each crossing is evaluated from the lower endpoint of its edge, as the
+    native mask does, so vertex order cannot change a center on an edge.
+    """
     x, y = point[:2]
     count = 0
     for a, b in zip(vertices, vertices[1:] + vertices[:1], strict=True):
         if (a[1] > y) != (b[1] > y):
-            cross_x = (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]
+            lo, hi = (a, b) if a[1] < b[1] else (b, a)
+            cross_x = (hi[0] - lo[0]) * (y - lo[1]) / (hi[1] - lo[1]) + lo[0]
             count += x < cross_x
     return count % 2 == 1
 

@@ -1,17 +1,23 @@
 //! Simple polygon prisms use the same cell-center mask and face operators as boxes.
 use crate::case::Case;
 
-/// Signed-crossing point test. Half-open ray crossings agree with box masks
-/// for axis-aligned footprints; the bounding box handles upper boundaries.
+/// Even-odd crossing test of a ray toward +x. Half-open ray crossings agree
+/// with box masks for axis-aligned footprints; the bounding box handles upper
+/// boundaries. A point exactly on an edge belongs to the footprint whose
+/// interior lies on the +x side of that edge (for a horizontal edge, the +y
+/// side). Every crossing is evaluated from the edge's lower endpoint, so the
+/// result does not depend on the winding, on the first vertex, or on which of
+/// two abutting footprints lists a shared edge: such a point is in exactly one.
 pub fn contains(polygon: &[[f64; 2]], p: [f64; 2]) -> bool {
     let mut inside = false;
     for i in 0..polygon.len() {
         let a = polygon[i];
         let b = polygon[(i + 1) % polygon.len()];
-        if (a[1] > p[1]) != (b[1] > p[1])
-            && p[0] < a[0] + (p[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
-        {
-            inside = !inside;
+        if (a[1] > p[1]) != (b[1] > p[1]) {
+            let (lo, hi) = if a[1] < b[1] { (a, b) } else { (b, a) };
+            if p[0] < lo[0] + (p[1] - lo[1]) * (hi[0] - lo[0]) / (hi[1] - lo[1]) {
+                inside = !inside;
+            }
         }
     }
     inside
@@ -118,6 +124,51 @@ pub fn minimum_passage(c: &Case) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn centers_on_a_shared_slanted_edge_are_in_exactly_one_abutting_footprint() {
+        // Cell centers of a uniform grid that lie on the common edge A-B of two
+        // footprints. Evaluating the crossing from A in one footprint and from
+        // B in the other rounded differently, leaving one-cell fluid holes.
+        let mut checked = 0;
+        for dx in [0.1, 0.3, 0.7] {
+            for (i0, j0, steps, slope) in [
+                (28usize, 30usize, 12usize, [2isize, -1isize]),
+                (27, 0, 10, [2, 1]),
+                (3, 5, 9, [1, 3]),
+                (11, 40, 7, [3, -1]),
+                (0, 0, 12, [1, 1]),
+            ] {
+                let at = |m: usize| {
+                    [
+                        (i0 as f64 + 0.5 + (m as isize * slope[0]) as f64) * dx,
+                        (j0 as f64 + 0.5 + (m as isize * slope[1]) as f64) * dx,
+                    ]
+                };
+                let (a, b) = (at(0), at(steps));
+                let left = [a, b, [b[0] - 50., b[1]], [a[0] - 50., a[1]]];
+                let right = [b, a, [a[0] + 50., a[1]], [b[0] + 50., b[1]]];
+                for m in 1..steps {
+                    let p = at(m);
+                    assert_ne!(contains(&left, p), contains(&right, p), "{dx} {p:?}");
+                    // Winding and first vertex do not change the answer.
+                    let mut reversed = left;
+                    reversed.reverse();
+                    assert_eq!(contains(&left, p), contains(&reversed, p));
+                    let mut rotated = left;
+                    rotated.rotate_left(1);
+                    assert_eq!(contains(&left, p), contains(&rotated, p));
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 100);
+        // The first recorded failure: dx = 0.7, in neither footprint.
+        let (a, b) = ([19.95, 21.349999999999998], [36.75, 12.95]);
+        let p = [21.349999999999998, 20.65];
+        let left = [a, b, [b[0] - 50., b[1]], [a[0] - 50., a[1]]];
+        let right = [b, a, [a[0] + 50., a[1]], [b[0] + 50., b[1]]];
+        assert_ne!(contains(&left, p), contains(&right, p));
+    }
     #[test]
     fn simple_concave_and_invalid_crossing() {
         let p = [[0., 0.], [2., 0.], [2., 1.], [1., 1.], [1., 2.], [0., 2.]];

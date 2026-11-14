@@ -24,7 +24,11 @@ polygons work; holes, crossing edges and zero area are rejected (`CFD-E084`).
 ```
 
 The mask is cell-center based, with lower bounds inclusive and upper bounds
-exclusive. It uses the same wall faces and pressure operator as boxes. There
+exclusive. A cell center exactly on a slanted edge belongs to the footprint
+whose interior lies on the +x side of that edge. The rule does not depend on
+the winding or on the first vertex, so a center on the common edge of two
+abutting footprints is in exactly one of them and no fluid cell appears between
+them. It uses the same wall faces and pressure operator as boxes. There
 are no cut cells, terrain or body-fitted native walls. `geometry.json.shapes`
 records exact and represented volume, signed volume error, contained cells,
 and the narrowest horizontal fluid run from each shape to another solid.

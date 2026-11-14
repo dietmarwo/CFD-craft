@@ -2,6 +2,7 @@
 
 <!-- check: openfoam -->
 <!-- check: long -->
+<!-- check: timeout=4000 -->
 
 This chapter maps an accepted coarse backstep once to the next finer mesh, continues the fine solve in bounded stages, and reports honestly when the fine grid does not earn acceptance. You need the runtime of [chapter 15](15-openfoam-first-run.md), a checkout with the validation requirements, and several hours of one CPU core for the declared campaign; a quick cavity variant is at the end.
 
@@ -42,6 +43,8 @@ print("source:", "runs/coarse-reference/" + r["rows"][0]["name"])
 Before it creates its output, the campaign verifies the source itself and requires its numerical acceptance, the full independent audit and its measurement screen (for the cavity, the Ghia reference check). Supported sources are cold-generated level 1 or 2 cavity archives and cold `wall-resolved` / `simplec` backstep archives; the target is exactly the next level. A mapped or continued archive cannot be mapped again.
 
 ## Run the campaign
+
+<!-- check: timeout=7200 -->
 
 ```bash
 python validation/refinement_campaign.py \

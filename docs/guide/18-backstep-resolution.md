@@ -2,6 +2,7 @@
 
 <!-- check: openfoam -->
 <!-- check: long -->
+<!-- check: timeout=4000 -->
 
 This chapter decides whether a backward-facing-step calculation may be compared with measurements at all: it runs the wall-resolved reference recipe, audits its mesh, face fluxes and near-wall resolution independently, and reads the report level by level. You need the runtime of [chapter 15](15-openfoam-first-run.md), a checkout with the validation requirements and about an hour of one CPU core.
 

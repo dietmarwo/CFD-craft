@@ -1,6 +1,7 @@
 # Install OpenFOAM and run a cavity
 
 <!-- check: openfoam -->
+<!-- check: timeout=600 -->
 
 This chapter installs the pinned OpenFOAM Foundation 13 runtime without root, then generates, runs and checks one laminar cavity through CFD-craft's bounded OpenFOAM adapter, from the command line and from Python. You need Ubuntu 24.04 on x86_64, a checkout, Python 3.10 or newer, Rust 1.88 or newer and `dpkg-deb`.
 

@@ -1,6 +1,7 @@
 # Optimization jobs
 
 <!-- check: jobs -->
+<!-- check: timeout=900 -->
 
 This chapter runs the solver as jobs of `optimization-run`, the runner of the separate optimization-jobs project: once as a plain command, and once through the optional fcmaes application worker with an evaluation, a BiteOpt retry and a Gaussian-process surrogate job. You need Rust, a checkout, the worker crate built with its own lockfile and `optimization-run` built from the pinned optimization-jobs revision.
 

@@ -41,19 +41,24 @@ sources that this page does not list.
 The documentation check (`scripts/check_docs.py`) reports
 `CFD-R003 docs.<field>: PAGE:LINE: message` for a page whose code blocks do not
 hold: `docs.fence` for a block without a known info string or without an end,
-`docs.marker` for an unknown or misplaced `<!-- check: ... -->` or
-`<!-- file: ... -->` comment, a tolerance above 1e-4 or a missing tolerance
+`docs.marker` for an unknown, misplaced, malformed or repeated
+`<!-- check: ... -->` or `<!-- file: ... -->` comment, a tolerance above 1e-4,
+a timeout that is not a positive number of seconds or a missing tolerance
 sentence, `docs.setup` when `## Setup` is not the first section, `docs.python`
 and `docs.bash` for a block that raises, exits non-zero, has a syntax error,
 names a script that is not in the checkout or does not end in time, `docs.text`
 when the output of the block before it differs from the shown text (floats
-within the tolerance the page declares, everything else exactly), `docs.json`
+within the tolerance the page declares, everything else exactly) or when a
+`text` block shows a float on a page without a tolerance, `docs.json`
 for JSON that is not strict, a case that `cfd-craft check` rejects or a block
 that differs from the committed file it names, `docs.sh`, `docs.toml` and
 `docs.rust` for a block that does not parse or is not found in the file it is
-bound to, `docs.binary` when `cfd-craft` cannot be run, `docs.page` for an
-unreadable page and `docs.arguments` for invalid options. The line is the line
-of the opening fence, or of the differing output line. These are checks of the
+bound to, `docs.binary` when `cfd-craft` cannot be run, `docs.counts` when a page has
+fewer blocks of a class than its entry in `docs/check-counts.json`, has no
+entry, or (for the default set) an entry names a page that is not checked,
+`docs.page` for an unreadable page and `docs.arguments` for invalid options.
+The line is the line of the opening fence, or of the differing output line; it
+is 0 for `docs.counts`. These are checks of the
 documentation, not solver tolerances.
 
 Native performance probes use `CFD-B001 benchmark.<field>` for invalid probe

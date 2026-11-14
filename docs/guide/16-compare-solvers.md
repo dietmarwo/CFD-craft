@@ -1,6 +1,7 @@
 # Compare solvers and measurements
 
 <!-- check: openfoam -->
+<!-- check: timeout=600 -->
 
 This chapter makes three comparisons with the OpenFOAM backend: the native solver and OpenFOAM on the same cavity against a numerical reference, OpenFOAM on the backward-facing step against public measurements under a frozen protocol, and the cost of both backends on one host. You need the runtime of [chapter 15](15-openfoam-first-run.md), a checkout with the release build and the validation requirements.
 
@@ -28,6 +29,7 @@ In the [external-backend record](../evidence/external-backend.md) (a GitHub-host
 ## One solver against measurements
 
 <!-- check: long -->
+<!-- check: timeout=1200 -->
 
 The backstep uses the raw Driver and Seegmiller measurements published by the [Turbulence Modeling Resource](https://tmbwg.github.io/turbmodels/backstep_val.html). Fetch them once; the script checks frozen SHA-256 identities and never substitutes synthetic data:
 
@@ -74,6 +76,7 @@ The study preset runs backstep levels 1, 2 and 3 (22,656, 90,624 and 203,904 cel
 ## Time both backends on one host
 
 <!-- check: long -->
+<!-- check: timeout=1800 -->
 
 ```bash
 python validation/compare_backends.py \

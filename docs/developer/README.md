@@ -13,6 +13,7 @@ adapters, the checks or the documentation. To run cases, start with the
 - [Numerical decisions](decisions.md): the choices behind version 0.1 and what each costs.
 - [Roadmap](roadmap.md): the milestones of the plan, their state and the next steps.
 - [Releasing](releasing.md): versions, registries, qualification and tagging.
+- [The documentation check](documentation.md): the fence contract, smoke and full mode, the block ledger and the CI jobs.
 
 The measurements behind these pages are listed in the [evidence index](../evidence/README.md);
 the plans as they were written are in the [history](../history/README.md).
@@ -28,6 +29,8 @@ python validation/test_cli.py -v
 python -O validation/test_cli.py -v
 python validation/test_manual_examples.py -v
 python scripts/generate_reference.py --check
+python validation/test_check_docs.py -v
+python scripts/check_docs.py --smoke > runs/docs-check.json
 python validation/run_suite.py --preset smoke --output runs/verification
 python validation/flow_accuracy.py --output runs/flow-accuracy
 python validation/cavity.py --output runs/cavity

@@ -13,7 +13,7 @@ python scripts/check_docs.py --smoke
 ```
 
 The last command runs the code blocks of the guide and the READMEs and compares
-their outputs; [the developer pages](../../docs/developer/README.md) describe it.
+their outputs; [the documentation check](../../docs/developer/documentation.md) describes it.
 `python validation/manual_examples.py --output NEW_DIRECTORY` still runs these
 files as a fixed suite of 11 native steps, and with `--foam-root ROOT` the 8
 OpenFOAM steps. Both are API and numerical verification, not experimental

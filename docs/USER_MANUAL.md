@@ -56,7 +56,7 @@ Now in [Chapter 14, Optimization jobs](guide/14-optimization-jobs.md); [Chapter 
 
 ## Verification and performance
 
-Now in [Working on CFD-craft, Checks before a change](developer/README.md#checks-before-a-change); [Chapter 12, Many runs](guide/12-studies.md); [Chapter 16, Time both backends on one host](guide/16-compare-solvers.md#time-both-backends-on-one-host).
+Now in [The documentation check, Run the documentation check](developer/documentation.md#run-the-documentation-check); [Chapter 12, Many runs](guide/12-studies.md); [Chapter 16, Time both backends on one host](guide/16-compare-solvers.md#time-both-backends-on-one-host).
 
 ## Troubleshooting
 
@@ -94,6 +94,6 @@ Now in [Chapter 21, Troubleshooting](guide/21-troubleshooting.md).
 | 26: inspect the application worker | [Chapter 14, The application worker](guide/14-optimization-jobs.md#the-application-worker) |
 | 27: execute real optimizer jobs | [Chapter 14, Run the four jobs](guide/14-optimization-jobs.md#run-the-four-jobs) |
 | 28: prompt an agent with concrete boundaries | [Chapter 14, A task for an agent](guide/14-optimization-jobs.md#a-task-for-an-agent) |
-| 29: run the manual's executable example checks | [Working on CFD-craft, Checks before a change](developer/README.md#checks-before-a-change) |
+| 29: run the manual's executable example checks | [The documentation check, Run the documentation check](developer/documentation.md#run-the-documentation-check) |
 | 30: run scientific workflows | [Chapter 12, What sensors identify: the source-inference study](guide/12-studies.md#what-sensors-identify-the-source-inference-study); [Chapter 12, An independent reference solve](guide/12-studies.md#an-independent-reference-solve); [Chapter 10, All committed scenarios in one study](guide/10-street-canyon.md#all-committed-scenarios-in-one-study) |
 | 31: reproduce the backend timing comparison | [Chapter 16, Time both backends on one host](guide/16-compare-solvers.md#time-both-backends-on-one-host); [CFD-craft, OpenFOAM and Ansys Fluent](comparison.md) |

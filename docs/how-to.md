@@ -139,3 +139,4 @@ the setup of its chapter.
 | read a run archive from Rust? | 20 [Read a CLI archive](guide/20-rust-library.md#read-a-cli-archive) |
 | find what a diagnostic code means? | [Diagnostics](diagnostics.md); 21 [By symptom](guide/21-troubleshooting.md#by-symptom) |
 | find the measurement behind a number? | [Evidence](evidence/README.md); [comparison](comparison.md) |
+| run the documentation check myself? | [Run the documentation check](developer/documentation.md#run-the-documentation-check) |

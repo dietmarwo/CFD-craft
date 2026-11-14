@@ -125,6 +125,51 @@ pub fn minimum_passage(c: &Case) -> Option<usize> {
 mod tests {
     use super::*;
     #[test]
+    fn crossings_spikes_and_touching_vertices_are_rejected_with_nonzero_area() {
+        // A symmetric bow tie has zero shoelace area and is rejected for that
+        // alone. These footprints have positive area, so only the edge tests
+        // can reject them.
+        let bounds = |p: &[[f64; 2]]| {
+            let lo = [0, 1].map(|d| p.iter().map(|v| v[d]).fold(f64::INFINITY, f64::min));
+            let hi = [0, 1].map(|d| p.iter().map(|v| v[d]).fold(f64::NEG_INFINITY, f64::max));
+            ([lo[0], lo[1], 0.], [hi[0], hi[1], 1.])
+        };
+        let crossing = [[0., 0.], [4., 0.], [1., 3.], [3., 3.]];
+        let spike = [[2., 2.], [4., 2.], [6., 2.], [4., 2.], [4., 4.], [2., 4.]];
+        let touching = [[2., 2.], [6., 2.], [6., 6.], [4., 2.], [2., 6.]];
+        let overlap = [
+            [0., 0.],
+            [4., 0.],
+            [4., 2.],
+            [1., 2.],
+            [3., 2.],
+            [3., 4.],
+            [0., 4.],
+        ];
+        for p in [&crossing[..], &spike, &touching, &overlap] {
+            assert!(area(p) > 0.5);
+            let (lo, hi) = bounds(p);
+            assert!(!valid_polygon(p, &lo, &hi), "{p:?}");
+        }
+        // The same outline without the defect is accepted, in both windings,
+        // with collinear vertices and with an edge far shorter than a cell.
+        let mut simple = vec![
+            [2., 2.],
+            [4., 2.],
+            [6., 2.],
+            [6., 6.],
+            [6., 6.000001],
+            [2., 6.000001],
+        ];
+        let (lo, hi) = bounds(&simple);
+        assert!(valid_polygon(&simple, &lo, &hi));
+        simple.reverse();
+        assert!(valid_polygon(&simple, &lo, &hi));
+        // A repeated neighbor, including a repeated closing vertex, is rejected.
+        simple.push(simple[0]);
+        assert!(!valid_polygon(&simple, &lo, &hi));
+    }
+    #[test]
     fn centers_on_a_shared_slanted_edge_are_in_exactly_one_abutting_footprint() {
         // Cell centers of a uniform grid that lie on the common edge A-B of two
         // footprints. Evaluating the crossing from A in one footprint and from

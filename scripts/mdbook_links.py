@@ -4,8 +4,8 @@ The site is built from `docs/` (see `book.toml` and `docs/SUMMARY.md`). A page
 in `docs/` may link to a file that the site does not contain: a stub that is
 not listed in `SUMMARY.md`, a source file or case outside `docs/`, or a
 directory. In the built HTML such a link would be broken. This preprocessor
-rewrites it to `https://github.com/dietmarwo/CFD-craft/blob/main/PATH`
-(`tree/main/PATH` for a directory). Links between listed pages, links to
+rewrites it to the file's `blob/main` URL in the GitHub repository
+(`tree/main` for a directory). Links between listed pages, links to
 assets (images) inside `docs/`, anchors, absolute URLs and everything inside
 code blocks and code spans stay as they are, except that a link to a
 `README.md` becomes a link to `index.md`, because mdBook writes `index.html`.

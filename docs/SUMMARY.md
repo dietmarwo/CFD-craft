@@ -92,6 +92,7 @@
 - [Symmetric pressure multigrid](developer/pressure-multigrid.md)
 - [Numerical decisions for 0.1](developer/decisions.md)
 - [Roadmap](developer/roadmap.md)
+- [The documentation check](developer/documentation.md)
 - [Releasing](developer/releasing.md)
 
 # History

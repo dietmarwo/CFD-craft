@@ -30,7 +30,7 @@ completed steady_discrete_solution not_validated; see validation/data-inventory.
 ```
 
 The second line is the point of the tool: why the run stopped, what the
-numerical checks support, and the experimental-validation label. Version 0.1.0
+numerical checks support, and the experimental-validation label. Version 0.1.1
 is a research prototype. A numerically accepted run is not an experimentally
 validated prediction.
 
@@ -59,7 +59,7 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
   <img src="docs/images/cfd-craft.jpg" alt="CFD-craft: CFD experiments and validation with native Rust and OpenFOAM workflows">
 </p>
 
-## What 0.1.0 contains
+## What 0.1.1 contains
 
 Uniform Cartesian finite volumes with box-shaped solids; laminar flow and one
 neutral k-epsilon package; passive gas with point, line and volume sources and

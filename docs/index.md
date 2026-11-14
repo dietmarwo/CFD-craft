@@ -4,7 +4,7 @@ A Rust CFD research solver for incompressible flow and passive-gas dispersion
 on uniform Cartesian grids, used from Python, a JSON command line or Rust, with
 a bounded OpenFOAM Foundation 13 backend for cross-checks.
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an
+Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 ## Start here
@@ -16,7 +16,7 @@ experimentally validated prediction.
 - [CFD-craft, OpenFOAM and Ansys Fluent](comparison.md): what each tool is
   for, the committed measurements, and where the others are ahead.
 
-## What 0.1.0 contains
+## What 0.1.1 contains
 
 - Uniform Cartesian grids with box-shaped solids.
 - Laminar flow and one neutral k-epsilon package.

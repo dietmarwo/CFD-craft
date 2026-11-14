@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
+A documentation release of the research prototype. A user gains one guide of 21 chapters ordered by difficulty, a task index, a reference section generated from `describe` and the Python docstrings, and a documentation site at <https://dietmarwo.github.io/CFD-craft/>; the code blocks of these pages are run and their outputs compared by a CI check. Solver behavior is unchanged: the same case gives the same numerical results, and the case and result schemas are unchanged; the build version and the source and executable fingerprints in a result differ, because the version and the sources changed. One runtime string changed: the schema description of the multigrid option in `describe` links the new page. Experimental canyon validation and a successful fine-grid resolution study remain open gates.
+
 ### Added
 
 - Documentation restructure. One [guide](docs/guide/README.md) of 21 chapters ordered by difficulty replaces the user manual, the tutorial pages and the integration guides; the first chapter installs with `pip` and runs the smallest case. New pages: a [landing page](docs/index.md), ["How do I …?"](docs/how-to.md) with 82 tasks, a [comparison with OpenFOAM and Ansys Fluent](docs/comparison.md) that uses committed measurements only, a [reference section](docs/reference/README.md) with pages generated from `describe` and the Python docstrings, and index pages for [developers](docs/developer/README.md), [evidence](docs/evidence/README.md) and [history](docs/history/README.md).
@@ -66,5 +70,6 @@ First version, 0.1.0, a research prototype, released on crates.io (`cfd-craft`, 
 - Analytic and reference verification (periodic shear, Gaussian transport, Poiseuille, Couette, lid cavity, a SciPy sparse reference, an empty-ABL consistency check), source inversion and finite-canyon tutorials.
 - A command launcher for optimization-jobs and an optional native fcmaes simulation worker.
 
-[Unreleased]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dietmarwo/CFD-craft/releases/tag/v0.1.0

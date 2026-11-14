@@ -6,7 +6,7 @@ links to the next steps. It covers the native solver (constant-density
 incompressible flow and passive gas on uniform Cartesian grids), its Python
 binding, and the separate OpenFOAM backend.
 
-Version 0.1.0 is a research prototype. A numerically accepted run is not an
+Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 ## Chapters
@@ -57,4 +57,4 @@ OpenFOAM, and the adapter starts OpenFOAM as separate programs.
 
 Three words are kept apart on every page. A run **completed** or stopped
 (termination). A result is numerically **accepted** or not (assessment). A
-model is **validated** against measurements or not; in 0.1.0 none is.
+model is **validated** against measurements or not; in 0.1.1 none is.

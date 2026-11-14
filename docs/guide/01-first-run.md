@@ -102,7 +102,7 @@ early.
   means the discrete equations on this grid are solved, so the run is
   numerically accepted.
 - `experimental_validation`: whether the model was compared with measurements
-  for this use. In version 0.1.0 no result is.
+  for this use. In version 0.1.1 no result is.
 
 ## Read a receptor
 

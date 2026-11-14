@@ -2,7 +2,7 @@
 
 Version 0.1.0 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
-This page compares CFD-craft 0.1.0 with OpenFOAM (Foundation version 13, package `20260407`, the version the bounded backend pins) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
+This page compares CFD-craft 0.1.0 with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
 
 The short answer: OpenFOAM and Fluent cover far more physics, far more mesh and geometry types and far larger problems. CFD-craft covers one narrow task, neutral passive-gas dispersion on uniform grids around boxes, and puts its effort into checked input, stated stopping reasons and recomputed evidence.
 
@@ -22,34 +22,33 @@ These properties can be checked in this repository:
 
 ## Features
 
-Cells about other tools are facts from their current public documentation (sources at the end). "Not checked" means no public source was read for that cell. The Fluent column is features only: this repository has no Fluent measurement.
+Cells about other tools are facts from their current public documentation (sources at the end). "None documented" names the pages read that do not describe the feature; it says nothing about features those pages do not cover. The Fluent column is features only: this repository has no Fluent measurement.
 
 | Feature | CFD-craft 0.1.0 | OpenFOAM Foundation 13 | Ansys Fluent 2026 R1 |
 |---|---|---|---|
 | License and source | MIT, source on GitHub ([LICENSE](https://github.com/dietmarwo/CFD-craft/blob/main/LICENSE)) | GNU GPL version 3, source pack published [O1] | Licensed product; PyFluent needs a licensed local Fluent installation [F8] |
-| Install | `pip install cfd-craft` (Python binding) or `cargo install cfd-craft-cli` | Packages for Ubuntu 22.04, 24.04 and 25.04; Windows through WSL; macOS through Multipass; source pack [O1] | Not checked |
+| Install | `pip install cfd-craft` (Python binding) or `cargo install cfd-craft-cli` | Packages for Ubuntu 22.04, 24.04 and 25.04; Windows through WSL; macOS through Multipass; source pack [O1] | Installers for Linux x64 (Red Hat, SUSE, Ubuntu 22.04 and 24.04, Rocky) and Windows 11 or Server 2022 and 2025 [F13, F14]; a license is required [F8] |
 | Case definition | One strict JSON file ([case schema](reference/case-schema.md)) | A case directory of text dictionaries: `system`, `constant`, time directories [O5] | GUI, text console in Scheme, journal files [F1, F6]; Python through PyFluent [F8] |
-| Input check before a run | `check`: coded diagnostics with field paths, memory and output estimates ([diagnostics](diagnostics.md)) | `checkMesh` checks a mesh [O6]; whole-case check not checked | Not checked |
+| Input check before a run | `check`: coded diagnostics with field paths, memory and output estimates ([diagnostics](diagnostics.md)) | `checkMesh` checks a mesh [O6]; a whole-case check is not documented in [O5, O6, O7, O11] | Mesh check (topology, face handedness, volumes) and a case check of models, boundaries and solver settings with recommendations [F18, F19] |
 | Mesh | Uniform Cartesian only ([flow model card](model-cards/flow.md#scope)) | Arbitrary polyhedral cells; `blockMesh`, `snappyHexMesh` [O2, O6] | Triangle to polyhedral cells; structured, unstructured, hybrid, non-conformal and overset meshes [F2] |
-| Geometry | Axis-aligned boxes only | `snappyHexMesh` refines and snaps to surface geometry [O6] | Not checked |
+| Geometry | Axis-aligned boxes only | `snappyHexMesh` refines and snaps to surface geometry [O6] | CAD and STL import in meshing mode; watertight-geometry and fault-tolerant meshing workflows [F15, F16] |
 | Flow models | Constant-density incompressible: prescribed uniform, laminar, neutral RANS | Incompressible, compressible, density-based, multiphase (VoF, Euler), films [O3] | Pressure-based and density-based solvers [F4]; hypersonic, moving frames, dynamic meshes [F1] |
 | Turbulence | One neutral k-epsilon package with wall functions; no LES ([flow model card](model-cards/flow.md#neutral-turbulence-package)) | RAS (k-epsilon, k-omega SST, Reynolds stress and others), LES, DES [O4] | Spalart-Allmaras, k-epsilon, k-omega, transition, Reynolds stress, SAS, DES, LES [F3] |
 | Scalar transport | Passive gas; point, line and volume sources; point and volume receptors; audited mass budget ([transport model card](model-cards/transport.md)) | `scalarTransport` function object; multicomponent flow module [O3, O8] | Species transport [F1] |
 | Other physics | None: no buoyancy, heat transfer, particles, chemistry, multiphase or compressibility | Heat transfer, combustion, Lagrangian particles, multiphase, solids [O1, O3] | Heat transfer, combustion, pollutants, discrete phase, multiphase, FSI, batteries and more [F1] |
 | Steady algorithm | Explicit pseudo-time (default); SIMPLEC-type `implicit_projection` (opt-in) ([flow model card](model-cards/flow.md#steady-pseudo-time-algorithms)) | SIMPLE for steady cases, PIMPLE, local pseudo-time stepping [O7, O9] | SIMPLE, SIMPLEC, PISO, Fractional Step, Coupled [F4]; pseudo time method [F4] |
 | Momentum advection | First-order donor-cell (default); second-order upwind, limited with van Albada, van Leer or monotonized central (opt-in) | Upwind, linear, linearUpwind, LUST, limitedLinear and other schemes [O9] | First- and second-order upwind, QUICK, third-order MUSCL, bounded central [F5] |
-| Pressure solver | IC(0)-preconditioned CG (default); geometric multigrid on grids without solids (opt-in) ([pressure multigrid](developer/pressure-multigrid.md)) | PCG or PBiCGStab with DIC, FDIC or GAMG preconditioning; GAMG solver [O7] | Not checked |
+| Pressure solver | IC(0)-preconditioned CG (default); geometric multigrid on grids without solids (opt-in) ([pressure multigrid](developer/pressure-multigrid.md)) | PCG or PBiCGStab with DIC, FDIC or GAMG preconditioning; GAMG solver [O7] | Algebraic multigrid in the pressure-based and density-based implicit solvers [F17] |
 | Parallelism | Threads on one machine (1 to 64); no MPI, no GPU | MPI domain decomposition (`decomposePar`, Open MPI by default) [O10] | MPI across compute nodes [F9]; native GPU solver on one or several GPUs [F10] |
-| Budgets and cancellation | Steps, wall time, memory and output in the case; signal or cancel file stops cleanly | End time; `stopAtClockTime` and `stopAtFile` function objects [O8, O11] | Not checked |
+| Budgets and cancellation | Steps, wall time, memory and output in the case; signal or cancel file stops cleanly | End time; `stopAtClockTime` and `stopAtFile` function objects [O8, O11] | Number of iterations and convergence conditions; the Stop button or Ctrl+C interrupts after the current iteration [F20, F21]; a wall-time budget is not documented there |
 | What a result reports | Termination, assessment, recomputed checks, validation label ([result contract](result-contract.md)) | Logs and function-object output such as residuals and probes [O8] | Convergence monitors and conditions [F4]; simulation reports [F1] |
 | Restart | Checksummed checkpoint bound to a physics hash | Start from the latest written time directory [O11] | Case and data files together restart a solution [F7] |
-| Provenance | Case, physics, initial-state, source and executable hashes in a manifest | Not checked | Not checked |
-| Scripting | In-process Python, JSON command line, Rust library ([Python API](reference/python-api.md)) | Command-line utilities; `foamDictionary` edits dictionaries [O6]; Python not checked | PyFluent [F8]; Scheme text commands and journals [F6] |
-| Interface for agents | `describe` prints the case and result schemas and exit codes as JSON ([agent entry page](ai-context.md)) | Not checked | Not checked |
+| Provenance | Case, physics, initial-state, source and executable hashes in a manifest | Each data file has a header naming format, class and file; no hash or build record is documented in [O17]; output goes to a log by redirection [O16] | Transcript files record a session [F6]; file hashes are not documented in [F6, F7] |
+| Scripting and machine-readable interface | In-process Python, JSON command line, Rust library ([Python API](reference/python-api.md)); `describe` prints the case and result schemas and exit codes as JSON ([agent entry page](ai-context.md)) | Command-line utilities; `foamDictionary` reads and edits dictionary entries [O6]; a Python interface is not documented in [O6, O12, O16] | PyFluent Python library [F8]; Scheme text commands and journals [F6] |
 | Post-processing | VTK export for ParaView; no built-in viewer | ParaView reader, `foamToVTK`, `writeVTK` [O6, O8, O12] | Built-in graphics and reports; export to EnSight and CFD-Post [F1, F6] |
-| Experimental validation | None: `not_validated`; canyon data not available ([data inventory](https://github.com/dietmarwo/CFD-craft/blob/main/validation/data-inventory.json)) | Not checked | Verification manual: 78 Fluent and CFX cases against theory or published experiments [F11] |
+| Experimental validation | None: `not_validated`; canyon data not available ([data inventory](https://github.com/dietmarwo/CFD-craft/blob/main/validation/data-inventory.json)) | Comparison with measurements is not documented in the tutorial pages [O14, O15] | Verification manual: 78 Fluent and CFX cases against theory or published experiments [F11] |
 | Maturity | First version 0.1.0, 4 November 2026 ([changelog](https://github.com/dietmarwo/CFD-craft/blob/main/CHANGELOG.md)) | Major versions every July since at least 2017; 13 in July 2025, 14 in July 2026 [O1, O13] | Releases 2024 R2, 2025 R1, 2025 R2 and 2026 R1 are supported by PyFluent [F8] |
-| Optimization | Optimization-job worker and fcmaes adapter ([README](https://github.com/dietmarwo/CFD-craft/blob/main/README.md)) | Not checked | Adjoint solver, gradient-based optimizer, mesh morphing [F12] |
+| Optimization | Optimization-job worker and fcmaes adapter ([README](https://github.com/dietmarwo/CFD-craft/blob/main/README.md)) | Not documented in the v13 user guide [O12] | Adjoint solver, gradient-based optimizer, mesh morphing [F12] |
 
 ## Measured against OpenFOAM: the Re = 100 cavity
 
@@ -83,7 +82,7 @@ All measurements below are committed records under [`evidence/`](evidence/backen
 
 Fluent is a licensed commercial CFD code [F8]. Its public 2026 R1 user's guide covers pressure-based and density-based solvers, structured, unstructured, hybrid, polyhedral, non-conformal and overset meshes, a wide range of turbulence models from Spalart-Allmaras to LES, and many physics modules (heat transfer, species transport and combustion, discrete particles, multiphase, fluid-structure interaction). It runs in parallel with MPI and has a native GPU solver. It is scripted with Scheme text commands, journal files and the PyFluent Python library, and it includes an adjoint solver for shape optimization.
 
-This repository has no Fluent run. The page therefore makes no speed or accuracy statement about Fluent. Cells marked "not checked" were not found in public pages that could be read on 14 November 2026; the Ansys product pages redirected to a domain that could not be fetched.
+This repository has no Fluent run. The page therefore makes no speed or accuracy statement about Fluent. Every Fluent cell rests on the public 2026 R1 documentation; the Ansys product pages redirected to a domain that could not be fetched.
 
 ## Urban-dispersion tools
 
@@ -94,7 +93,7 @@ Practitioners in urban air quality also use dedicated tools. PALM is a large-edd
 - **Physics.** OpenFOAM and Fluent model heat transfer, compressible and multiphase flow, particles and combustion [O3, F1]. CFD-craft has none of these.
 - **Turbulence.** They offer many RANS models plus LES and DES [O4, F3]. CFD-craft has one neutral k-epsilon package.
 - **Geometry and meshing.** They use unstructured and polyhedral meshes fitted to surface geometry [O2, O6, F2]. CFD-craft has uniform Cartesian grids and boxes.
-- **Validation.** Fluent publishes a verification manual with cases against published experiments [F11]; an OpenFOAM counterpart was not checked. CFD-craft 0.1.0 has no experimental validation.
+- **Validation.** Fluent publishes a verification manual with cases against published experiments [F11]; the OpenFOAM v13 tutorial pages do not document a comparison with measurements [O14, O15]. CFD-craft 0.1.0 has no experimental validation.
 - **Community and maturity.** OpenFOAM has released a major version every year since at least 2017 [O13], and Fluent names an R1 and an R2 release in each of 2025 and 2026 [F8]. CFD-craft had its first release on 4 November 2026.
 - **Parallel scaling.** Both run in parallel with MPI [O10, F9]; Fluent also on GPUs [F10]. CFD-craft uses threads on one machine.
 
@@ -127,6 +126,10 @@ All checked on 14 November 2026.
 | O11 | OpenFOAM | Run control and restart (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/controldict |
 | O12 | OpenFOAM | ParaView chapter (v13 contents) | https://doc.cfd.direct/openfoam/user-guide-v13 |
 | O13 | OpenFOAM | Release dates of versions 13 and 14 | https://openfoam.org/category/release |
+| O14 | OpenFOAM | Tutorials (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/tutorials |
+| O15 | OpenFOAM | Backward-facing step tutorial (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/backwardstep |
+| O16 | OpenFOAM | Running applications, log files (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/running-applications |
+| O17 | OpenFOAM | File header format (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/basic-file-format |
 | F1 | Fluent | User's guide 2026 R1, chapter list | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/pt03.html |
 | F2 | Fluent | Cell shapes and mesh topologies | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_GridTypes.html and https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_chp_grid.html |
 | F3 | Fluent | Turbulence models | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_chap_turbulence.html |
@@ -139,6 +142,15 @@ All checked on 14 November 2026.
 | F10 | Fluent | Native GPU solver | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_sec_gpu_solver_intro.html |
 | F11 | Fluent | Verification manual 2026 R1 | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/fbu_vm/vmflintrochp.html |
 | F12 | Fluent | Adjoint solver and optimizer | https://ansyshelp.ansys.com/public/views/secured/corp/v261/en/flu_ug/flu_adj_usage.html |
+| F13 | Fluent | Linux installation prerequisites, 2026 R1 | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/installation/unix_sysprereqs.html |
+| F14 | Fluent | Windows installation prerequisites, 2026 R1 | https://ansyshelp.ansys.com/public/views/secured/corp/v261/en/installation/win_sysprereqs.html |
+| F15 | Fluent | Meshing mode, CAD formats | https://ansyshelp.ansys.com/public/views/secured/corp/v261/en/flu_ug/ch09s01.html and https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/pt02.html |
+| F16 | Fluent | Watertight and fault-tolerant workflows | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/tgd_user_workflow_guided_watertight.html and https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/tgd_user_workflow_guided_fault.html |
+| F17 | Fluent | Multigrid methods (theory guide) | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_th/flu_th_MultigridMethod.html |
+| F18 | Fluent | Mesh check | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_GridCheck.html |
+| F19 | Fluent | Case check | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_sec_solve_check.html |
+| F20 | Fluent | Steady calculation, interrupting | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_sec_solve_calc.html |
+| F21 | Fluent | Convergence conditions | https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/flu_ug/flu_ug_convergence_conditions.html |
 | U1 | PALM | Model overview and PALM-4U (GMD, 2020) | https://gmd.copernicus.org/articles/13/1335/2020/ |
 | U2 | PALM | Description and license | https://docs.csc.fi/apps/palm |
 | U3 | PALM | Release 25.10 talk, April 2026 | https://tu-dresden.de/tu-dresden/veranstaltungen/veranstaltungskalender/zih-kolloqium/zih-kolloquium-the-palm-model-system-release-25-10-an-les-code-for-basic-and-environmental-research-capabilities-and-recent-applications |

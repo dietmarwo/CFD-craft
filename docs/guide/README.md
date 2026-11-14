@@ -44,6 +44,10 @@ OpenFOAM, and the adapter starts OpenFOAM as separate programs.
 - A `python` or `bash` block is meant to be run as it stands, in the order of
   its section, after the `Setup` section of its chapter. A `sh` block shows
   commands that install, build or take long; adapt them before you run them.
+- Every section starts from what `Setup` left, not from the section before
+  it. When you run a whole chapter in order, first remove an output directory
+  that an earlier section made (`rm -r runs/point`): a run never writes into
+  an existing directory (`CFD-E062`, chapter 3).
 - A `text` block is the real output of the block before it. Outputs show a few
   chosen fields, never wall times or hashes.
 - A `json` block is a complete case, or a fragment that the text names.

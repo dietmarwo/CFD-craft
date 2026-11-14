@@ -94,9 +94,9 @@ Two errors every user meets once are an existing output directory and a
 missing parent directory:
 
 ```bash
-cfd-craft run examples/manual/point-source.json --output runs/point > /dev/null
+cfd-craft run examples/manual/point-source.json --output runs/twice > /dev/null
 echo "first run: exit $?"
-cfd-craft run examples/manual/point-source.json --output runs/point \
+cfd-craft run examples/manual/point-source.json --output runs/twice \
   2> runs/second.err || echo "second run: exit $?"
 grep -o "CFD-E[0-9]*" runs/second.err
 cfd-craft run examples/manual/point-source.json --output missing/point \

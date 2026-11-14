@@ -1703,8 +1703,17 @@ impl Case {
                     "geometry_min_passage_cells",
                     "Minimum passage resolution must be positive.",
                 );
+            } else if cells > 10_000_000 {
+                // The scan is bounded; a skipped request must not read as satisfied.
+                if !self.geometry.is_empty() {
+                    add(
+                        "CFD-W011",
+                        "warning",
+                        "geometry_min_passage_cells",
+                        "The passage resolution was not evaluated: this check scans at most 10000000 cells. Read narrowest_fluid_passage_cells of each shape in geometry.json.",
+                    );
+                }
             } else if self.grid.cells.iter().all(|n| *n > 0)
-                && cells <= 10_000_000
                 && let Some(width) = crate::geometry::minimum_passage(self)
                 && width < minimum
             {

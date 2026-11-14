@@ -288,7 +288,7 @@ drag for a prescribed-flow leaf-collection study, or solve laminar/RANS flow.
 |---|---|---|
 | CFD-E084 | `geometry[i].footprint_m`, `geometry_min_passage_cells` | Invalid/self-intersecting polygon, mismatched footprint bounds or nonpositive passage-resolution request |
 | CFD-E085 | `building_roughness_m` | Building roughness must be finite, positive and used with neutral RANS |
-| CFD-W011 | `geometry_min_passage_cells` | A represented horizontal street between solids has fewer cells than requested |
+| CFD-W011 | `geometry_min_passage_cells` | A represented horizontal street between solids has fewer cells than requested, or the request was not evaluated because the grid has more than 10000000 cells (the message says which; `geometry.json` still records the passage of every shape) |
 | CFD-M001 | `map` | Converter rejected source geometry, coordinates, elevation range, provenance or native case check; the message names the reason |
 | CFD-U001 | `campaign` | Urban campaign input, budget, worker or native archive error; failed rows are retained |
 

@@ -120,6 +120,27 @@ fn underresolved_passages_and_invalid_polygons_have_coded_paths() {
             .iter()
             .any(|d| d.code == "CFD-W011" && d.path == "geometry_min_passage_cells")
     );
+    // The scan is bounded at ten million cells. A request above that bound is
+    // reported as not evaluated; it does not pass silently.
+    let mut large = c.clone();
+    large.grid.cells = [360, 240, 120];
+    let warnings: Vec<_> = large
+        .check()
+        .diagnostics
+        .into_iter()
+        .filter(|d| d.code == "CFD-W011")
+        .collect();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].path, "geometry_min_passage_cells");
+    assert!(warnings[0].message.contains("not evaluated"));
+    large.geometry.clear();
+    assert!(
+        large
+            .check()
+            .diagnostics
+            .iter()
+            .all(|d| d.code != "CFD-W011")
+    );
     c.geometry[0].footprint_m = Some(vec![[2., 0.], [4., 4.], [2., 4.], [4., 0.]]);
     assert!(
         c.check()

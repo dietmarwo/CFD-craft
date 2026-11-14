@@ -803,6 +803,10 @@ def check(path):
             if leaf_rate:
                 deposition_rates["vegetation"] = leaf_rate
             reported = record.get("deposition_rate_kg_s", {})
+            require(
+                set(reported) <= {"ground", "roof", "vegetation"},
+                "unknown deposition surface",
+            )
             for surface in {"ground", "roof", "vegetation"}:
                 expected = deposition_rates.get(surface, 0)
                 require(
@@ -811,7 +815,10 @@ def check(path):
                     f"{surface} deposition rate differs from field flux",
                 )
         else:
-            require(not deposited, "passive gas has cumulative particle deposition")
+            require(
+                not deposited and not record.get("deposition_rate_kg_s"),
+                "passive gas has particle deposition",
+            )
         flux_scale = max(rate + outgoing + incoming, 1e-30)
         require(
             abs(record["source_rate_kg_s"] - rate) < 1e-9 * flux_scale,

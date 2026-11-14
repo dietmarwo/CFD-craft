@@ -98,7 +98,9 @@ used for a single prism approximation; surfaces from different LoDs are not
 mixed. GeometryInstance/templates are refused. Footprint holes require external
 decomposition. Conservative lower-half projected surface elevations screen
 sloping bases; unknown or nonflat ground can be rejected. Supplied nonfinite
-coordinates, transforms, elevations and invalid indices are errors.
+coordinates, transforms, elevations, heights or level counts, invalid indices,
+features without a geometry object, a GeoJSON `crs` member naming geographic
+coordinates and an overflowing domain extent are errors.
 
 `map-provenance.json` contains the exact consumed source-file SHA-256, declared
 license/credit, crop, rotation, coordinate system, translation, height and

@@ -69,6 +69,51 @@ class UrbanMapTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "projected"):
             self.convert(coordinate_system="EPSG:4326")
 
+    def test_hostile_geojson_is_refused_with_a_converter_error(self):
+        base = json.loads(
+            (ROOT / "integrations/fixtures/urban-synthetic.geojson").read_text()
+        )
+
+        def null_geometry(d):
+            d["features"][0]["geometry"] = None
+
+        def geographic_crs(d):
+            d["crs"] = {
+                "type": "name",
+                "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"},
+            }
+
+        def nan_height(d):
+            d["features"][0]["properties"]["height"] = "NaN"
+
+        def infinite_levels(d):
+            d["features"][1]["properties"]["building:levels"] = "inf"
+
+        def overflowing_height(d):
+            d["features"][0]["properties"]["height"] = 1e308
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "map.json"
+            for fault, message in [
+                ([1, 2], "Expected a FeatureCollection"),
+                (null_geometry, "geometry object"),
+                (geographic_crs, "geographic"),
+                (nan_height, "height must be finite"),
+                (infinite_levels, "building:levels must be finite"),
+                (overflowing_height, "overflows"),
+            ]:
+                data = json.loads(json.dumps(base))
+                if callable(fault):
+                    fault(data)
+                else:
+                    data = fault
+                path.write_text(json.dumps(data))
+                with (
+                    self.subTest(message=message),
+                    self.assertRaisesRegex(ValueError, message),
+                ):
+                    self.convert(path)
+
     def test_cityjson_transformed_vertices_and_heights(self):
         data = {
             "type": "CityJSON",

@@ -191,7 +191,7 @@ python -O -m unittest discover -s tutorials/optimization -p 'test_*.py'
 
 ## Recorded results
 
-The [lesson record](../evidence/optimization-lessons.md) (committed state of 8 November 2026) holds one complete smoke and one complete study run of all three lessons. In it the F1 LP and the vertex enumeration agree on the normalized optimum 1.6662105873, and the fresh replays match `A q` to within 1.8e-15 for all three arms; F2 matches the run above; F3 supports zero designs in both presets, with grid changes of 32 % in smoke and 10.4 % to 12.1 % in the study. Every F3 solve in that record was accepted numerically; none of it is experimental validation.
+The [lesson record](../evidence/optimization-lessons.md) (the record gives no date) holds one complete smoke and one complete study run of all three lessons. In it the F1 LP and the vertex enumeration agree on the normalized optimum 1.6662105873, and the fresh replays match `A q` to within 1.8e-15 for all three arms; F2 matches the run above; F3 supports zero designs in both presets, with grid changes of 32 % in smoke and 10.4 % to 12.1 % in the study. Every F3 solve in that record was accepted numerically; none of it is experimental validation.
 
 ## Next
 

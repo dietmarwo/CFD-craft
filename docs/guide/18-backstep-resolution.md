@@ -39,7 +39,7 @@ print("physical qualification:", r["physical_qualification"])
 
 The tutorial exits 0 when every requested case was accepted and passed its screen, and 2 when it kept unaccepted evidence; then read every row's execution, error, progress and limits in `report.json`. Exit 1 means a workflow, input or runtime error, including a failure to prepare a case. A NaN or infinite value in the solver log, or a diverging continuity error, stops a solve early with `CFD-X010`. A timeout or failure has no accepted final field, so its measurement comparison is not assessed. Without `--data` the tutorial fetches the frozen measurement files itself.
 
-In the [resolution record](../evidence/backstep-resolution.md) (committed state of 8 November 2026) this run converged after 18,412 iterations, executed in 3,037.4 s of its 3,500 s budget, passed the independent audit and the measurement screen, and exited 0. Three reruns on other runners converged at the same iteration. It is one mesh: no mesh pair, no GCI, no physical qualification, and the screen's targets are broad (a predictor that ignores the step scores 0.067 at x/H = 1, inside the 0.10 target).
+In the [resolution record](../evidence/backstep-resolution.md) (the record gives no date) this run converged after 18,412 iterations, executed in 3,037.4 s of its 3,500 s budget, passed the independent audit and the measurement screen, and exited 0. Three reruns on other runners converged at the same iteration. It is one mesh: no mesh pair, no GCI, no physical qualification, and the screen's targets are broad (a predictor that ignores the step scores 0.067 at x/H = 1, inside the 0.10 target).
 
 ## Presets and budgets
 
@@ -72,7 +72,7 @@ Every stage is kept, as `wall-resolved-simplec-level1`, then `wall-resolved-simp
 | `cancelled` | The study was cancelled between stages |
 | `source_ineligible: …` | The completed stage fails the source flux gate and cannot seed the next (exit 2; finer meshes are skipped) |
 
-Other preparation, archive or I/O errors stop the workflow with exit 1. Disk use and time grow with the number of stages; there is no automatic resume across separate CI jobs. Iteration limits need a divisor between 50 and 250 for the write cadence (any multiple of 50 works), so that a stopped stage still writes a final field. In the [continuation record](../evidence/steady-continuation.md) (committed state of 8 November 2026) four stages of 6,000, 6,000, 6,000 and 412 iterations reached the same converged solution as the single run, at the same cumulative iteration, with final fields about 2e-12 apart in U.
+Other preparation, archive or I/O errors stop the workflow with exit 1. Disk use and time grow with the number of stages; there is no automatic resume across separate CI jobs. Iteration limits need a divisor between 50 and 250 for the write cadence (any multiple of 50 works), so that a stopped stage still writes a final field. In the [continuation record](../evidence/steady-continuation.md) (the record gives no date) four stages of 6,000, 6,000, 6,000 and 412 iterations reached the same converged solution as the single run, at the same cumulative iteration, with final fields about 2e-12 apart in U.
 
 ## Audit mesh, flux and y+
 

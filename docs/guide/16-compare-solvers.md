@@ -23,7 +23,7 @@ python tutorials/external_cfd.py --preset cavity \
 
 The cavity preset runs the Re = 100 lid-driven cavity with the native solver (`--binary`, default the checkout's release build) and with OpenFOAM, samples both along the centerlines with shared helpers, and compares each with the Ghia, Ghia and Shin (1982) stations and with the other solver. The native case uses x and z, OpenFOAM x and y; the mapping between the vertical axes is explicit. Ghia et al. is a numerical benchmark, not an experiment, so this is a numerical cross-check. Its report is `runs/two-cavities/cavity-comparison.json`.
 
-In the [external-backend record](../evidence/external-backend.md) (committed state of 8 November 2026, a GitHub-hosted run of the study preset), the maximum centerline velocity error over the lid speed was 0.0275488 for native against Ghia, 0.00896632 for OpenFOAM against Ghia and 0.0311705 between the two solvers, each against a target of 0.06. Both runs completed and were numerically accepted; the native case ran transient to 30 s, OpenFOAM converged in 696 steady iterations.
+In the [external-backend record](../evidence/external-backend.md) (a GitHub-hosted run of the study preset; the record gives no date), the maximum centerline velocity error over the lid speed was 0.0275488 for native against Ghia, 0.00896632 for OpenFOAM against Ghia and 0.0311705 between the two solvers, each against a target of 0.06. Both runs completed and were numerically accepted; the native case ran transient to 30 s, OpenFOAM converged in 696 steady iterations.
 
 ## One solver against measurements
 
@@ -56,7 +56,7 @@ python validation/compare_backstep.py --run runs/backstep-run \
 
 The profile at x/H = -4 defines the inlet. The stations x/H = 1, 4, 6 and 10 (112 velocity samples) and 17 lower-wall skin-friction values are evaluation data; no case parameter is fitted to them. Pressure coefficients are fetched for provenance and are not scored. The comparison is assessed only when the run passed its numerical gate; otherwise it reports the screen as `not_assessed` and its metrics describe the final iterate only.
 
-In the [external-backend record](../evidence/external-backend.md) (committed state of 8 November 2026) the level-1 legacy backstep (22,656 cells) ran all 6,000 iterations and did **not** pass the numerical gate: its final pressure residual was 1.19e-3 against 1e-7, and the solve was stalled, so the measurement screen was not assessed. A plausible velocity plot does not change that. The wall-resolved recipe of [chapter 18](18-backstep-resolution.md) is the one that passes.
+In the [external-backend record](../evidence/external-backend.md) the level-1 legacy backstep (22,656 cells) ran all 6,000 iterations and did **not** pass the numerical gate: its final pressure residual was 1.19e-3 against 1e-7, and the solve was stalled, so the measurement screen was not assessed. A plausible velocity plot does not change that. The wall-resolved recipe of [chapter 18](18-backstep-resolution.md) is the one that passes.
 
 ## The frozen protocol
 
@@ -103,7 +103,7 @@ Every row keeps numerical acceptance, the independent checks, the frozen 0.06 Gh
 
 ## What the committed measurements say
 
-All of them come from one laminar two-dimensional case, the Re = 100 cavity. With the default native numerics, the [backend comparison](../evidence/backend-comparison.md) (committed state of 8 November 2026) found OpenFOAM's workflow 4.7 to 5.5 times faster than native steady mode on two hosts, its solver process about 9 times faster, and OpenFOAM closer to Ghia. With the opt-in `limited_upwind`, `implicit_projection` and multigrid settings, the [matched-accuracy record](../evidence/matched-accuracy.md) of 1 November 2026 found native at 24 x 24 cells with solver time 0.549 s and Ghia error 0.00543 against 0.743 s and 0.00897 for OpenFOAM, all 32 rows accepted. The [comparison page](../comparison.md) puts these in context; none of it says anything about urban flows.
+All of them come from one laminar two-dimensional case, the Re = 100 cavity. With the default native numerics, the [backend comparison](../evidence/backend-comparison.md) (the record gives no date) found OpenFOAM's workflow 4.7 to 5.5 times faster than native steady mode on two hosts, its solver process about 9 times faster, and OpenFOAM closer to Ghia. With the opt-in `limited_upwind`, `implicit_projection` and multigrid settings, the [matched-accuracy record](../evidence/matched-accuracy.md) of 1 November 2026 found native at 24 x 24 cells with solver time 0.549 s and Ghia error 0.00543 against 0.743 s and 0.00897 for OpenFOAM, all 32 rows accepted. The [comparison page](../comparison.md) puts these in context; none of it says anything about urban flows.
 
 ## A task for an agent
 

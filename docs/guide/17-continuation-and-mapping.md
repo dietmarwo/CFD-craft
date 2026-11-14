@@ -42,7 +42,7 @@ A source must be a complete archive (case, mesh, final fields, logs, summary, ma
 
 A completed but unconverged stage can be eligible: `report` then exits 2, and the source is still accepted. `prepare-restart` exits 0 for a prepared stage and 1 otherwise, with a coded field path: `CFD-X012` at `initial_state.*` for eligibility and receipt errors, `CFD-X006` for an archive that fails verification or an invalid final field, and `CFD-E062` or `CFD-E063` for the output path. A failed preparation leaves no partial stage.
 
-The flux gate is strict for early stages. It follows the last pressure solve's relative tolerance and tightens with refinement. In the [continuation record](../evidence/steady-continuation.md) (committed state of 8 November 2026) the wall-resolved `simplec` backstep scores 0.0048 at iteration 500 (rejected), 2.7e-9 at 6,000 and 6.6e-10 at 10,000, and a cold start scores 5.6; use stages of thousands of iterations. Whether this gate suits continuation is recorded there as an open decision.
+The flux gate is strict for early stages. It follows the last pressure solve's relative tolerance and tightens with refinement. In the [continuation record](../evidence/steady-continuation.md) (the record gives no date) the wall-resolved `simplec` backstep scores 0.0048 at iteration 500 (rejected), 2.7e-9 at 6,000 and 6.6e-10 at 10,000, and a cold start scores 5.6; use stages of thousands of iterations. Whether this gate suits continuation is recorded there as an open decision.
 
 The general form, for any completed source (`SOURCE_RUN`, `NEW_*` and `ROOT` are placeholders):
 
@@ -131,7 +131,7 @@ A run that stops at its iteration limit writes a final field only when the limit
 | External `mapNearest` (`prepare-mapped`) | Fresh target mesh, mapped volume initial guess | Yes |
 | Refinement campaign ([chapter 19](19-refinement-campaign.md)) | Bounded composition with complete provenance | Yes |
 
-In the [mapping record](../evidence/mesh-initialization.md) (committed state of 8 November 2026) a mapped and a cold level-2 cavity converged to the same fields (5.1e-9 in U) and passed every declared check. Two accepted meshes allow an observable comparison, not a claim of mesh independence or a GCI.
+In the [mapping record](../evidence/mesh-initialization.md) (the record gives no date) a mapped and a cold level-2 cavity converged to the same fields (5.1e-9 in U) and passed every declared check. Two accepted meshes allow an observable comparison, not a claim of mesh independence or a GCI.
 
 ## Check the tools themselves
 

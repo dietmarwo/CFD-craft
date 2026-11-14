@@ -10,6 +10,8 @@ in the case.
 
 The input GeoJSON must be a FeatureCollection of LineString or MultiLineString
 features in the **same projected metric coordinate system** as the buildings.
+A GeoJSON `crs` member that names geographic coordinates (for example CRS84)
+is rejected (`streets.crs`); reproject first.
 Street IDs come from Feature.id, or the `id` property when no feature ID is
 present (`--street-id-property` changes the property name). Simultaneous IDs
 must agree, and duplicates are errors. Polylines are split at every vertex;

@@ -24,6 +24,7 @@ from shapely.geometry import LineString, Polygon, box
 
 ROOT = Path(__file__).resolve().parents[1]
 RATE_COLUMNS = {"street_id", "constituent", "rate_kg_s_m", "units"}
+GEOGRAPHIC_NAMES = ("4326", "4979", "crs84", "wgs84", "wgs 84", "longlat", "latlon")
 
 
 class TrafficSourceError(ValueError):
@@ -69,7 +70,7 @@ def _load_json(raw, path):
 
     try:
         return json.loads(raw, parse_constant=invalid_constant)
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError) as exc:
         raise TrafficSourceError(path, f"Expected UTF-8 JSON: {exc}") from exc
 
 
@@ -130,6 +131,11 @@ def _street_lines(data, id_property):
         isinstance(data, dict) and data.get("type") == "FeatureCollection",
         "streets.type",
         "Street input must be a GeoJSON FeatureCollection",
+    )
+    _require(
+        not any(v in json.dumps(data.get("crs", "")).lower() for v in GEOGRAPHIC_NAMES),
+        "streets.crs",
+        "GeoJSON crs member declares geographic coordinates; reproject first",
     )
     _require(
         isinstance(data.get("features"), list), "streets.features", "Expected a list"
@@ -269,9 +275,7 @@ def _settings(case, provenance, height):
     _require(
         isinstance(crs, str)
         and bool(crs.strip())
-        and not any(
-            v in crs.lower() for v in ("4326", "wgs84", "wgs 84", "longlat", "latlon")
-        ),
+        and not any(v in crs.lower() for v in GEOGRAPHIC_NAMES),
         "map_provenance.coordinate_system",
         "Street and map data must share the declared projected metric frame",
     )

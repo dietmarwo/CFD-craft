@@ -202,6 +202,27 @@ class TrafficSourcesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Nonfinite"):
             self.convert()
 
+    def test_geographic_crs_member_and_deep_nesting_are_coded_rejections(self):
+        p = self.directory / "streets.geojson"
+        p.write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "crs": {
+                        "type": "name",
+                        "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"},
+                    },
+                    "features": [self.line()],
+                }
+            )
+        )
+        self.streets = p
+        with self.assertRaisesRegex(traffic.TrafficSourceError, "streets.crs"):
+            self.convert()
+        p.write_text("[" * 100000 + "]" * 100000)
+        with self.assertRaisesRegex(traffic.TrafficSourceError, "CFD-M002 streets"):
+            self.convert()
+
     def test_multiple_constituents_and_existing_sources_are_preserved(self):
         self.case["constituents"].append(
             {

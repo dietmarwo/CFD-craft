@@ -65,6 +65,15 @@ replaces its rows; a later record that adds to it is named.
 
 - [Optimization lessons](optimization-lessons.md): F1 to F3, including the failed fidelity gate of F3; the record gives no date. Current.
 
+**City blocks and mobile measurements**
+
+- [Urban features](urban-extension.md): multigrid with buildings, polygon prisms, particles, vegetation, the rotated canyon (not passed) and the Delft district campaign (no direction converged); 14 November 2026. Current, with the measurements of the code review added in the record itself.
+- [Mobile measurements](mobile-measurements.md): path receptors, virtual rides, street sources, and inference and route selection on two synthetic studies; 14 November 2026. Current.
+
+The run archives of these two records are attached to the GitHub release
+[v0.2.0](https://github.com/dietmarwo/CFD-craft/releases/tag/v0.2.0) as
+`cfd-craft-0.2.0-evidence.zip`; both records say how to reproduce them.
+
 ## Open gates
 
 - **Measured canyon data.** The raw wind-tunnel files and their terms were not
@@ -75,6 +84,15 @@ replaces its rows; a later record that adds to it is named.
   index for either.
 - **Same-case comparison.** There is no OpenFOAM canyon recipe, so no canyon
   comparison between the two solvers exists.
-
-- [Urban source extension: verification, measured failures and open gates](urban-extension.md)
-- [Mobile paths, supplied street emissions and synthetic source recovery](mobile-measurements.md)
+- **Multigrid with buildings.** It cuts pressure iterations but gives no
+  consistent end-to-end gain on the measured cases, and it is slower on a
+  strongly stretched grid ([urban features](urban-extension.md#pressure-multigrid-with-buildings-no-consistent-gain)).
+- **Grid orientation.** The canyon rotated by 45 degrees did not pass its
+  frozen study ([urban features](urban-extension.md#geometry-and-the-rotated-canyon-gate-g3-not-passed)).
+- **District runs.** No direction of the Delft demonstration converged within
+  its short budget
+  ([urban features](urban-extension.md#delft-district-the-campaign-keeps-every-row-no-direction-converged-gate-g7)).
+- **Mobile inference.** It is verified on synthetic data of the same model
+  only; no measured ride has been used ([mobile measurements](mobile-measurements.md)).
+- **Particles and vegetation.** Verified against analytic fixtures; no
+  measured deposition or canopy data has been compared.

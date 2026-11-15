@@ -1,12 +1,69 @@
-# Urban source extension: verification and open gates
+# Urban features: verification, measured failures and open gates
 <!-- check: none: record of bounded experiments on 14 November 2026 -->
 
-The source extension implements U0–U7's numerical features and campaign
-infrastructure from the urban plan. It does **not** pass the plan's practical
-urban qualification gates. Masked multigrid is numerically verified but has no
-consistent coupled gain; the rotated-canyon and district runs retain failures.
-Defaults are unchanged. No release is tagged and no experimental validation
-claim is made. See [guide chapter 22](../guide/22-urban-geometry-particles-vegetation.md).
+**Summary.** Polygon-prism buildings, building-wall roughness, pressure
+multigrid with buildings, particle size classes, porous vegetation, the map
+converter and the wind-direction campaign pass their numerical verification
+fixtures. None of them is experimentally validated. Four results of this
+record are failures or open questions, and they stay in it:
+
+- Multigrid with buildings needs fewer pressure iterations but gives no
+  consistent gain in run time (ratio of default to multigrid time 1.05, 0.94
+  and 0.91 on three accepted pairs). The default preconditioner did not change.
+- The canyon rotated by 45 degrees did not pass its frozen grid study: one
+  case was rejected and two timed out. No rotation error is known.
+- In the Delft district demonstration none of the twelve wind directions
+  converged within its 45 s budget, and the refined run stopped after 5 steps.
+- No urban comparison with OpenFOAM and no comparison with measured urban
+  data exists.
+
+The guide for these features is
+[chapter 22](../guide/22-urban-geometry-particles-vegetation.md).
+
+## Names used in this record
+
+The work followed a plan whose stage and gate names appear below.
+
+| Name | Meaning |
+|---|---|
+| U0 to U7 | Stages of the plan: U0 throughput target, U1 multigrid with buildings (masked multigrid), U2 decision on defaults, U3 polygon prisms and wall roughness, U4 map converter, U5 particle size classes, U6 vegetation, U7 one district with twelve wind directions |
+| U8 | A conditional GPU experiment; not started |
+| P2b, P2c | Names of masked multigrid and of the measurement of its setup cost in the [performance gap status](performance-gap-status.md) |
+| G0 | Gate after U0: a declared throughput target and a measured baseline |
+| G1 | Gate after U1: equivalent accepted fields and a measured end-to-end gain of multigrid on the 27k and 93k canyons |
+| G3 | Gate after U3: a canyon rotated by 45 degrees reproduces the grid-aligned receptor values within a tolerance declared before the run, at two resolutions, with a shrinking difference |
+| G7 | Gate after U7: every direction of the district campaign is accepted or kept as a failed row within a declared budget |
+| V1, V2 | Validation tracks: V1 the same canyon in OpenFOAM, V2 measured data |
+| M5a, M5b | Roadmap milestones for particle settling and for vegetation ([roadmap](../developer/roadmap.md)) |
+| R1 to R3, GR | Stages and gate of the mobile-measurement work ([mobile record](mobile-measurements.md)) |
+
+## Where the run archives are
+
+The run archives behind this record are not in the repository, because field
+files are large. They are attached to the GitHub release
+[v0.2.0](https://github.com/dietmarwo/CFD-craft/releases/tag/v0.2.0) as the
+asset `cfd-craft-0.2.0-evidence.zip` (3.5 MB): folder `urban/` for this record
+and `mobile/` for the [mobile record](mobile-measurements.md), with a README,
+`SHA256SUMS.json` and `DATA-LICENSE.txt`, which holds the CC BY 4.0
+attribution of the inputs derived from 3DBAG for the Delft district. The raw
+map is not included.
+
+The archives were produced before the code review of this release, on the
+source tree that each archive records. They are records of past runs. A run
+with the current code has another source fingerprint, and its timings depend
+on the host.
+
+To reproduce a run of the pressure or rotation comparisons, take its consumed
+case `urban/NAME.json` from the asset, run
+`cfd-craft profile urban/NAME.json --output NEW_DIR` and audit the result with
+`python validation/check_fields.py NEW_DIR/run`.
+`python validation/summarize_urban.py urban --output FILE` rebuilds the
+summary of all pairs. For the district, download the 3DBAG tile named below,
+convert it with `integrations/urban_map.py` and run
+`validation/urban_campaign.py run` with the budgets stated below
+([chapter 22](../guide/22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions)).
+The verification fixtures are tests of the repository
+(`cargo test --release --workspace --locked` and `validation/test_urban_*.py`).
 
 ## Source and measurement scope
 
@@ -14,7 +71,7 @@ Base: `7d8d70a864383e92f431d8afdacd15864e6c1c54` (0.1.1, latest main when
 checked out). An isolated clean build independently confirmed the original
 IC0 producer source fingerprint
 `ce85729bc3564d2658ce6894e232e69da981a07ac36fde4512c5468ba05866fc`.
-The U0–U7 evidence producer's source-extension CLI fingerprint is
+The command that produced the U0–U7 evidence has the source fingerprint
 `786eb87c9f81b86fd1f8aa8aa947d090524abeedd5d6de3ef0eb2daceba30a72`.
 The later R1–R3 producer and its separate synthetic gate are recorded in
 [mobile evidence](mobile-measurements.md); these earlier experiments were not
@@ -29,16 +86,16 @@ within two hours on one CPU thread, with a 6144 MiB preflight budget and indepen
 field audit. This target is declared for future qualification, not achieved
 by the present short-budget experiment. The synthetic block has 20 buildings,
 a 200 m × 200 m × 60 m domain and 5H/15H/5H clearances for its declared prevailing wind.
-The 4 m grid has37,500 cells; the 2 m grid has300,000.
+The 4 m grid has 37,500 cells; the 2 m grid has 300,000.
 
-## Coupled performance: G1 remains open
+## Pressure multigrid with buildings: no consistent gain
 
 Solver elapsed time below includes native setup/solve scope; launcher and archive
 overheads are retained separately in the detailed records.
 
 | Case | IC0 seconds | Multigrid seconds | Outer steps each | Independent fields | IC0/MG time |
 |---|---:|---:|---:|---|---:|
-| Synthetic block,37,500 cells | 30.4519 | 33.5757 | 400 | Both pass | 0.907 |
+| Synthetic block, 37,500 cells | 30.4519 | 33.5757 | 400 | Both pass | 0.907 |
 | Canyon, 27,648 cells | 66.4748 | 63.4473 | 1100 | Both pass | 1.048 |
 | Canyon, 93,312 cells | 816.9110 | 869.2023 | 3000 | Both pass | 0.940 |
 | Synthetic block, 300,000 cells | 60.2711 | 60.5119 | 50/54 | Both incomplete; continuity audit fails | No ratio |
@@ -51,10 +108,11 @@ Both methods solve the unchanged fine equation to the existing native and
 independent archived-field checks. There is no accuracy-for-speed trade.
 
 The 27k gain is small and absent on 93k and the block. Therefore G1's coupled
-gain requirement is not met, and U2 keeps donor-cell/explicit/IC0 defaults.
+gain requirement is not met (gate G1 remains open), and U2 keeps
+donor-cell/explicit/IC0 defaults.
 The opt-in implicit recipe remains available as an explicit case copy.
 
-## U1/P2c: setup and pressure work
+## Setup and pressure work of multigrid (U1, P2c)
 
 | Case | MG setup seconds | IC0 pressure iterations | MG pressure iterations |
 |---|---:|---:|---:|
@@ -75,7 +133,7 @@ read as per-case RSS. The durable 93k replays independently sampled 245,300 KiB
 IC0 session interruption is retained separately; the bounded replay supplies
 the completed 93k result.
 
-## Geometry and G3
+## Geometry and the rotated canyon (gate G3 not passed)
 
 Boxes, simple concave prisms, equivalent 0°/90° masks, exact shape volumes,
 represented volume errors, adjacent passage resolution, diagnostic paths and
@@ -89,7 +147,7 @@ relative bounds 35%/25%, and requires shrinking error. It **does not pass**:
 
 | Grid | Aligned | 45° |
 |---|---|---|
-| 12,288 cells | Accepted in 10.153 s, 400 steps | Rejected: receptor stencil crosses a stair-stepped solid(`CFD-E042`) |
+| 12,288 cells | Accepted in 10.153 s, 400 steps | Rejected: receptor stencil crosses a stair-stepped solid (`CFD-E042`) |
 | 98,304 cells | 90.092 s timeout, 285 steps | 90.111 s timeout, 260 steps |
 
 No rotation accuracy ratio is reported for rejected/incomplete pairs. The
@@ -102,12 +160,12 @@ orientation independence; improved wall treatment remains a possible follow-up.
 | Fixture | Result |
 |---|---|
 | Falling layer cumulative mass budget | Relative defect 3.47e-16 |
-| Periodic settling L1, 32/64/128 cells |0.0053689/0.0027203/0.0013672 |
-| Wind-plume centroid |(0.390000000000005,0.539999999999995), analytic(0.39,0.54) |
+| Periodic settling L1, 32/64/128 cells | 0.0053689/0.0027203/0.0013672 |
+| Wind-plume centroid | (0.390000000000005, 0.539999999999995), analytic (0.39, 0.54) |
 | Complete steady settling–diffusion/source column, 16/32/64 | Relative RMS 1.760%/0.894%/0.451%; first-order boundary/spatial refinement |
 | Column steady source/deposition rates | Agree within frozen 1.1e-6; maximum cumulative mass defect 1.08e-13 |
 | Uniform-force canopy speed | Matches sqrt(0.08) with zero measured error |
-| Porous-block pressure drop |0.799999999965 versus integrated drag0.800000000000 |
+| Porous-block pressure drop | 0.799999999965 versus integrated drag 0.800000000000 |
 | Uniform leaf decay | Relative error 1.07e-6, mass defect 1.47e-15 |
 | Leaf-block refinement | Relative errors 3.26e-4/8.10e-5/2.05e-5 |
 | Active-canopy transient momentum | Verified first-order time convergence |
@@ -126,9 +184,9 @@ Case/physics identities record declared zero-LAD input, so identity fields and
 full archives differ; byte identity applies to the complete numerical State.
 No gas, particle or canopy field is experimentally validated by these tests.
 
-## Delft district: G7 infrastructure works, steady study not ready
+## Delft district: the campaign keeps every row, no direction converged (gate G7)
 
-Data: 3DBAG v2025.09.03, tile 9-284-556, EPSG 7415, CC BY4.0;
+Data: 3DBAG v2025.09.03, tile 9-284-556, EPSG 7415, CC BY 4.0;
 credit **© 3DBAG by tudelft3d and 3DGI**. Source:
 [download](https://data.3dbag.nl/v20250903/tiles/9/284/556/9-284-556.city.json.gz),
 [license](https://docs.3dbag.nl/en/copyright/).
@@ -157,7 +215,7 @@ No grid-convergence conclusion is available from these incomplete runs.
 
 The fine profile gives pressure solve 5.34 s (11.4%) and scalar transport 11.89 s
 (25.4%) of 46.83 s; setup is separate. Coarse district profiles put pressure near
-5–6% and scalar transport near40%. These are partial-run profiles.
+5–6% and scalar transport near 40%. These are partial-run profiles.
 
 A separate one-second orchestration smoke repeated all twelve directions
 through the pinned optimization-jobs trusted-command runner. All twelve
@@ -167,7 +225,7 @@ An initial command-output cap error was fixed to the runner's 64 MiB limit and
 its twelve rejected rows were kept. `app.cfd.wind-direction` also completed
 one actual SDK evaluation with zero failed/cancelled evaluations.
 
-## Validation and GPU decisions
+## Validation and GPU decisions (U8, V1, V2)
 
 U8 is not triggered: pressure is not the dominant measured cost, including the
 million-cell sensitivity run. No GPU backend or speed/parity claim is added.
@@ -181,3 +239,28 @@ The next useful performance work follows the measured coupled profile:
 scalar substeps/canopy coefficient reuse, momentum residual and turbulence
 work. Re-run the same accepted 27k/93k fields and the frozen district/rotation
 gates before changing defaults or recommending district optimization campaigns.
+
+## Measurements of the code review
+
+The code review of this release (14 November 2026; 2-CPU host, rustc 1.97,
+one thread, fixed numbers of steps, so these are not accepted steady runs)
+measured multigrid against the default `ic0` preconditioner again:
+
+| Case | Multigrid pressure iterations | `ic0` pressure iterations | Multigrid pressure time | `ic0` pressure time |
+|---|---:|---:|---:|---:|
+| Canyon, 27,648 cells | 1604 | 6192 | 3.5 s | 4.2 s |
+| Canyon, 93,312 cells | 703 | 3159 | 5.9 s | 8.3 s |
+| Canyon, 1,000,000 cells, 3 steps | 387 | 2309 | 58 s | 114 s |
+| Canyon 18x16x96, weight ratio 256, 10 steps | 2236 | 1695 | 4.48 s | 1.15 s |
+
+On the three grids with equal cell widths multigrid needs 3.9 to 6.0 times
+fewer iterations. On the stretched grid it is slower, because the path for
+grids with buildings has point smoothing only; the warning `CFD-W004` now
+says so for a case with geometry. Setup at one million cells took 0.8 s and
+170 bytes per cell. These rows do not change the conclusion above: no
+consistent end-to-end gain, default unchanged.
+
+The review also corrected the rule for a cell center exactly on a slanted
+polygon edge that two footprints share. An archive produced before that
+correction whose polygons have such a center no longer passes
+`validation/check_fields.py`; none of the committed cases is affected.

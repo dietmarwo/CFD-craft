@@ -1,12 +1,51 @@
-# Mobile-measurement source extension: numerical evidence
+# Mobile measurements: numerical evidence on synthetic data
 <!-- check: none: record of bounded synthetic experiments on 14 November 2026 -->
 
-R1–R3 are implemented and synthetic gate GR passes on both committed-case
-derivatives below. This verifies observation weights, frozen-flow responses,
-inference and bounded route selection under the declared assumptions. It does
-not close urban experimental validation, grid/rotation qualification or the
-earlier district performance gates. Defaults remain unchanged. See
-[the guide](../guide/24-mobile-source-inference.md).
+**Summary.** Path receptors, the virtual ride, line sources from supplied
+street rates, frozen-flow source responses, the fit of emission rates and the
+route selection pass their numerical checks on two synthetic studies. In both
+studies the data were produced by the same model that is fitted, so a
+recovered rate tests the workflow, not the atmosphere. No measured ride,
+traffic count or calibrated sensor has been used; nothing here is
+experimentally validated. The open questions of the
+[urban record](urban-extension.md) (rotation, district budget, no consistent
+multigrid gain) apply unchanged to any matrix built on a district flow.
+
+The guides are chapters [23](../guide/23-mobile-paths-and-virtual-rides.md)
+and [24](../guide/24-mobile-source-inference.md).
+
+## Names used in this record
+
+| Name | Meaning |
+|---|---|
+| R1 | Stage of the plan: path receptors and virtual rides |
+| R2 | Stage: line sources from street data |
+| R3 | Stage: source inference and route selection from rides |
+| GR | Gate after R3: on a synthetic truth, street emission rates inferred from virtual rides are recovered on held-out rides within an error declared beforehand, and source combinations that the rides cannot separate are reported |
+| V1, V2 | Validation tracks: V1 the same canyon in OpenFOAM, V2 measured data. Both are open |
+
+## Where the run archives are
+
+The run archives of both studies are not in the repository, because field
+files are large. They are attached to the GitHub release
+[v0.2.0](https://github.com/dietmarwo/CFD-craft/releases/tag/v0.2.0) as the
+asset `cfd-craft-0.2.0-evidence.zip` (3.5 MB), folder `mobile/`, beside the
+folder `urban/` of the [urban record](urban-extension.md), a README,
+`SHA256SUMS.json` and `DATA-LICENSE.txt`. They were produced before the code
+review of this release, on the source tree that each archive records. They
+are records of past runs.
+
+To reproduce the studies with the current code, build the `mobile_response`
+example and run
+
+```sh
+python tutorials/mobile_measurements.py run --preset source-response --output NEW_DIR_1
+python tutorials/mobile_measurements.py run --preset canyon --output NEW_DIR_2
+```
+
+([chapter 24](../guide/24-mobile-source-inference.md#setup)). The new reports
+carry the fingerprints of the current source; the documentation check runs
+the first preset on every change.
 
 ## Identity and frozen gates
 
@@ -57,8 +96,8 @@ Malformed input produces a coded diagnostic under normal and optimized Python.
 
 | Study | Relative superposition defect | Relative rate error | Held-out relative error | Training rank | GR |
 |---|---:|---:|---:|---:|---|
-| Uniform laminar source-response, winds 270/250 | 3.153e-16 | 3.629e-16 | 2.212e-16 |3/3| Pass |
-| WH1 canyon, winds 270/225 | 3.230e-8 | 2.859e-9 | 4.363e-7 |3/3| Pass |
+| Uniform laminar source-response, winds 270/250 | 3.153e-16 | 3.629e-16 | 2.212e-16 | 3/3 | Pass |
+| WH1 canyon, winds 270/225 | 3.230e-8 | 2.859e-9 | 4.363e-7 | 3/3 | Pass |
 
 The canyon uses the opt-in implicit flow recipe, fixed linear scalar transport
 and coarse existing geometry. Its residual-level superposition error is
@@ -74,8 +113,8 @@ between-pass sigma 1e-9 kg/m3. Neither is sampled or estimated from data.
 
 | Study | Selected route/wind opportunities | Riding + setup seconds | Budget seconds | Worst-direction information | Master solves |
 |---|---|---:|---:|---:|---:|
-| Source-response | Near at270 and250 |26.6667|36|236.1870|4|
-| Canyon | Canyon path at270 and225 |32|36|79160.1633|4|
+| Source-response | Near at 270 and 250 | 26.6667 | 36 | 236.1870 | 4 |
+| Canyon | Canyon path at 270 and 225 | 32 | 36 | 79160.1633 | 4 |
 
 LP-IP-craft 0.29.0's native mixed integer solves and eigenvector cuts converge
 within the 1e-7 normalized floating-point gap. All 16 candidate subsets are
@@ -92,12 +131,12 @@ samples/pass and zero systematic floor, the assumed pass counts are:
 
 | Study / wind | First training path | Second training path |
 |---|---:|---:|
-| Source-response270 |31|69|
-| Source-response250 |45|102|
-| Canyon270 |1|32|
-| Canyon225 |1|15108|
+| Source-response 270 | 31 | 69 |
+| Source-response 250 | 45 | 102 |
+| Canyon 270 | 1 | 32 |
+| Canyon 225 | 1 | 15108 |
 
-The high downwind count at225° follows its tiny modeled increment and the
+The high downwind count at 225° follows its tiny modeled increment and the
 assumed pass scatter; it is retained. Counts are planning calculations, not
 measured precision. A systematic uncertainty floor can make the target
 unachievable; correlated drift and CFD error are not removed by repetition.
@@ -123,3 +162,13 @@ provided. V2 remains unopened under the
 OpenFOAM backend still does not translate an urban dispersion case. All previous
 [urban failures and open gates](urban-extension.md) remain part of the evidence;
 synthetic GR is not a substitute for those qualifications.
+
+## Changes of the code review
+
+The code review of this release (14 November 2026) changed three things that
+this record touches. A route selection is now certified against the solver's
+proven bound, not against the objective value of its incumbent. The study
+driver now recomputes the frozen-flow hash of every archive of a wind and
+requires them to be equal, and records a malformed archive as a failed audit.
+After these changes the source-response preset was run again and passed all
+its checks; the tables above are the recorded runs, unchanged.

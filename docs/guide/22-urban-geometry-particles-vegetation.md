@@ -156,7 +156,7 @@ time: `ic0` time over multigrid time was 1.05 at 27,648 cells, 0.94 at 93,312
 cells and 0.91 on a 37,500-cell block (below 1, `ic0` was faster). With
 strongly unequal cell widths (`CFD-W004`) multigrid was slower, because its
 path for buildings has no line smoothing. The default stays `ic0`
-([measurements](../evidence/urban-extension.md)).
+([measurements](../evidence/urban-extension.md#pressure-multigrid-with-buildings-no-consistent-gain)).
 
 ## Import buildings from a map
 <!-- check: long -->

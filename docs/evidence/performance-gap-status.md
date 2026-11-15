@@ -1,10 +1,10 @@
 # Performance gap: current state and remaining stages
 <!-- check: none: record of past runs -->
 
-The unreleased urban extension implements masked multigrid (P2b) and records
-setup/reuse costs (P2c), with independent topology/nullspace/SPD/reference tests.
+Masked multigrid (P2b) is implemented and its setup and reuse costs are
+recorded (P2c), with independent topology/nullspace/SPD/reference tests.
 The coupled urban throughput gate remains open; see the
-[urban extension results](urban-extension.md). Historical measurements below
+[urban features record](urban-extension.md). Historical measurements below
 retain their original implementation and scope.
 
 

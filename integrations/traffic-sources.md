@@ -1,4 +1,4 @@
-# Supplied street emissions (urban R2)
+# Supplied street emissions
 
 `traffic_sources.py` extends an existing case from the urban map converter. It
 adds native line sources from a GeoJSON street network and an explicit CSV

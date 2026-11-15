@@ -9,6 +9,7 @@ reported it.
 | `CFD-X`, `CFD-D` | The OpenFOAM adapter and the reference data | [External backend and reference data](#external-backend-and-reference-data) |
 | `CFD-P` | The Python package | [Tools, examples and scripts](#tools-examples-and-scripts) |
 | `CFD-U`, `CFD-T`, `CFD-R` | Example programs, optimization lessons, release and documentation tools | [Tools, examples and scripts](#tools-examples-and-scripts) |
+| `CFD-M` | The map and street converters, the ride tool and the mobile study | [City blocks and mobile measurements](#city-blocks-and-mobile-measurements) |
 | `CFD-B` | Performance probes, comparisons and sweeps | [Tools, examples and scripts](#tools-examples-and-scripts); [Native profiling and accuracy-sweep diagnostics](#native-profiling-and-accuracy-sweep-diagnostics) |
 
 ## Tools, examples and scripts
@@ -146,7 +147,7 @@ after each fix.
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
 | CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
 | CFD-E030 | error | The geometry leaves no fluid cells |
-| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid on a grid without fluid components, or with nonpositive/nonfinite pressure weights. Release 0.1.1 also raised it for any geometry mask; masks and several fluid components are now supported |
+| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid on a grid without fluid components, or with nonpositive/nonfinite pressure weights. A geometry mask and several fluid components are supported and do not raise it |
 | CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |
 | CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite (on a masked grid, the factor of one fluid component), or masked aggregation could not reduce a connected component; no diagonal repair or hidden fallback is applied |
 | CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
@@ -282,7 +283,7 @@ drag coefficient 0..10, leaf collection velocity 0..10 m/s.
 prescribed velocity, because no momentum response would be solved. Use zero
 drag for a prescribed-flow leaf-collection study, or solve laminar/RANS flow.
 
-## Urban geometry and campaign additions
+## City blocks and mobile measurements
 
 | Code | Path | Meaning |
 |---|---|---|
@@ -290,14 +291,17 @@ drag for a prescribed-flow leaf-collection study, or solve laminar/RANS flow.
 | CFD-E085 | `building_roughness_m` | Building roughness must be finite, positive and used with neutral RANS |
 | CFD-W011 | `geometry_min_passage_cells` | A represented horizontal street between solids has fewer cells than requested, or the request was not evaluated because the grid has more than 10000000 cells (the message says which; `geometry.json` still records the passage of every shape) |
 | CFD-M001 | `map` | Converter rejected source geometry, coordinates, elevation range, provenance or native case check; the message names the reason |
-| CFD-U001 | `campaign` | Urban campaign input, budget, worker or native archive error; failed rows are retained |
 
-`CFD-E034` now covers invalid multigrid topology/weights; geometry masks and
-multiple fluid components are supported. `CFD-E070` retains its host-memory
-meaning. `CFD-E028` remains an error when a shape vanishes under cell-center
-masking: a warning must never silently remove a building from the physics.
+The wind-direction campaign (`validation/urban_campaign.py`) has no code of
+its own. It refuses invalid budgets or a case without `neutral_rans` flow with
+a Python `ValueError`, and each direction that fails keeps a row with
+`accepted: false` and an `error` text such as `campaign_budget_exhausted`,
+`worker_watchdog_timeout`, `worker_failed` or `no_native_archive`.
 
-For opt-in particles, `CFD-E020 run.mode` admits a closed-air source only with
+`CFD-E028` is an error also when a polygon prism contains no cell center: a
+warning must never silently remove a building from the physics.
+
+For particle bins, `CFD-E020 run.mode` admits a closed-air source only with
 a declared removal candidate, and `CFD-E043 sources[i]` then requires an actual
 positive represented ground/roof/leaf removal mechanism in the same fluid
 component as each source support cell. A sink in another component or a canopy
@@ -340,4 +344,4 @@ The ordinary run and restart contracts are unchanged.
 nonfinite values, noise/pass assumptions, malformed study inputs, unsafe IDs,
 duplicate training/held-out identities and execution/output errors in the
 optional mobile study driver. Bounded native or integer-solver failures remain
-in the report and do not produce a passed GR gate.
+in the report, and the study then does not pass.

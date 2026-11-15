@@ -1,7 +1,7 @@
 # Numerical decisions for 0.1
 
 1. Use face-flux projection on a uniform masked grid. Build and test one operator definition before adding geometry formats or refinement blocks.
-2. Use matrix-free PCG with cached IC(0). This improves the small reference cases but does not solve the fine-grid throughput problem. IC(0) stays the default; opt-in unmasked symmetric multigrid (with anisotropic line blocks) was added later after its own gates, and masked multigrid remains open.
+2. Use matrix-free PCG with cached IC(0). This improves the small reference cases but does not solve the fine-grid throughput problem. IC(0) stays the default; opt-in symmetric multigrid for grids without solids (with anisotropic line blocks) was added later after its own gates, and a multigrid path for grids with buildings after that. With buildings it cut pressure iterations but gave no consistent gain in run time ([urban record](../evidence/urban-extension.md)), which is one reason the default did not change.
 3. Use explicit diffusion and bounded timestep selection. This is simple to verify and increasingly expensive on fine RANS grids. It remains the default and the transient method; steady runs can opt into implicit viscosity and implicit k–ε steps (decisions 9 and 10).
 4. Retain linear transport alongside MUSCL. It provides exact response matrices, reference comparisons and a simpler failure diagnosis.
 5. Keep one neutral inlet/wall/turbulence combination. Its coefficient and upper-boundary choices are recorded; a change needs the empty-ABL test.

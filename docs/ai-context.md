@@ -130,7 +130,7 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
 | `report.json` of the mobile study | `cfd-craft.mobile-study-result/1`: `passed`, `gate_checks`, `inference` (multipliers, rank, ambiguous combinations), `pass_count_planning`, `route_selection` |
 | `report.json` of the wind campaign | `cfd-craft.urban-report/1`: one row per direction with `accepted`, and `within_budget` |
 | Exit codes | 0 success (valid case, accepted run, intact archive); 1 invalid input or an execution or I/O error; 2 a run without numerical acceptance, or an accepted run that omitted files over its output budget |
-| [Diagnostics](diagnostics.md) | Every `CFD-` code with its meaning; the scripts report `CFD-M001` (map), `CFD-M002` (streets), `CFD-M003` (inference), `CFD-M004` (ride) and `CFD-U001` (campaign) |
+| [Diagnostics](diagnostics.md) | Every `CFD-` code with its meaning; the scripts report `CFD-M001` (map), `CFD-M002` (streets), `CFD-M003` (inference) and `CFD-M004` (ride); the wind campaign reports an `error` text per row |
 
 Generated pages: [case schema](reference/case-schema.md),
 [result schema](reference/result-schema.md), [command line](reference/cli.md),

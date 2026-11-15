@@ -1,9 +1,10 @@
 # Symmetric pressure multigrid
 
 `numerics.pressure_preconditioner` selects `ic0` (default) or `multigrid`.
-Multigrid accepts unmasked Cartesian cases and, in the unreleased source
-extension, masked cases with disconnected fluid components. Masked cases use
-the connected-aggregate path below. Laminar and neutral-RANS pressure
+Multigrid accepts Cartesian cases without solids and cases with a geometry
+mask, also when the mask separates the fluid into several regions. Masked
+cases use the [connected-aggregate path](#masked-connected-aggregates), which
+has point smoothing only. Laminar and neutral-RANS pressure
 use the same constant-density operator; no flow, scalar or turbulence model is
 changed. Prescribed-flow runs bypass pressure and gain no acceleration from this
 selection. Strong anisotropy now selects exact principal-line/small-plane
@@ -233,9 +234,10 @@ The opt-in **CFD checks** selector `external=pressure` runs this original campai
 and packages evidence with directory entries and archive round-trip checks.
 See [recorded results](../evidence/pressure-multigrid.md) and the
 [plan](../history/18-pressure-multigrid-plan.md). No timing threshold is imposed
-in ordinary CI. Masked-grid multigrid (P2b) and setup-cost measurements (P2c)
-are now implemented in the source extension, with coupled qualification still open; anisotropic line blocks (P2a), second-order momentum
-and the implicit steady algorithms were added later. This change alone
+in ordinary CI. Multigrid for masked grids and measurements of its setup cost
+were added later; its coupled runs show no consistent gain in run time.
+Anisotropic line blocks, second-order momentum
+and the implicit steady algorithms were also added later. This change alone
 does not qualify a canyon model or establish OpenFOAM parity.
 
 The new selector `external=anisotropy` runs the three-method rough-pressure suite
@@ -257,7 +259,7 @@ Hosted runs can select `external=accuracy, native_pressure=multigrid`.
 See the [iteration plan](../history/19-anisotropic-pressure-plan.md) and
 [remaining gap and work](../evidence/performance-gap-status.md).
 
-## Masked connected aggregates (urban U1 / P2b)
+## Masked connected aggregates
 
 The masked path compacts fluid unknowns and leaves solid entries exactly zero.
 Each coarsening step forms geometric 2x2x2 bins, then splits every bin by
@@ -299,9 +301,14 @@ irregular, so `level_dimensions` is omitted; actual `level_cells`, nonzeros,
 retained storage and work are reported. The existing conservative per-cell
 memory allowance covers this path. Construction polls cancellation between
 levels and during connectivity and aggregation scans. The first setup is
-measured separately from reused cycles (P2c).
+measured separately from reused cycles.
 
 A successful preconditioner verification does not close the coupled performance
 gate. The [urban evidence](../evidence/urban-extension.md) reports both setup and
-whole-run costs and preserves failed93k and district rows. General anisotropic
-masked robustness and practical million-cell throughput remain unqualified.
+whole-run costs and preserves the failed block and district rows. On isotropic
+canyon grids the masked path needs 3 to 6 times fewer pressure iterations than
+IC(0) at about the same run time. With strong anisotropy it is slower, because
+it has no line blocks: on an 18x16x96 canyon with a weight ratio of 256 it
+needed 2236 iterations and 4.48 s of pressure solve in 10 steps, IC(0) 1695
+and 1.15 s. `CFD-W004` says so for a case with geometry. Practical
+million-cell throughput remains unqualified.

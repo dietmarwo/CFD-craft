@@ -32,7 +32,7 @@ GPU execution.
 
 ## The guide
 
-21 chapters, ordered by difficulty; each starts with its own setup. The
+24 chapters, ordered by difficulty; each starts with its own setup. The
 [guide index](guide/README.md) lists them and says which interface to use.
 
 - **Part I, First steps:** run a case from Python, the case file, the command
@@ -45,6 +45,9 @@ GPU execution.
   measurements, continuation and mesh initialization, a wall-resolved
   backstep, a bounded refinement campaign.
 - **Part V, Embedding and help:** the Rust library, troubleshooting.
+- **Part VI, City blocks and mobile measurements:** buildings from a map,
+  particles and vegetation, routes and virtual sensor rides, street emissions
+  inferred from rides.
 
 ## Reference
 

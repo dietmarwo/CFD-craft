@@ -1,7 +1,7 @@
 <!-- stub -->
 # CFD-craft user manual
 
-This page moved. The manual is now the [guide](guide/README.md): 21 chapters,
+This page moved. The manual is now the [guide](guide/README.md): 24 chapters,
 ordered by difficulty, each with its own setup. The old sections and the 31
 numbered examples are listed below with their new places. The example
 programs are listed in [examples/manual](../examples/manual/README.md).

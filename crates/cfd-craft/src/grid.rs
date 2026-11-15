@@ -238,7 +238,7 @@ impl Grid {
     ///
     /// # Errors
     ///
-    /// `CFD-E028` when a box contains no cell center (the grid would not
+    /// `CFD-E028` when a box or prism contains no cell center (the grid would not
     /// represent it) and `CFD-E030` when no fluid cell remains. Source and
     /// receptor support are checked separately, by
     /// [`transport::source_fields`](crate::transport::source_fields) and
@@ -282,8 +282,13 @@ impl Grid {
         }
         for (i, (b, n)) in c.geometry.iter().zip(&box_cells).enumerate() {
             if *n == 0 {
+                let kind = if b.footprint_m.is_some() {
+                    "prism"
+                } else {
+                    "box"
+                };
                 return Err(format!(
-                    "CFD-E028: geometry[{i}] (box {}) contains no cell center, so the grid does not represent it; enlarge it or refine the grid",
+                    "CFD-E028: geometry[{i}] ({kind} {}) contains no cell center, so the grid does not represent it; enlarge it or refine the grid",
                     b.id
                 ));
             }

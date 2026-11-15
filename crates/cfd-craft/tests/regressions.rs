@@ -237,6 +237,19 @@ fn an_empty_box_error_names_its_index() {
 }
 
 #[test]
+fn an_empty_prism_error_calls_it_a_prism() {
+    let mut c = canyon();
+    c.geometry.push(Block {
+        footprint_m: Some(vec![[10.0, 3.0], [10.01, 3.0], [10.01, 13.0], [10.0, 13.0]]),
+        id: "thin".into(),
+        min_m: [10.0, 3.0, 0.0],
+        max_m: [10.01, 13.0, 1.0],
+    });
+    let e = Grid::build(&c).unwrap_err();
+    assert!(e.starts_with("CFD-E028: geometry[2] (prism thin)"), "{e}");
+}
+
+#[test]
 fn a_restart_with_mass_in_a_solid_cell_is_rejected() {
     let mut c = canyon();
     c.grid.cells = [18, 16, 12];

@@ -145,7 +145,7 @@ after each fix.
 | CFD-E025 | error | Negative or nonfinite initial concentration |
 | CFD-E026 | error | Invalid periodic Gaussian initial condition |
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
-| CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
+| CFD-E028 | error | A box or polygon prism contains no cell center, so the grid would not represent it; the path names the shape |
 | CFD-E030 | error | The geometry leaves no fluid cells |
 | CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid on a grid without fluid components, or with nonpositive/nonfinite pressure weights. A geometry mask and several fluid components are supported and do not raise it |
 | CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |

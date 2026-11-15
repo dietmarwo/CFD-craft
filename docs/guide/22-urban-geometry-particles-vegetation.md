@@ -159,7 +159,6 @@ path for buildings has no line smoothing. The default stays `ic0`
 ([measurements](../evidence/urban-extension.md#pressure-multigrid-with-buildings-no-consistent-gain)).
 
 ## Import buildings from a map
-<!-- check: long -->
 
 `integrations/urban_map.py` converts building footprints to a case with
 prisms. It reads GeoJSON polygons or CityJSON solids in a projected coordinate

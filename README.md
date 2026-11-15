@@ -1,8 +1,9 @@
 # CFD-craft
 <!-- check: rel=1e-4 -->
 
-A Rust CFD research solver for incompressible flow and passive-gas dispersion
-on uniform Cartesian grids, used from Python, a JSON command line or Rust, with
+A Rust CFD research solver for incompressible flow and the dispersion of gases
+and particles around buildings on uniform Cartesian grids, used from Python, a
+JSON command line or Rust, with tools for city maps and mobile sensor rides and
 a bounded OpenFOAM Foundation 13 backend for cross-checks.
 
 ```sh
@@ -44,11 +45,12 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
 - A result keeps termination, numerical assessment and experimental validation apart.
 - A run directory carries hashes of the case, the physics, the initial state, the source and the executable, and an independent checker recomputes the balances from the stored fields.
 - It is small and scriptable: in-process from Python, a JSON command line, a Rust library without native scientific-library dependencies; OpenFOAM is optional and stays a separate program.
+- It goes from a city map to a question about measurements: buildings from GeoJSON or CityJSON, particle size classes and vegetation, concentrations along a route, and street emissions inferred from sensor rides. These parts are numerically verified, not experimentally validated.
 
 ## Documentation
 
 - [Documentation site](https://dietmarwo.github.io/CFD-craft/): all pages, with search.
-- [Guide, chapter 1: First run](docs/guide/01-first-run.md): 21 chapters, smallest case first.
+- [Guide, chapter 1: First run](docs/guide/01-first-run.md): 24 chapters, smallest case first.
 - [How do I …?](docs/how-to.md): tasks in plain words, each linked to the section that does it.
 - [Comparison with OpenFOAM and others](docs/comparison.md): features and committed measurements, including where the others are ahead.
 - [Reference](docs/reference/README.md): case and result schemas, command line, Python API, units, diagnostics, model cards.
@@ -59,27 +61,32 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
   <img src="docs/images/cfd-craft.jpg" alt="CFD-craft: CFD experiments and validation with native Rust and OpenFOAM workflows">
 </p>
 
-## What 0.1.1 contains
+## What CFD-craft contains
 
-Uniform Cartesian finite volumes with box-shaped solids; laminar flow and one
-neutral k-epsilon package; passive gas with point, line and volume sources and
-point and volume receptors; bounded runs with checksummed restart; opt-in
-second-order momentum, implicit steady iteration and pressure multigrid; an
-optional OpenFOAM Foundation 13 backend for two generated cases (a laminar
-cavity and a turbulent backward-facing step). It does not contain particles,
-vegetation, LES, chemistry, stretched grids or GPU execution.
+- **Grid and geometry.** Uniform Cartesian finite volumes. Buildings are boxes
+  or prisms with a polygon footprint; a converter imports them from GeoJSON
+  or CityJSON maps.
+- **Flow.** Laminar flow and one neutral k-epsilon package with rough walls;
+  optional porous vegetation.
+- **Dispersion.** Passive gases and particle size classes with settling,
+  deposition and PM2.5 and PM10 sums; point, line and volume sources; point,
+  volume and path receptors.
+- **Runs.** Bounded runs with checksummed restart; opt-in second-order
+  momentum, implicit steady iteration and pressure multigrid (the defaults do
+  not change).
+- **Measurement campaigns.** Wind-direction campaigns, virtual sensor rides,
+  line sources from street data, and street emissions and routes inferred from
+  rides.
+- **OpenFOAM.** An optional Foundation 13 backend for two generated cases (a
+  laminar cavity and a turbulent backward-facing step).
 
-## Urban extension in this source checkout
-
-The unreleased source adds component-preserving masked pressure multigrid,
-polygon prisms and explicit non-ground wall roughness, an optional GeoJSON /
-CityJSON converter, spherical particle settling/deposition, porous vegetation,
-and bounded cold-start district campaigns. Legacy defaults are retained.
-See guide chapter22 and the urban extension evidence record, available through
-the Guide and Evidence links above.
-These additions are numerically verified research features; urban physical
-validation and practical district throughput remain open. Installed 0.1.1
-packages have the earlier scope above.
+It does not contain body-fitted or stretched grids, terrain, LES, buoyancy or
+heat, chemistry or GPU execution. Nothing is experimentally validated. For the
+city-block features in particular: multigrid with buildings gave no consistent
+gain in run time, a canyon rotated by 45 degrees did not pass its grid study,
+no direction of the district demonstration converged within its short budget,
+and inference from rides is verified on synthetic data of the same model only.
+The guide and the evidence records linked above have the details.
 
 ## Command line and source build
 
@@ -109,12 +116,6 @@ shows how they connect.
 CFD-craft as an optimization job, and
 [experiment-craft](https://github.com/dietmarwo/experiment-craft) schedules
 campaigns of such jobs.
-
-The unreleased source extension also supports path receptors, idealized virtual
-rides, supplied street emissions and source inference with integer route/wind
-selection. Its guides and evidence are in the documentation index. Synthetic
-recovery is verified; measured urban validation and the earlier performance
-and rotation qualification gates remain open.
 
 ## License
 

@@ -1,7 +1,8 @@
 # CFD-craft
 
-A Rust CFD research solver for incompressible flow and passive-gas dispersion
-on uniform Cartesian grids, used from Python, a JSON command line or Rust, with
+A Rust CFD research solver for incompressible flow and the dispersion of gases
+and particles around buildings on uniform Cartesian grids, used from Python, a
+JSON command line or Rust, with tools for city maps and mobile sensor rides and
 a bounded OpenFOAM Foundation 13 backend for cross-checks.
 
 Version 0.1.1 is a research prototype. A numerically accepted run is not an
@@ -16,19 +17,32 @@ experimentally validated prediction.
 - [CFD-craft, OpenFOAM and Ansys Fluent](comparison.md): what each tool is
   for, the committed measurements, and where the others are ahead.
 
-## What 0.1.1 contains
+## What CFD-craft contains
 
-- Uniform Cartesian grids with box-shaped solids.
-- Laminar flow and one neutral k-epsilon package.
-- Passive gas with point, line and volume sources, and point and volume receptors.
+- Uniform Cartesian grids. Buildings are boxes or prisms with a polygon
+  footprint, written by hand or imported from a GeoJSON or CityJSON map.
+- Laminar flow and one neutral k-epsilon package; optional porous vegetation.
+- Passive gases and particle size classes with settling, deposition and PM2.5
+  and PM10 sums.
+- Point, line and volume sources; point, volume and path receptors.
 - Bounded runs (steps, wall time, memory, output) with checksummed restart.
 - Strict case and result schemas, listed by `cfd-craft describe`.
-- Opt-in second-order momentum, implicit steady iteration and pressure multigrid; the defaults are unchanged.
+- Opt-in second-order momentum, implicit steady iteration and pressure multigrid, also with buildings; the defaults are unchanged.
+- Tools for measurement campaigns: wind-direction campaigns, virtual sensor rides, line sources from street data, street emissions inferred from rides, and route selection.
 - An optional, bounded OpenFOAM Foundation 13 backend for two generated cases: a laminar cavity and a turbulent backward-facing step.
 - Optimization examples: a linear program, sensor placement and a coupled-flow design.
 
-It does not contain particles, vegetation, LES, chemistry, stretched grids or
-GPU execution.
+## What it does not contain
+
+- Body-fitted or stretched grids, terrain, LES, buoyancy or heat, chemistry or
+  GPU execution.
+- Experimental validation. Every model is numerically verified only.
+- A qualified city-district workflow. Multigrid with buildings gave no
+  consistent gain in run time; a canyon rotated by 45 degrees did not pass its
+  grid study; no wind direction of the district demonstration converged within
+  its short budget; inference from rides is verified on synthetic data of the
+  same model only ([urban record](evidence/urban-extension.md),
+  [mobile record](evidence/mobile-measurements.md)).
 
 ## The guide
 

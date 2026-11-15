@@ -70,9 +70,11 @@ replaces its rows; a later record that adds to it is named.
 - [Urban features](urban-extension.md): multigrid with buildings, polygon prisms, particles, vegetation, the rotated canyon (not passed) and the Delft district campaign (no direction converged); 14 November 2026. Current, with the measurements of the code review added in the record itself.
 - [Mobile measurements](mobile-measurements.md): path receptors, virtual rides, street sources, and inference and route selection on two synthetic studies; 14 November 2026. Current.
 
-The run archives of these two records are attached to the GitHub release
+The run records of these two records are attached to the GitHub release
 [v0.2.0](https://github.com/dietmarwo/CFD-craft/releases/tag/v0.2.0) as
-`cfd-craft-0.2.0-evidence.zip`; both records say how to reproduce them.
+`cfd-craft-0.2.0-evidence.zip`: complete archives with fields for the mobile
+studies; cases, summaries, profiles and manifests without the field files for
+the urban runs. Both records say how to reproduce them.
 
 ## Open gates
 

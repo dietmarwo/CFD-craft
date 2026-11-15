@@ -1,10 +1,5 @@
 # How do I …?
 
-For path receptors and idealized sensor lag, see
-[mobile paths](guide/23-mobile-paths-and-virtual-rides.md). For supplied street
-rates, source inference, required passes and integer route/wind selection, see
-[mobile source inference](guide/24-mobile-source-inference.md).
-
 Tasks in plain words. Each link goes to the section of the
 [guide](guide/README.md) or the reference that does it; the section starts from
 the setup of its chapter.
@@ -57,6 +52,9 @@ the setup of its chapter.
 | fix "steady sources need an open boundary" (`CFD-E020`)? | 5 [A steady source needs a way out](guide/05-sources-receptors-transport.md#a-steady-source-needs-a-way-out) |
 | simulate a release that is not steady? | 5 [A release that is not steady](guide/05-sources-receptors-transport.md#a-release-that-is-not-steady) |
 | build a source-receptor response matrix? | 12 [Unit responses and superposition](guide/12-studies.md#unit-responses-and-superposition) |
+| model particle size classes and get PM2.5 and PM10? | 22 [Particle size classes](guide/22-urban-geometry-particles-vegetation.md#particle-size-classes) |
+| sample the concentration along a route? | 23 [Declare a path receptor](guide/23-mobile-paths-and-virtual-rides.md#declare-a-path-receptor); [Read the samples and the mean](guide/23-mobile-paths-and-virtual-rides.md#read-the-samples-and-the-mean) |
+| turn street emission rates into line sources? | 24 [Street emissions from map data](guide/24-mobile-source-inference.md#street-emissions-from-map-data) |
 
 ## Flow
 
@@ -102,6 +100,13 @@ the setup of its chapter.
 | speed up a canyon run? | 10 [The same steady state faster](guide/10-street-canyon.md#the-same-steady-state-faster) |
 | know what a coarse canyon result does not show? | 10 [What this result is not](guide/10-street-canyon.md#what-this-result-is-not) |
 | run all canyon scenarios as one study? | 10 [All committed scenarios in one study](guide/10-street-canyon.md#all-committed-scenarios-in-one-study) |
+| describe a building with a polygon footprint? | 22 [A building with a polygon footprint](guide/22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint) |
+| see how well the grid represents a building? | 22 [A building with a polygon footprint](guide/22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint) |
+| import buildings from a GeoJSON or CityJSON map? | 22 [Import buildings from a map](guide/22-urban-geometry-particles-vegetation.md#import-buildings-from-a-map) |
+| add a hedge or trees? | 22 [Hedges and trees](guide/22-urban-geometry-particles-vegetation.md#hedges-and-trees) |
+| use multigrid with buildings? | 22 [Multigrid with buildings](guide/22-urban-geometry-particles-vegetation.md#multigrid-with-buildings) |
+| run a wind-direction campaign? | 22 [One case, twelve wind directions](guide/22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions) |
+| know what a city-block result does not show? | 22 [What these results are not](guide/22-urban-geometry-particles-vegetation.md#what-these-results-are-not) |
 
 ## Python and automation
 
@@ -120,7 +125,22 @@ the setup of its chapter.
 | optimize a flow setting without exploiting a coarse grid? | 13 [F3: a design must survive a finer grid](guide/13-optimization-lessons.md#f3-a-design-must-survive-a-finer-grid) |
 | run CFD-craft as an optimization job? | 14 [Run the four jobs](guide/14-optimization-jobs.md#run-the-four-jobs) |
 | build and inspect the fcmaes worker? | 14 [The application worker](guide/14-optimization-jobs.md#the-application-worker) |
-| give an agent a bounded task? | [Agent entry point](ai-context.md); A task for an agent in chapters [10](guide/10-street-canyon.md#a-task-for-an-agent), [12](guide/12-studies.md#a-task-for-an-agent), [14](guide/14-optimization-jobs.md#a-task-for-an-agent), [16](guide/16-compare-solvers.md#a-task-for-an-agent), [18](guide/18-backstep-resolution.md#a-task-for-an-agent), [19](guide/19-refinement-campaign.md#a-task-for-an-agent) |
+| run wind directions as optimization jobs? | 14 [Wind-direction jobs for a city block](guide/14-optimization-jobs.md#wind-direction-jobs-for-a-city-block) |
+| give an agent a bounded task? | [Agent entry point](ai-context.md); A task for an agent in chapters [10](guide/10-street-canyon.md#a-task-for-an-agent), [12](guide/12-studies.md#a-task-for-an-agent), [14](guide/14-optimization-jobs.md#a-task-for-an-agent), [16](guide/16-compare-solvers.md#a-task-for-an-agent), [18](guide/18-backstep-resolution.md#a-task-for-an-agent), [19](guide/19-refinement-campaign.md#a-task-for-an-agent), [23](guide/23-mobile-paths-and-virtual-rides.md#a-task-for-an-agent) |
+
+## Mobile measurements
+
+| How do I … | Section |
+|---|---|
+| simulate a sensor ride through a computed field? | 23 [Simulate a ride](guide/23-mobile-paths-and-virtual-rides.md#simulate-a-ride) |
+| check path samples independently of the solver? | 23 [Check the path independently](guide/23-mobile-paths-and-virtual-rides.md#check-the-path-independently) |
+| infer street emissions from rides? | 24 [The smallest study](guide/24-mobile-source-inference.md#the-smallest-study) |
+| compute the response of rides to each street on one flow? | 24 [One flow, one transport run per street](guide/24-mobile-source-inference.md#one-flow-one-transport-run-per-street) |
+| fit my own ride observations? | 24 [Fit your own observations](guide/24-mobile-source-inference.md#fit-your-own-observations) |
+| find out which streets the rides cannot tell apart? | 24 [Which streets can be told apart](guide/24-mobile-source-inference.md#which-streets-can-be-told-apart) |
+| plan how many passes a street needs? | 24 [How many passes a street needs](guide/24-mobile-source-inference.md#how-many-passes-a-street-needs) |
+| choose routes under a time budget? | 24 [Which routes under a time budget](guide/24-mobile-source-inference.md#which-routes-under-a-time-budget) |
+| know what a virtual ride or a fitted rate does not show? | 23 [What a virtual ride is not](guide/23-mobile-paths-and-virtual-rides.md#what-a-virtual-ride-is-not); 24 [What this is not](guide/24-mobile-source-inference.md#what-this-is-not) |
 
 ## OpenFOAM backend
 
@@ -145,6 +165,3 @@ the setup of its chapter.
 | find what a diagnostic code means? | [Diagnostics](diagnostics.md); 21 [By symptom](guide/21-troubleshooting.md#by-symptom) |
 | find the measurement behind a number? | [Evidence](evidence/README.md); [comparison](comparison.md) |
 | run the documentation check myself? | [Run the documentation check](developer/documentation.md#run-the-documentation-check) |
-
-For source-checkout urban geometry, map import, particle bins, vegetation and
-bounded wind-direction jobs, see [chapter 22](guide/22-urban-geometry-particles-vegetation.md).

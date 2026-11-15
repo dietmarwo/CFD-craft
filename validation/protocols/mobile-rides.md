@@ -1,7 +1,8 @@
 # Mobile rides: protocol before access to measurements
 
 Status: frozen workflow outline, no data opened, no experimental claim.
-The R1–R3 synthetic checks do not close V2. A named dataset, lawful terms and
+The synthetic checks of the path, ride and inference tools do not replace a
+measured validation. A named dataset, lawful terms and
 site-specific numerical gates must be supplied before a measured study begins.
 
 Before reading concentration values, register the site/flat-ground screen,

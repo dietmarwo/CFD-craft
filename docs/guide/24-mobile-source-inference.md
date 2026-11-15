@@ -14,8 +14,9 @@ and no urban air, and no measured ride has been used.
 
 ## Setup
 
-You need a checkout with the command and the examples built, and the optional
-Python packages of the study (NumPy, SciPy, Shapely and LP-IP-craft):
+You need a checkout with the command and the example `mobile_response` built,
+and the optional Python packages: NumPy, SciPy and LP-IP-craft for the study,
+Shapely for the street converter.
 
 ```sh
 cargo build --release --workspace --locked

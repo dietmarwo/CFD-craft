@@ -319,18 +319,22 @@
       "json": 0
     },
     "docs/guide/22-urban-geometry-particles-vegetation.md": {
-      "run": 0,
-      "text": 0,
-      "json": 4
+      "run": 9,
+      "text": 4,
+      "json": 4,
+      "long": {
+        "run": 2,
+        "text": 1
+      }
     },
     "docs/guide/23-mobile-paths-and-virtual-rides.md": {
-      "run": 1,
-      "text": 0,
-      "json": 0
+      "run": 5,
+      "text": 3,
+      "json": 1
     },
     "docs/guide/24-mobile-source-inference.md": {
-      "run": 1,
-      "text": 1,
+      "run": 5,
+      "text": 4,
       "json": 0
     },
     "docs/guide/README.md": {

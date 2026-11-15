@@ -205,11 +205,11 @@ The counter covers state-update floors. The wall algebraic relation itself has a
 
 Verification covers Poisson/projection identities, gauges, analytic channels, Couette flow, periodic viscous shear and the Re=100 lid cavity. The empty-ABL test compares near-outlet U/k/epsilon to the inlet at heights H..5H under frozen tolerances. It is a consistency check for this setup. The suite also reports, without a gate, the drift below H. There the cell-centered velocity gradient of the second cell overestimates the logarithmic gradient, so production and epsilon run high: on the canonical empty-ABL grid epsilon is up to 16 % above the inlet profile below H (U 4 %, k 4 %), and more on coarser vertical grids. A log-consistent near-wall gradient is an open improvement.
 
-The illustrative canyon examples are not exact CODASC geometry/inflow reproductions. Their coarse-grid numerical convergence does not validate urban dispersion. Fine-grid pressure/explicit-time throughput is an open performance gate. No buoyancy, stratification, traffic turbulence, chemistry or unsteady turbulent statistics are represented. The source extension adds opt-in particles and vegetation with separate verification and unvalidated physics, described below and in the transport model card.
+The illustrative canyon examples are not exact CODASC geometry/inflow reproductions. Their coarse-grid numerical convergence does not validate urban dispersion. Fine-grid pressure/explicit-time throughput is an open performance gate. No buoyancy, stratification, traffic turbulence, chemistry or unsteady turbulent statistics are represented. Opt-in vegetation (below) and opt-in particles (transport model card) have their own numerical verification and no experimental validation.
 
 Method references: Richards and Hoxey (1993), Richards and Norris (2011), and Hargreaves and Wright, "On the use of the k–ε model in commercial CFD software to model the neutral atmospheric boundary layer", J. Wind Eng. Ind. Aerodyn. 95 (2007) 355–369. No OpenFOAM source code is included or was consulted for these methods.
 
-## Opt-in porous vegetation (urban U6)
+## Porous vegetation
 
 `vegetation` contains axis-aligned volumes with `id`, `min_m`, `max_m`,
 `leaf_area_density_m2_m3` (LAD, inverse meters), `drag_coefficient` (Cd),
@@ -240,11 +240,13 @@ S_\epsilon=C_d\,\mathrm{LAD}(C_{\epsilon4}\beta_p|U|^3\epsilon/k
 | Source coefficient set | beta_p | beta_d | C_e4 | C_e5 |
 |---|---:|---:|---:|---:|
 | `green1992` (default) | 1 | 4 | 1.5 | 1.5 |
-| `sanz2003` (Katul/Sanz alternative) | 1 | 5.1 | 0.9 | 0.9 |
+| `sanz2003` | 1 | 5.1 | 0.9 | 0.9 |
 
 The equations and coefficient convention are documented by
-[Viana Parente Lopes, Palma and Silva Lopes (2021), equations 1.1–1.3 and table 1](https://doi.org/10.1017/jfm.2020.927)
-and [Katul et al. (2004)](https://doi.org/10.1023/B:BOUN.0000037333.48760.e5).
+[Viana Parente Lopes, Palma and Silva Lopes (2021), equations 1.1–1.3 and table 1](https://doi.org/10.1017/jfm.2020.927).
+`green1992` is the set of Green (1992) in that table. `sanz2003` is the set of
+Sanz (2003) as tabulated there, where it is listed under
+[Katul et al. (2004)](https://doi.org/10.1023/B:BOUN.0000037333.48760.e5).
 Only canopy source coefficients switch; the existing ambient k-epsilon
 constants, wall functions and upper-boundary treatment remain fixed. This is
 a model-range comparison within the existing closure, not a reproduction of
@@ -255,7 +257,7 @@ Algebraic epsilon wall cells keep the established wall condition.
 Particle leaf removal is \(\mathrm{LAD}\,v_{leaf}\,c\), integrated in the
 same SSPRK2 budget as settling; the CFL allowance includes this loss rate.
 Removed mass is `deposited_kg.vegetation`, with its current rate reported per
-bin. Gases have no leaf sink in this release. A prescribed-flow study must set
+bin. Gases have no leaf sink. A prescribed-flow study must set
 Cd=0; positive canopy drag is rejected rather than silently ignored.
 
 With zero LAD, all additional operators return before changing arithmetic;

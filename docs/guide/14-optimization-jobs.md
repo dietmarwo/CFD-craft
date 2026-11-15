@@ -44,9 +44,7 @@ d = json.load(open("runs/worker-description.json"))
 print(sorted(x["profile"] for x in d["examples"]))
 ```
 
-The worker registers `app.cfd.source-allocation`, version 1, and the source
-extension adds `app.cfd.wind-direction`, version1. The following allocation
-examples and their two-dimensional domain are unchanged. The allocation model It consumes a hashed case and requires prescribed flow, exactly three sources with equal positive base rates, one constituent and at least one receptor. Its built-in example uses `cases/verification/source-response.json`.
+The worker registers two models. `app.cfd.source-allocation`, version 1, is the model of this chapter's four jobs. It consumes a hashed case and requires prescribed flow, exactly three sources with equal positive base rates, one constituent and at least one receptor. Its built-in example uses `cases/verification/source-response.json`. `app.cfd.wind-direction`, version 1, is described [below](#wind-direction-jobs-for-a-city-block).
 
 It exposes two box-bounded parameters, `x0` and `x1` in [0.1, 1.4]. The three source multipliers are `x0`, `x1` and `3 - x0 - x1`; the third lies in [0.2, 2.8], so every source stays positive and the total emission is preserved for equal base rates. The objective is the largest receptor concentration divided by 1e-8 kg/m3. Lesson F1 of [chapter 13](13-optimization-lessons.md) solves the same problem as a linear program.
 
@@ -108,6 +106,25 @@ The command and optimizer files written by `run_jobs.py` are ordinary `execution
 
 Not tested in this release: a full multi-node CFD campaign, remote machine commissioning and transfer of large fields.
 
+## Wind-direction jobs for a city block
+
+`app.cfd.wind-direction` optimizes over the wind direction of a case with buildings. It consumes a checked `neutral_rans` case with one constituent, sources and receptors. Its one parameter is the meteorological wind direction in the model frame, where the wind comes from, in [0, 360]. The objective is the largest receptor concentration divided by 1e-8 kg/m3. Every evaluation starts cold and must end as an accepted steady solution; anything else is returned to the optimizer as an error, never as a number. The model returns a scalar, not a field archive, and it has no automated test in the repository yet.
+
+For full archives use the campaign of [chapter 22](22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions) with `--runner PATH/optimization-run`:
+
+```sh
+python validation/urban_campaign.py run runs/district/case.json \
+  --output runs/district-rose-jobs --run-budget-s 120 --campaign-budget-s 1200 \
+  --runner ../optimization-jobs/target/release/optimization-run
+```
+
+Each direction becomes an `execution.command/0.1` job with the case, the job description, the launcher `integrations/launch_urban_command.py`, the campaign worker, the field checker and the solver binary as hashed inputs. A job returns its result row and the complete run archive as a ZIP file; the runner limits each collected file to 64 MiB. Failed and timed-out directions are kept as rows. Without `--runner` the same campaign runs as local processes.
+
+Limits:
+
+- An accepted command job is not an accepted run, and neither is a validated result. Read the row of each direction.
+- On a timeout the campaign stops only the runner process. The processes the runner started (launcher, worker, solver) may keep running; check for them and stop them yourself.
+
 ## A task for an agent
 
 > Build the optional worker with its lockfile. Register it on a new local foreground optimization-jobs node, then run `integrations/run_jobs.py`. Use `cases/verification/source-response.json`; keep geometry, source support, total integrated emission and receptor IDs fixed.
@@ -122,20 +139,3 @@ For a new application, define the objective and the conservation constraints bef
 
 - [Chapter 15](15-openfoam-first-run.md): Part IV, the OpenFOAM backend, starting with install and a first cavity.
 - [Chapter 13](13-optimization-lessons.md): the same allocation problem solved as a linear program.
-
-## Urban cold-direction jobs (source extension)
-
-`app.cfd.wind-direction` consumes a checked neutral-RANS case with one
-constituent, local sources and receptors. Its single parameter is a model-local
-meteorological wind direction from, in [0,360]. Each call starts cold and must
-reach the existing steady checks; failures propagate to the worker. This scalar
-application reports a receptor objective, not a native field archive.
-
-For a full native archive and independent audit use the chapter22 campaign's
-`--runner PATH/optimization-run` option. It submits existing
-`execution.command/0.1` envelopes with hashed case, job, launcher, worker,
-checker and solver inputs. The node permits trusted commands explicitly.
-Outputs include a result JSON and a zipped native archive; runner output files
-are capped at64MiB. Command/manifest acceptance, native numerical acceptance
-and physical validation remain separate. The default local process backend is
-also available, and all failed/time-limited rows are kept.

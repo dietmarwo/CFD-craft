@@ -34,7 +34,7 @@ pass; the monitor history is checked in place and moved over last. A pressure
 failure, a cancellation or a late check failure leaves the whole state
 unchanged, and constituents without a supplied source array keep their values.
 
-## Opt-in spherical aerosol bins (urban U5)
+## Particle bins
 
 A constituent may declare `particle` with `diameter_m`, `density_kg_m3`, an
 optional `settling_velocity_m_s`, and optional
@@ -67,7 +67,7 @@ MUSCL. Its outgoing rate enters the same positivity CFL limit as advection,
 diffusion and surface removal. Settling leaves through an open lower boundary;
 the incoming increment at an open top is zero. Impermeable upward-facing ground
 and roofs absorb at \((w_s+v_d)c\); the separately specified \(v_d\) excludes
-settling. Vertical walls have no particle deposition in this release.
+settling. Vertical walls have no particle deposition.
 
 The SSPRK2-integrated cumulative budget is initial + emitted + boundary-in =
 airborne + boundary-out + deposited. Ground and roof deposits are separate
@@ -120,7 +120,7 @@ fluid component. Connectivity is necessary, not a proof of reachability or
 convergence, and the numerical steady-equation and mass gates still apply.
 A passive gas retains the original outlet requirements (CFD-E020/CFD-E043).
 
-## Path observations and an idealized moving sensor (R1)
+## Path receptors and an idealized moving sensor
 
 `Receptor::Path` adds linear observation weights to the returned concentration
 field; it changes no transport or flow equation. A local x/y polyline at a
@@ -139,7 +139,7 @@ pass through a steady mean local increment. Temporal turbulence, intermittent
 emissions, a regional background and sensor-specific calibration remain outside
 this observation model. See [the mobile-path guide](../guide/23-mobile-paths-and-virtual-rides.md).
 
-## Frozen-flow source responses (R3)
+## Frozen-flow source responses
 
 The opt-in `mobile_response::PreparedFlow` API accepts only completed steady
 flow with matching case/physics/current-source identity and recomputed native

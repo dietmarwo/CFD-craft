@@ -1,105 +1,130 @@
 # Source inference and route selection from rides
+<!-- check: rel=1e-4 -->
 
-The source extension implements R2 and R3 of the mobile-measurement plan.
-Its observations are local-source concentration increments along idealized
-rides through an accepted steady field. A successful synthetic recovery tests
-the numerical workflow; it does not validate a bicycle sensor or urban air.
+Which street emits how much? Rides with a sensor give concentrations along
+routes. If a model gives the concentration that each street alone would cause
+on each ride, the emission rates can be fitted to the rides. This chapter
+builds that table (the response matrix), fits rates, shows which streets the
+rides cannot tell apart, estimates how many passes a street needs and selects
+routes under a time budget.
+
+Everything here is verified on synthetic data that the same model produced.
+A successful recovery tests the numerical workflow. It validates no sensor
+and no urban air, and no measured ride has been used.
 
 ## Setup
 
-Build the checkout and its bounded response driver, then install the optional
-study packages. These dependencies are outside the native CFD core.
+You need a checkout with the command and the examples built, and the optional
+Python packages of the study (NumPy, SciPy, Shapely and LP-IP-craft):
 
 ```sh
-cargo build --release --locked
+cargo build --release --workspace --locked
 cargo build --release --locked -p cfd-craft --example mobile_response
 python -m pip install -r integrations/requirements-mobile.txt
 ```
 
-## Supply street emissions
+Every section reads this study of 4 s on the documentation host. It writes
+its plan and its acceptance thresholds before the first solve.
 
-First make a local case and `map-provenance.json` with the
-[urban converter](22-urban-geometry-particles-vegetation.md). Then supply street
-centerlines and a CSV whose columns are `street_id`, `constituent`,
-`rate_kg_s_m`, `units`. Rates must be explicit, finite and nonnegative, with
-`units=kg/s/m`; no emission factor or traffic rate is inferred.
-
-```sh
-python integrations/traffic_sources.py --case mapped/case.json --map-provenance mapped/map-provenance.json --streets streets.geojson --rates rates.csv --height-m 0.3 --output mapped-traffic --binary target/release/cfd-craft
+```bash
+mkdir -p runs
+python tutorials/mobile_measurements.py run --preset source-response --output runs/study > /dev/null
 ```
 
-The converter reuses the recorded map transform, clips continuous segments,
-and records retained/omitted lengths, integrated kg/s, input hashes and all
-assumptions. Continuous building intersections reject the affected street.
-Native `check` also tests the represented mask: a geometrically clear street
-may still be unrepresentable on a coarse grid. Rejections retain diagnostics;
-there is no silent source relocation. See the
-[traffic-input contract](../../integrations/traffic-sources.md).
+Outputs on this page are real. The documentation check compares floating-point
+numbers with a relative tolerance of 1e-4; everything else must match exactly.
 
-## One flow, separate scalar responses
+## The smallest study
 
-`mobile_response::PreparedFlow` validates the original source/receptor support,
-prepares one flow-only case per wind, and requires completed native steady
-acceptance. Adoption verifies case/physics/source identities, the actual state
-and recomputed native gates. Every source column starts at zero concentration
-on the same immutable velocity, pressure, k and epsilon arrays. Their
-length-prefixed little-endian f64 SHA-256 is recorded in `summary.frozen_flow`
-and recomputed by the independent field checker. The flow is not updated by
-a scalar response. This is an explicit frozen-flow initialization API; ordinary
-restart still requires its existing exact-case contract.
+The preset has three streets (line sources `street-a` to `street-c`), two wind
+directions (270 and 250 degrees), two training rides and two held-out rides
+that the fit never sees. The true rates are 0.7, 1.3 and 0.4 times the
+reference rate of each street.
 
-Transport reuses the native SSPRK2 operator, stable step, mass accounting,
-positivity and steady-equation/monitor gates. Only steady `linear_upwind`
-transport with empty scalar initial conditions is eligible. MUSCL cannot
-produce an exact linear response matrix. Particle bins and fixed leaf sinks
-remain linear under their declared fixed coefficients. Failed preparation or
-response archives and work counts remain in the report.
+```python
+import json
 
-For three source groups, one wind uses one accepted flow solve, three cold
-scalar columns, and a separate combined-truth scalar solve for verification.
-The last solve is not used to construct the columns. Prescribed analytical
-flow counts as zero numerical flow solves. All archive identities refer to
-the actual producer; memory, iteration and wall-time budgets remain binding.
-
-## Build and test ride responses
-
-[Path receptors and virtual rides](23-mobile-paths-and-virtual-rides.md) supply
-the observation operator H: uniform arc-length samples, interpolation in
-distance, constant speed and a declared first-order sensor lag. The study
-applies exactly the same H to each native source column and the independent
-combined truth. A zero initial sensor value makes H linear. The consumed case
-supplies the original polyline, preserving corners between concentration
-samples. Rows carry wind, route, sample index, time and position.
-
-```sh
-python tutorials/mobile_measurements.py run --preset source-response --output runs/mobile-source-response
-python tutorials/mobile_measurements.py run --preset canyon --output runs/mobile-canyon
+r = json.load(open("runs/study/report.json"))
+fit = r["inference"]
+print(r["passed"], r["experimental_validation"])
+print([f"{m:.4g}" for m in fit["multipliers"]], fit["estimate_label"])
+print(fit["identifiability"]["rank"], fit["heldout_relative_error"] < 1e-3)
+print(r["relative_superposition_defect"] < 1e-4)
+print(sorted(k for k, passed in r["gate_checks"].items() if passed))
 ```
 
-Use `--config PLAN.json` for another frozen study. The preset configuration,
-noise assumptions and GR error gates are written before any native solve.
-Between winds, the driver permits only the wind vector/direction/speed and
-case name to differ; source rates, geometry, routes and numerical controls
-stay fixed. The demonstration uses three groups, two winds and two training
-plus two held-out rides. For every wind the flow archive, each response
-column and the truth archive must pass the independent audit, and the driver
-recomputes their stored flow fingerprints: all must equal the native frozen
-flow identity, responses must record no flow update, and archived source
-rates must equal the reference rates used to convert multipliers to kg/s.
-Native archives, independent audits, stdout/stderr,
-partial failures, virtual truth, the matrix and CSV remain under the new output
-directory. See [the measured results](../evidence/mobile-measurements.md).
+```text
+True not_validated
+['0.7', '1.3', '0.4'] unique_nonnegative_estimate
+3 True
+True
+['ambiguity_reported', 'full_rank_training', 'heldout_recovery', 'rate_recovery', 'route_integer_optimal', 'superposition']
+```
 
-## Coverage, rank and ambiguity
+The fit recovers the three multipliers from the training rides, the matrix
+has full rank 3, and the held-out rides are predicted within the threshold of
+1e-3. The study exits 0 when all six checks pass and 2 otherwise; failed
+solves and partial results stay in the output directory. The second preset,
+`--preset canyon`, does the same in the street canyon of chapter 10;
+`--config PLAN.json` runs your own plan.
 
-The matrix A maps dimensionless source multipliers q to concentrations in
-kg/m3. Each column's explicitly supplied integrated reference kg/s is retained
-to convert the fitted multiplier back to an emission rate. Nonnegative least
-squares uses training rides only. Held-out rides and the reference station
-never enter the fit. Singular values and rank use the declared relative
-threshold (default 1e-10), with named nullspace combinations and identical
-response groups. A particular nonnegative estimate of a rank-deficient matrix
-does not identify individual street rates.
+## One flow, one transport run per street
+
+For each wind the study solves the flow once and accepts it by the usual
+steady checks. Then it solves one transport run per street on that frozen
+flow, each from zero concentration: the flow is not updated again. A fourth
+transport run with all streets at their true rates is the reference; it is
+never used to build the matrix. Each run is a normal archive that passes
+`validation/check_fields.py`. The checker recomputes a hash of the frozen
+velocity, pressure and turbulence fields of each archive, and the study
+requires the same hash in all runs of one wind.
+
+The matrix has one row per ride sample and one column per street. A row is
+the virtual ride of [chapter 23](23-mobile-paths-and-virtual-rides.md) through
+one street's field: constant speed, a first-order sensor that starts at zero.
+The matrix maps dimensionless multipliers to kg/m3; the reference rate of each
+column converts a fitted multiplier back to kg/s.
+
+Conditions for an exact matrix: steady `linear_upwind` transport, no initial
+concentration, and the same flow for all columns (`CFD-E089` otherwise). The
+MUSCL scheme is not linear. Particle bins and leaf deposition stay linear.
+The Rust interface is `mobile_response::PreparedFlow`
+([transport model card](../model-cards/transport.md#frozen-flow-source-responses)).
+
+## Fit your own observations
+
+`fit` takes a response matrix and a CSV with exactly the columns
+`wind,ride,sample_index,concentration_kg_m3`, one row per sample of the
+matrix. The study wrote such a file from its reference run:
+
+```bash
+python tutorials/mobile_measurements.py fit runs/study/mobile-response-matrix.json \
+  runs/study/virtual-observations.csv --train train-near train-far \
+  --heldout heldout-mid heldout-reverse --output runs/fit.json
+python -c "
+import json
+f = json.load(open('runs/fit.json'))
+print([f'{m:.4g}' for m in f['multipliers']], f['individual_rates_unique'])
+p = f['input_provenance']
+print(len(p['matrix_sha256']), len(p['observations_sha256']))"
+```
+
+```text
+['0.7', '1.3', '0.4'] True
+64 64
+```
+
+The fit is a nonnegative least-squares fit on the training rides, weighted by
+the declared noise. Held-out rides only test the prediction. The result keeps
+the SHA-256 hashes of the matrix and of the CSV it read (second line). Real sensor data must first
+be aligned to the samples, calibrated and reduced to the increment above
+background, in kg/m3 of the same constituent; the fit does none of that.
+
+## Which streets can be told apart
+
+Two streets with the same response on every ride cannot be separated: only
+their sum is known. `identifiability` reports the rank of the matrix and
+names the combinations that the rides do not determine.
 
 ```python
 import sys
@@ -126,62 +151,96 @@ print(passes["passes"], passes["simulated"])
 4 False
 ```
 
-## Noise and required passes
+Rank 1 of 2: the fitted rates of the two streets are one of many equally good
+answers and must not be read one by one. The rank uses a relative threshold
+on the singular values (default 1e-10). The study also adds a copy of
+`street-b` on purpose and reports rank 3 of 4.
 
-The declared covariance of one route/wind pass is
-Σ = σ_sensor² I + σ_pass² 11ᵀ. Readout noise is independent; pass-to-pass
-scatter is one coherent offset within a pass and independent between passes.
-Whitening uses its analytic inverse square root, avoiding quadratic storage
-in ride length. Neither random noise nor atmospheric scatter is simulated.
-These are planning assumptions, not an inferred error distribution.
+## How many passes a street needs
 
-For an effective n samples per pass, the variance of its mean is
-v = σ_pass² + σ_sensor²/n. To target mean half-width h at Gaussian multiplier z,
-the smallest planned count is ceil(v / ((h/z)² − σ_systematic²)), at least one.
-An unreachable systematic floor or zero mean with a relative-only target
-returns no achievable pass count. Drift, sensor calibration and CFD model
-error require separate evidence. `n` is effective independent sample count,
-not merely the logger frequency. Planning is reported per ridden street
-segment and wind, conditional on its modeled sensor mean.
+The second result above is a planning number. A pass is one ride of a route
+in one wind. The noise model has two declared parts: readout noise of the
+sensor, independent per sample, and scatter between passes, one offset per
+pass. With n effective independent samples per pass the variance of a pass
+mean is v = pass scatter² + sensor noise² / n. To know the mean within a half
+width h at confidence factor z you need at least
+ceil(v / ((h/z)² − systematic²)) passes. A mean of 1e-8 kg/m3 with the values
+above needs 4 passes for 10 percent. When the systematic part alone exceeds
+the target, no number of passes is enough and the function says so.
 
-## Integer route and wind selection
+No noise is simulated and none is estimated from data. Drift, calibration
+error and the error of the CFD model are not reduced by repetition.
 
-Each binary decision selects an available route/wind observation opportunity,
-with riding plus setup time charged against a declared budget. Wind sectors
-are opportunities to wait for, not weather the rider can control. For candidate
-r, F_r = A_rᵀ Σ_r⁻¹ A_r. The E-optimal objective maximizes the smallest eigenvalue
-of Σ_r z_r F_r, so weakly observed source combinations affect the choice.
+## Which routes under a time budget
 
-The implementation uses LP-IP-craft's native mixed integer solver for a bounded
-outer approximation: unit-vector cuts provide upper bounds, and eigenvectors
-of each returned information matrix add violated cuts. Actual candidate
-feasibility, integrality, time cost and eigenvalues are checked independently.
-Native solver results, incumbents and bounds are retained even when a limit
-or failure prevents certification. Each outer bound is the native solver's
-proven master bound (`best_bound`), never the incumbent's objective value; a
-master without a finite proven bound stops without certification. `certified`
-means convergence within the declared floating-point gap, not an exact
-rational proof. The small synthetic campaign additionally checks every binary
-pattern independently. Rank of the selected observations is reported
-separately.
+A candidate is one route in one wind, with its riding and setup time. A wind
+direction is an opportunity to wait for, not something the rider controls.
+The selection picks the set of candidates within the time budget whose
+weakest-determined combination of streets is determined best (an E-optimal
+design: it maximizes the smallest eigenvalue of the summed information
+matrices).
 
-## Use an observation CSV and compare a station
+```python
+import json
 
-```sh
-python tutorials/mobile_measurements.py fit runs/mobile-source-response/mobile-response-matrix.json observations.csv --train train-near train-far --heldout heldout-mid heldout-reverse --output fitted-rates.json
+sel = json.load(open("runs/study/report.json"))["route_selection"]
+print(sel["selected"], sel["certified"])
+print(f"{sel['riding_time_s']:.4g} of {sel['riding_time_budget_s']:.4g} s")
+rank = sel["selected_identifiability"]["rank"]
+print(sel["exhaustive_check"]["checked_patterns"], rank)
 ```
 
-The CSV requires exactly `wind,ride,sample_index,concentration_kg_m3`, matching
-the matrix's unique sample identities. Matrix and consumed CSV hashes are
-returned with the sensor parameters, frozen-plan hash and native producer
-identities. Data must represent the same constituent, source-increment units,
-route and observation operator. Arbitrary raw sensor readings need their own
-predeclared alignment, calibration and background treatment first.
+```text
+['wind-270:train-near', 'wind-250:train-near'] True
+26.67 of 36 s
+16 3
+```
 
-The report gives steady adjacent-path mean / reference-point concentration
-and lagged sensor mean / reference-point concentration per wind. These are
-modeled local-increment ratios. Initial sensor lag matters on short rides;
-neither ratio is a measured bicycle/station comparison or total ambient PM.
-The [unopened-data protocol](../../validation/protocols/mobile-rides.md)
-records the decisions needed before V2 can begin. V1's urban OpenFOAM comparison,
-V2 measured validation and the previous district/rotation gates remain open.
+The mixed-integer solver of LP-IP-craft solves a sequence of bounded linear
+models with added cuts. `certified` means that the selection is optimal within
+the declared floating-point gap, measured against the solver's proven bound;
+it is not an exact proof. Limits and solver failures are kept in the report
+and are never certified. For the four candidates here all 16 subsets were
+also enumerated.
+
+## Street emissions from map data
+
+`integrations/traffic_sources.py` turns street centerlines and a table of
+emission rates into line sources of a case made by the
+[map converter](22-urban-geometry-particles-vegetation.md#import-buildings-from-a-map):
+
+```sh
+python integrations/traffic_sources.py --case mapped/case.json \
+  --map-provenance mapped/map-provenance.json --streets streets.geojson \
+  --rates rates.csv --height-m 0.3 --output mapped-traffic
+```
+
+The streets are GeoJSON lines in the coordinate system of the buildings. The
+CSV has the columns `street_id`, `constituent`, `rate_kg_s_m` and `units`,
+where `units` must be `kg/s/m`. The tool invents no rate: no emission factor
+and no traffic count is assumed. It reuses the recorded map transformation,
+clips streets to the domain and records kept and omitted lengths, the total
+in kg/s and the hashes of its inputs. A street that touches a building is
+rejected (`CFD-M002`), never moved. See the
+[street-emission input contract](../../integrations/traffic-sources.md).
+
+## What this is not
+
+- **Not validated.** Inference and route selection are verified on synthetic
+  data from the same model only. The [protocol for measured rides](../../validation/protocols/mobile-rides.md)
+  lists what must be fixed before measured data are opened.
+- **Not a bike-against-station comparison.** The report gives the ratio of a
+  modeled path mean and of a modeled lagged sensor mean to a modeled station
+  value. On a short ride the lagged ratio is dominated by the sensor starting
+  at zero.
+- **Not total concentration.** Rows are increments from the declared streets
+  in a steady mean field.
+- **Not better than the flow under it.** The open questions of
+  [chapter 22](22-urban-geometry-particles-vegetation.md#what-these-results-are-not)
+  apply to every matrix built on a district flow.
+
+## Next
+
+- [Mobile evidence record](../evidence/mobile-measurements.md): the measured
+  results of both presets.
+- [Chapter 12](12-studies.md): source inference from fixed sensors.

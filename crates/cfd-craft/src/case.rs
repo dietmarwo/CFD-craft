@@ -427,9 +427,17 @@ pub struct Block {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub footprint_m: Option<Vec<[f64; 2]>>,
 }
+#[cfg(test)]
+thread_local! {
+    /// Calls of [`Block::contains`] on this thread, for tests that bound the
+    /// work of building masks.
+    pub(crate) static CONTAINS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 impl Block {
     /// Cell-center containment, with lower bounds inclusive and upper exclusive.
     pub fn contains(&self, p: [f64; 3]) -> bool {
+        #[cfg(test)]
+        CONTAINS_CALLS.with(|c| c.set(c.get() + 1));
         (0..3).all(|a| p[a] >= self.min_m[a] && p[a] < self.max_m[a])
             && self
                 .footprint_m

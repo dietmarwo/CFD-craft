@@ -270,15 +270,15 @@ impl Grid {
             neighbor_faces: std::sync::OnceLock::new(),
             edge_faces: std::sync::OnceLock::new(),
         };
+        // Each shape is rasterized over its bounding box only (validation
+        // guarantees finite positive cell widths); a raster is rebuilt for the
+        // evidence below rather than kept, so at most one is held at a time.
+        let raster = |b| crate::geometry::Raster::new(b, n, dx);
         let mut box_cells = vec![0usize; c.geometry.len()];
-        for i in 0..count {
-            let p = g.center(i);
-            for (b, n) in c.geometry.iter().zip(box_cells.iter_mut()) {
-                if b.contains(p) {
-                    g.fluid[i] = false;
-                    *n += 1;
-                }
-            }
+        for (b, cells) in c.geometry.iter().zip(box_cells.iter_mut()) {
+            let r = raster(b);
+            r.for_each(n, |_, i| g.fluid[i] = false);
+            *cells = r.count();
         }
         for (i, (b, n)) in c.geometry.iter().zip(&box_cells).enumerate() {
             if *n == 0 {
@@ -296,11 +296,7 @@ impl Grid {
             .collect();
         for b in &c.geometry {
             let mut passage: Option<usize> = None;
-            for i in 0..count {
-                if !b.contains(g.center(i)) {
-                    continue;
-                }
-                let q = g.coord(i);
+            raster(b).for_each(n, |q, _| {
                 for axis in 0..2 {
                     for sign in [-1isize, 1] {
                         let mut next = q.map(|v| v as isize);
@@ -319,7 +315,7 @@ impl Grid {
                         }
                     }
                 }
-            }
+            });
             let cells = g.box_cells[&b.id];
             let exact = b.volume();
             let represented = cells as f64 * volume;
@@ -490,14 +486,12 @@ impl Grid {
         let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
         let mut parent: Vec<u32> = (0..count as u32).collect();
         let mut solid_cells = 0usize;
-        for (i, p) in parent.iter_mut().enumerate() {
-            let q = [i % n[0], i / n[0] % n[1], i / (n[0] * n[1])];
-            let x: [f64; 3] = std::array::from_fn(|a| (q[a] as f64 + 0.5) * dx[a]);
-            if c.geometry.iter().any(|b| b.contains(x)) {
-                *p = SOLID;
+        crate::geometry::for_each_solid(c, |i| {
+            if parent[i] != SOLID {
+                parent[i] = SOLID;
                 solid_cells += 1;
             }
-        }
+        });
         fn root(parent: &mut [u32], mut i: u32) -> u32 {
             while parent[i as usize] != i {
                 let up = parent[parent[i as usize] as usize];
@@ -689,5 +683,240 @@ impl Grid {
                 _ => {}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::case::CONTAINS_CALLS;
+    fn calls() -> usize {
+        CONTAINS_CALLS.with(|c| c.replace(0))
+    }
+    /// Boxes and polygon prisms with bounds and edges on cell centers, in
+    /// both windings and overlapping, on a grid of cell width 0.3 m.
+    fn case() -> Case {
+        let mut c: Case =
+            serde_json::from_str(include_str!("../../../cases/verification/lid-cavity.json"))
+                .unwrap();
+        c.moving_walls.clear();
+        c.grid.cells = [48, 40, 12];
+        c.domain.size_m = [14.4, 12.0, 3.6];
+        c.geometry_min_passage_cells = Some(2);
+        let dx = 0.3;
+        let at = |q: usize| (q as f64 + 0.5) * dx;
+        let mut seed = 12345u64;
+        let mut next = |m: usize| {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 33) as usize % m
+        };
+        let mut k = 0;
+        while c.geometry.len() < 160 {
+            let (i, j) = (next(37), next(29));
+            let (w, h, top) = (1 + next(5), 1 + next(5), at(1 + next(8)));
+            let footprint = match k % 4 {
+                0 => None,
+                1 => Some(vec![[at(i), at(j)], [at(i + w), at(j)], [at(i), at(j + h)]]),
+                2 => Some(vec![
+                    [at(i + w), at(j)],
+                    [at(i + 2 * w), at(j + w)],
+                    [at(i + w), at(j + 2 * w)],
+                    [at(i), at(j + w)],
+                ]),
+                _ => Some(vec![
+                    [at(i), at(j + h)],
+                    [at(i + 2 * w), at(j + h)],
+                    [at(i + w), at(j)],
+                ]),
+            };
+            let (lo, hi) = match &footprint {
+                None if k % 8 == 0 => ([at(i), at(j), 0.0], [at(i + w), at(j + h), top]),
+                None => (
+                    [i as f64 * dx + 0.07, j as f64 * dx, 0.0],
+                    [(i + w) as f64 * dx + 0.11, (j + h) as f64 * dx, top],
+                ),
+                Some(p) => {
+                    let lo = [0, 1].map(|d| p.iter().map(|v| v[d]).fold(f64::INFINITY, f64::min));
+                    let hi =
+                        [0, 1].map(|d| p.iter().map(|v| v[d]).fold(f64::NEG_INFINITY, f64::max));
+                    ([lo[0], lo[1], 0.0], [hi[0], hi[1], top])
+                }
+            };
+            let mut b = Block {
+                id: format!("s{k}"),
+                min_m: lo,
+                max_m: hi,
+                footprint_m: footprint,
+            };
+            if k % 3 == 0
+                && let Some(p) = &mut b.footprint_m
+            {
+                p.reverse();
+            }
+            k += 1;
+            // Every shape must contain a cell center (CFD-E028).
+            let represented = (0..48 * 40 * 12).any(|i| {
+                let p = [i % 48, i / 48 % 40, i / 1920].map(|v| (v as f64 + 0.5) * dx);
+                b.contains(p)
+            });
+            if represented {
+                c.geometry.push(b);
+            }
+        }
+        c
+    }
+    #[test]
+    fn shape_masks_and_evidence_cost_the_bounding_boxes_not_the_grid() {
+        let c = case();
+        calls();
+        let g = Grid::build(&c).unwrap();
+        let build_calls = calls();
+        // Reference: every shape against every cell center, as before the
+        // rasterization, with the per-shape passage walk.
+        let n = g.n;
+        let inside: Vec<Vec<bool>> = c
+            .geometry
+            .iter()
+            .map(|b| (0..g.count()).map(|i| b.contains(g.center(i))).collect())
+            .collect();
+        let brute_calls = calls();
+        let fluid: Vec<bool> = (0..g.count())
+            .map(|i| inside.iter().all(|s| !s[i]))
+            .collect();
+        assert_eq!(g.fluid, fluid);
+        assert!(fluid.iter().any(|v| *v) && fluid.iter().any(|v| !*v));
+        let mut polygon_cells = 0;
+        for (b, s) in c.geometry.iter().zip(&inside) {
+            let mut passage: Option<usize> = None;
+            for i in (0..g.count()).filter(|i| s[*i]) {
+                let q = g.coord(i).map(|v| v as isize);
+                for axis in 0..2 {
+                    for sign in [-1, 1] {
+                        let mut p = q;
+                        p[axis] += sign;
+                        let mut width = 0;
+                        while (0..n[axis] as isize).contains(&p[axis]) {
+                            if !fluid[Grid::index(n, p.map(|v| v as usize))] {
+                                if width > 0 {
+                                    passage = Some(passage.map_or(width, |o| o.min(width)));
+                                }
+                                break;
+                            }
+                            width += 1;
+                            p[axis] += sign;
+                        }
+                    }
+                }
+            }
+            let cells = s.iter().filter(|v| **v).count();
+            polygon_cells += cells * usize::from(b.footprint_m.is_some());
+            assert_eq!(g.box_cells[&b.id], cells, "{}", b.id);
+            let e = &g.shape_evidence[&b.id];
+            assert_eq!(
+                (e.solid_cells, e.narrowest_fluid_passage_cells),
+                (cells, passage)
+            );
+        }
+        assert!(polygon_cells > 100);
+        let mut minimum: Option<usize> = None;
+        for k in 0..n[2] {
+            for a in 0..2 {
+                for j in 0..n[1 - a] {
+                    let (mut after_solid, mut width) = (false, 0);
+                    for i in 0..n[a] {
+                        let mut q = [0, 0, k];
+                        (q[a], q[1 - a]) = (i, j);
+                        if fluid[Grid::index(n, q)] {
+                            width += 1;
+                        } else {
+                            if after_solid && width > 0 {
+                                minimum = Some(minimum.map_or(width, |o| o.min(width)));
+                            }
+                            (after_solid, width) = (true, 0);
+                        }
+                    }
+                }
+            }
+        }
+        calls();
+        assert_eq!(crate::geometry::minimum_passage(&c), minimum);
+        let passage_calls = calls();
+        let topology = Grid::mask_topology(&c).unwrap();
+        let topology_calls = calls();
+        assert_eq!(
+            topology.solid_cells,
+            g.count() - fluid.iter().filter(|v| **v).count()
+        );
+        // Point-in-shape tests: one per column of each shape's bounding box,
+        // not one per cell and shape. `build` rasterizes twice (mask and
+        // evidence) after validation ran minimum_passage once.
+        let dx = g.dx;
+        let columns: usize = c
+            .geometry
+            .iter()
+            .map(|b| {
+                (0..2)
+                    .map(|a| ((b.max_m[a] - b.min_m[a]) / dx[a]).floor() as usize + 1)
+                    .product::<usize>()
+            })
+            .sum();
+        assert_eq!(brute_calls, c.geometry.len() * g.count());
+        assert!(build_calls <= 3 * columns, "{build_calls} > 3 x {columns}");
+        assert!(
+            100 * build_calls < brute_calls,
+            "{build_calls} {brute_calls}"
+        );
+        assert!(passage_calls <= columns, "{passage_calls} > {columns}");
+        assert!(topology_calls <= columns, "{topology_calls} > {columns}");
+    }
+    #[test]
+    fn masks_of_an_invalid_domain_still_test_every_cell() {
+        // Negative cell widths make centers decrease with the index, so no
+        // index range selects a shape. The case check still evaluates the
+        // passage, so the mask falls back to testing all cells.
+        let mut c = case();
+        c.domain.size_m[0] = -14.4;
+        for b in &mut c.geometry {
+            (b.min_m[0], b.max_m[0]) = (-b.max_m[0], -b.min_m[0]);
+            for v in b.footprint_m.iter_mut().flatten() {
+                v[0] = -v[0];
+            }
+        }
+        let n = c.grid.cells;
+        let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
+        let solid = |q: [usize; 3]| {
+            let p = std::array::from_fn(|d| (q[d] as f64 + 0.5) * dx[d]);
+            c.geometry.iter().any(|b| b.contains(p))
+        };
+        let mut minimum: Option<usize> = None;
+        for k in 0..n[2] {
+            for a in 0..2 {
+                for j in 0..n[1 - a] {
+                    let (mut after_solid, mut width) = (false, 0);
+                    for i in 0..n[a] {
+                        let mut q = [0, 0, k];
+                        (q[a], q[1 - a]) = (i, j);
+                        if solid(q) {
+                            if after_solid && width > 0 {
+                                minimum = Some(minimum.map_or(width, |o| o.min(width)));
+                            }
+                            (after_solid, width) = (true, 0);
+                        } else {
+                            width += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(minimum.is_some());
+        assert_eq!(crate::geometry::minimum_passage(&c), minimum);
+        let solid_cells = (0..n.iter().product())
+            .filter(|i| solid([i % n[0], i / n[0] % n[1], i / (n[0] * n[1])]))
+            .count();
+        assert!(solid_cells > 1000);
+        assert_eq!(Grid::mask_topology(&c).unwrap().solid_cells, solid_cells);
+        assert!(c.check().diagnostics.iter().any(|d| d.code == "CFD-E003"));
     }
 }

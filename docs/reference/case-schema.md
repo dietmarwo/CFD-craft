@@ -49,7 +49,7 @@ Unknown fields are rejected.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `footprint_m` | `array` or `null` | optional | Optional simple footprint polygon in local x/y meters. With this field the shape is a prism between min_m[2] and max_m[2]; the other bounds must equal the footprint bounds. Holes and self-intersections are rejected (CFD-E084). Omission selects the original box. |
+| `footprint_m` | `array` or `null` | optional | Optional simple footprint polygon in local x/y meters. With this field the shape is a prism between `min_m[2]` and `max_m[2]`; the other bounds must equal the footprint bounds. Holes and self-intersections are rejected (CFD-E084). Omission selects the original box. |
 | `id` | `string` | required | Unique nonempty ID (CFD-E014); the key of the box's cell count in geometry.json. |
 | `max_m` | array of 3 `number` | required | Upper corner [x, y, z] in meters. |
 | `min_m` | array of 3 `number` | required | Lower corner [x, y, z] in meters. |

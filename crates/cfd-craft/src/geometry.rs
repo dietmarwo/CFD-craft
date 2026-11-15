@@ -1,5 +1,7 @@
 //! Simple polygon prisms use the same cell-center mask and face operators as boxes.
-use crate::case::Case;
+use crate::case::{Block, Case};
+use crate::grid::Grid;
+use std::ops::Range;
 
 /// Even-odd crossing test of a ray toward +x. Half-open ray crossings agree
 /// with box masks for axis-aligned footprints; the bounding box handles upper
@@ -84,14 +86,119 @@ pub fn valid_polygon(p: &[[f64; 2]], lo: &[f64; 3], hi: &[f64; 3]) -> bool {
     }
     true
 }
+/// Center coordinate of cell `q` along an axis of cell width `dx`, the same
+/// expression as [`Grid::center`](crate::grid::Grid::center).
+fn center(q: usize, dx: f64) -> f64 {
+    (q as f64 + 0.5) * dx
+}
+/// Number of leading indices in `0..n` for which `pred` holds; `pred` must
+/// hold on a prefix only.
+fn partition_point(n: usize, pred: impl Fn(usize) -> bool) -> usize {
+    let (mut lo, mut hi) = (0, n);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if pred(mid) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    lo
+}
+/// The cells of one shape on a uniform grid: the index box of the cell centers
+/// within its bounds and, per column of that box, whether
+/// [`Block::contains`] holds there. Together they select exactly the cells
+/// whose centers the shape contains, so the work is the shape's bounding box,
+/// not the grid.
+pub(crate) struct Raster {
+    range: [Range<usize>; 3],
+    /// Footprint membership of the columns of `range`, x fastest.
+    columns: Vec<bool>,
+}
+impl Raster {
+    /// Needs finite positive cell widths `dx`: cell centers then never
+    /// decrease with the index, so the centers with `min <= x < max` on an
+    /// axis form one index range (empty for NaN or inverted bounds).
+    pub(crate) fn new(b: &Block, n: [usize; 3], dx: [f64; 3]) -> Self {
+        debug_assert!(dx.iter().all(|v| v.is_finite() && *v > 0.0));
+        let range: [Range<usize>; 3] = std::array::from_fn(|a| {
+            let lo = b.min_m[a];
+            let first = partition_point(n[a], |q| center(q, dx[a]) < lo || lo.is_nan());
+            let end = partition_point(n[a], |q| center(q, dx[a]) < b.max_m[a]);
+            first..end.max(first)
+        });
+        // Every center of the z range is within the z bounds, so one
+        // evaluation per column decides the whole column.
+        let columns = if range.iter().any(|r| r.is_empty()) {
+            vec![]
+        } else {
+            let z = center(range[2].start, dx[2]);
+            range[1]
+                .clone()
+                .flat_map(|j| range[0].clone().map(move |i| (i, j)))
+                .map(|(i, j)| b.contains([center(i, dx[0]), center(j, dx[1]), z]))
+                .collect()
+        };
+        Self { range, columns }
+    }
+    /// Calls `f(q, index)` for every contained cell, in cell index order.
+    pub(crate) fn for_each(&self, n: [usize; 3], mut f: impl FnMut([usize; 3], usize)) {
+        if self.columns.is_empty() {
+            return;
+        }
+        let [rx, ry, rz] = &self.range;
+        for k in rz.clone() {
+            for (jj, j) in ry.clone().enumerate() {
+                for (ii, i) in rx.clone().enumerate() {
+                    if self.columns[jj * rx.len() + ii] {
+                        let q = [i, j, k];
+                        f(q, Grid::index(n, q));
+                    }
+                }
+            }
+        }
+    }
+    /// Number of contained cells.
+    pub(crate) fn count(&self) -> usize {
+        self.columns.iter().filter(|v| **v).count() * self.range[2].len()
+    }
+}
+/// Calls `f(index)` for every cell whose center lies in a shape of the case,
+/// once per containing shape (overlapping shapes repeat a cell). Rasterizes
+/// each shape over its bounding box; with cell widths that are not finite and
+/// positive (an invalid domain, still checked for its other diagnostics) it
+/// tests every cell against every shape instead.
+pub(crate) fn for_each_solid(c: &Case, mut f: impl FnMut(usize)) {
+    let n = c.grid.cells;
+    let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
+    if dx.iter().all(|v| v.is_finite() && *v > 0.0) {
+        for b in &c.geometry {
+            Raster::new(b, n, dx).for_each(n, |_, i| f(i));
+        }
+        return;
+    }
+    for k in 0..n[2] {
+        for j in 0..n[1] {
+            for i in 0..n[0] {
+                let q = [i, j, k];
+                let p = std::array::from_fn(|d| center(q[d], dx[d]));
+                if c.geometry.iter().any(|g| g.contains(p)) {
+                    f(Grid::index(n, q));
+                }
+            }
+        }
+    }
+}
 /// Minimum represented horizontal fluid run bounded by solids on both ends.
 /// Exterior clearances and vertical roof gaps are deliberately excluded.
+/// Holds the cell mask, one byte per cell, while it runs.
 pub fn minimum_passage(c: &Case) -> Option<usize> {
     if c.geometry.is_empty() {
         return None;
     }
     let n = c.grid.cells;
-    let dx: [f64; 3] = std::array::from_fn(|a| c.domain.size_m[a] / n[a] as f64);
+    let mut solid = vec![false; n.iter().product()];
+    for_each_solid(c, |i| solid[i] = true);
     let mut best = None;
     for z in 0..n[2] {
         for a in 0..2 {
@@ -104,8 +211,7 @@ pub fn minimum_passage(c: &Case) -> Option<usize> {
                     q[a] = i;
                     q[b] = j;
                     q[2] = z;
-                    let p = std::array::from_fn(|d| (q[d] as f64 + 0.5) * dx[d]);
-                    if c.geometry.iter().any(|g| g.contains(p)) {
+                    if solid[Grid::index(n, q)] {
                         if after_solid && width > 0 {
                             best = Some(best.map_or(width, |old: usize| old.min(width)));
                         }

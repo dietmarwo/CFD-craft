@@ -421,7 +421,7 @@ pub struct Block {
     /// Upper corner [x, y, z] in meters.
     pub max_m: [f64; 3],
     /// Optional simple footprint polygon in local x/y meters. With this field
-    /// the shape is a prism between min_m[2] and max_m[2]; the other bounds
+    /// the shape is a prism between `min_m[2]` and `max_m[2]`; the other bounds
     /// must equal the footprint bounds. Holes and self-intersections are
     /// rejected (CFD-E084). Omission selects the original box.
     #[serde(default, skip_serializing_if = "Option::is_none")]

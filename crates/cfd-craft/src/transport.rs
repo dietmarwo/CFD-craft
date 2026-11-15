@@ -1,5 +1,6 @@
-//! Conservative passive-gas transport: source densities, receptor weights,
-//! initial fields and the finite-volume right-hand side.
+//! Conservative transport of passive gases and particle size classes: source
+//! densities, receptor weights, initial fields and the finite-volume
+//! right-hand side.
 //!
 //! Each face flux is advective (upwind or MUSCL) plus diffusive, applied with
 //! opposite signs to the two cells, so interior fluxes cancel and mass

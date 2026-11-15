@@ -10,7 +10,7 @@ case and turn an accepted run into virtual sensor rides and estimates of
 street emissions. An optional adapter runs two generated cases on OpenFOAM
 Foundation 13 for cross-checks.
 
-Version 0.1.1 is a research prototype. A numerically accepted run is not an
+Version 0.2.0 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 ## The run loop

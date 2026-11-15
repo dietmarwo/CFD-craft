@@ -7,7 +7,7 @@ incompressible flow with passive gas and particles on uniform Cartesian
 grids), its Python binding, the tools for city blocks and mobile measurements,
 and the separate OpenFOAM backend.
 
-Version 0.1.1 is a research prototype. A numerically accepted run is not an
+Version 0.2.0 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 ## Chapters
@@ -64,4 +64,4 @@ OpenFOAM, and the adapter starts OpenFOAM as separate programs.
 
 Three words are kept apart on every page. A run **completed** or stopped
 (termination). A result is numerically **accepted** or not (assessment). A
-model is **validated** against measurements or not; in 0.1.1 none is.
+model is **validated** against measurements or not; in 0.2.0 none is.

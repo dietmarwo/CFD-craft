@@ -31,7 +31,7 @@ completed steady_discrete_solution not_validated; see validation/data-inventory.
 ```
 
 The second line is the point of the tool: why the run stopped, what the
-numerical checks support, and the experimental-validation label. Version 0.1.1
+numerical checks support, and the experimental-validation label. Version 0.2.0
 is a research prototype. A numerically accepted run is not an experimentally
 validated prediction.
 

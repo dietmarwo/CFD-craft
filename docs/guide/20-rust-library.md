@@ -36,7 +36,7 @@ The package is `cfd-craft`; the import name is `cfd_craft`.
 
 ```toml
 [dependencies]
-cfd-craft = "0.1"
+cfd-craft = "0.2"
 serde_json = "1"
 rayon = "1"
 ```

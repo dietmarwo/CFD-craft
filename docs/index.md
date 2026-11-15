@@ -5,7 +5,7 @@ and particles around buildings on uniform Cartesian grids, used from Python, a
 JSON command line or Rust, with tools for city maps and mobile sensor rides and
 a bounded OpenFOAM Foundation 13 backend for cross-checks.
 
-Version 0.1.1 is a research prototype. A numerically accepted run is not an
+Version 0.2.0 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
 
 ## Start here

@@ -1,6 +1,6 @@
 # CFD-craft, OpenFOAM and Ansys Fluent
 
-Version 0.1.1 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
+Version 0.2.0 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
 This page compares CFD-craft with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
 
@@ -99,7 +99,7 @@ Practitioners in urban air quality also use dedicated tools. PALM is a large-edd
 - **Community and maturity.** OpenFOAM has released a major version every year since at least 2017 [O13], and Fluent names an R1 and an R2 release in each of 2025 and 2026 [F8]. CFD-craft had its first release on 4 November 2026.
 - **Parallel scaling.** Both run in parallel with MPI [O10, F9]; Fluent also on GPUs [F10]. CFD-craft uses threads on one machine.
 
-Version 0.1.1 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
+Version 0.2.0 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
 ## When to use which
 

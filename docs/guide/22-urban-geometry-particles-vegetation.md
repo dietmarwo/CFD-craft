@@ -163,8 +163,9 @@ path for buildings has no line smoothing. The default stays `ic0`
 
 `integrations/urban_map.py` converts building footprints to a case with
 prisms. It reads GeoJSON polygons or CityJSON solids in a projected coordinate
-system in meters and refuses longitude and latitude: reproject first, for
-example with GDAL or QGIS. Convert CityGML to CityJSON with
+system in meters. Input that declares longitude and latitude is refused, and
+undeclared degrees cannot be detected: reproject first, for example with GDAL
+or QGIS. Convert CityGML to CityJSON with
 [citygml-tools](https://github.com/citygml4j/citygml-tools). For
 OpenStreetMap, export the footprints to GeoJSON and keep the ODbL attribution.
 
@@ -203,8 +204,9 @@ for a study of several wind directions. It writes `case.json`, `check.json`
 `CFD-M001` when the input or the check fails. Inspect before you run the case:
 
 - **Heights** come from the attribute named by `--height-attribute`, else from
-  a level count times a level height, else from a default. The provenance
-  records the method per building. These are assumptions, not measurements.
+  the level count `building:levels` times 3 m, else from the default of 8 m.
+  The provenance records the method per building. These are assumptions, not
+  measurements.
 - **Dropped buildings.** A building narrower or lower than two cells is left
   out and listed under `dropped`.
 - **Flat ground.** There is no terrain. Input whose building base heights

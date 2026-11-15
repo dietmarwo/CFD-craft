@@ -206,8 +206,9 @@ incomplete ([native verification](../evidence/native-verification.md)).
 
 - Not resolved. Each building is one cell wide and two cells high, and the
   street is a single column of cells. No canyon vortex can form on this grid.
-- Not grid-converged. No refinement study has finished, and the building-wall
-  roughness depends on the cell width, so refining also changes the wall model.
+- Not grid-converged. No refinement study has finished, and by default the
+  building-wall roughness depends on the cell width, so refining also changes
+  the wall model (`building_roughness_m` of chapter 22 fixes the roughness).
 - Not the CODASC wind-tunnel geometry or inflow. The boxes are illustrative.
 - Not validated. The measured data could not be obtained, so no comparison
   with experiments exists.
@@ -238,3 +239,5 @@ Give this to a coding agent that has the checkout:
 
 - [Chapter 11](11-python.md): the Python binding in depth.
 - [Chapter 12](12-studies.md): many runs, response matrices, source inference.
+- [Chapter 22](22-urban-geometry-particles-vegetation.md): polygon footprints,
+  buildings from a map, particles and vegetation in this canyon.

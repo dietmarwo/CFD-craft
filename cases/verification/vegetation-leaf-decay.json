@@ -1,0 +1,104 @@
+{
+  "schema_version": "cfd-craft.case/0.1",
+  "name": "vegetation-leaf-decay",
+  "domain": {
+    "size_m": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "grid": {
+    "cells": [
+      4,
+      4,
+      4
+    ]
+  },
+  "boundaries": {
+    "x": "periodic",
+    "y": "periodic",
+    "z": "periodic"
+  },
+  "flow": {
+    "kind": "prescribed_uniform",
+    "velocity_m_s": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "geometry": [],
+  "constituents": [
+    {
+      "id": "dust",
+      "diffusivity_m2_s": 0.0,
+      "particle": {
+        "diameter_m": 1e-06,
+        "density_kg_m3": 1000.0,
+        "settling_velocity_m_s": 0.0
+      }
+    }
+  ],
+  "initial_conditions": [
+    {
+      "kind": "uniform",
+      "constituent": "dust",
+      "concentration_kg_m3": 1e-06
+    }
+  ],
+  "sources": [],
+  "receptors": [
+    {
+      "kind": "point",
+      "id": "midpoint",
+      "point_m": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    }
+  ],
+  "numerics": {
+    "transport": "linear_upwind",
+    "max_time_step_s": 0.02,
+    "advective_cfl_max": 0.4,
+    "pressure_relative_tolerance": 1e-10,
+    "pressure_max_iterations": 1200,
+    "steady_residual_tolerance": 1e-05,
+    "steady_monitor_tolerance": 0.001,
+    "monitor_window": 30
+  },
+  "run": {
+    "mode": "transient",
+    "end_time_s": 2.0,
+    "max_steps": 20000,
+    "wall_time_limit_s": 30.0,
+    "threads": 1,
+    "memory_limit_mib": 1024
+  },
+  "output": {
+    "fields": true,
+    "checkpoint": true,
+    "max_total_mib": 64
+  },
+  "vegetation": [
+    {
+      "id": "canopy",
+      "min_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max_m": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "leaf_area_density_m2_m3": 2.0,
+      "drag_coefficient": 0.0,
+      "leaf_deposition_velocity_m_s": 0.1,
+      "turbulence_closure": "green1992"
+    }
+  ]
+}

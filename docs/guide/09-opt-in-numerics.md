@@ -182,7 +182,9 @@ True
 `multigrid` preconditions the same pressure equation and needs fewer pressure
 iterations for the same result. It costs setup time and memory, so compare
 total run times; on this small grid they are equal on the documentation host.
-A case with `geometry` is rejected (`CFD-E034`), with no silent fallback. See
+A case with `geometry` uses a separate multigrid path without line smoothing;
+[chapter 22](22-urban-geometry-particles-vegetation.md#multigrid-with-buildings)
+has its measurements. See
 [pressure multigrid](../developer/pressure-multigrid.md), also for `CFD-W004`.
 
 ## Where the time goes: `profile`

@@ -11,6 +11,35 @@ solver while native numerical development continues. It does not close M3b: an
 external backstep is not a measured native street-canyon comparison. The native
 wall and throughput tasks below remain.
 
+## City blocks and mobile measurements
+
+A second plan added city-block geometry, particles, vegetation and mobile
+measurements as opt-in features. Its stages are named U0 to U8 (urban) and R1
+to R3 (rides), its gates G0 to G7 and GR, and its validation tracks V1 and
+V2. Numbers and failed rows are in the
+[urban record](../evidence/urban-extension.md) and the
+[mobile record](../evidence/mobile-measurements.md); the user pages are guide
+chapters [22](../guide/22-urban-geometry-particles-vegetation.md),
+[23](../guide/23-mobile-paths-and-virtual-rides.md) and
+[24](../guide/24-mobile-source-inference.md).
+
+| Stage | Content | State |
+|---|---|---|
+| U0 Throughput target | A declared target: an accepted one-million-cell steady district run within two hours on one thread (gate G0: target and baseline recorded) | Declared and measured as a baseline; the target is not reached |
+| U1 Multigrid with buildings (P2b, P2c) | Masked pressure multigrid, its setup cost | Implemented and verified. Gate G1 (a measured end-to-end gain on the 27k and 93k canyons) is **open**: 3 to 6 times fewer pressure iterations, run-time ratios 1.05, 0.94 and 0.91; slower under strong anisotropy |
+| U2 Defaults | Decision on default numerics | Decided: the defaults stay (donor-cell, explicit, IC(0)) |
+| U3 Polygon prisms and wall roughness | `footprint_m`, `building_roughness_m`, per-shape evidence | Implemented and verified. Gate G3 (a canyon rotated by 45 degrees reproduces the aligned receptor values at two resolutions) is **not passed**: one case rejected, two timed out |
+| U4 Map converter | `integrations/urban_map.py` | Implemented with tests; flat ground only |
+| U5 Particle size classes (M5a) | Settling, deposition, PM sums, mass budget (gate G5) | Implemented; fixtures and budget pass. Not validated |
+| U6 Vegetation (M5b) | Drag, canopy turbulence terms, leaf deposition (gate G6) | Implemented; fixtures pass and zero leaf area leaves the state bytes unchanged. Not validated |
+| U7 District campaign | Twelve cold wind directions with retained rows (gate G7) | The campaign keeps every row, as G7 asks. The steady study is **open**: no direction of the Delft demonstration converged within 45 s |
+| U8 GPU experiment | Conditional on a measured pressure bottleneck at a million cells | Not triggered: pressure was 11 % of the profiled fine run |
+| R1 Path receptors and virtual rides | `path` receptors, `integrations/virtual_ride.py` | Implemented and verified against analytic cases |
+| R2 Street sources | `integrations/traffic_sources.py` | Implemented with tests; rates are supplied, never derived |
+| R3 Inference and routes | Frozen-flow responses, fit, pass planning, route selection | Implemented. Gate GR (recovery on held-out synthetic rides, ambiguity reported) passes on two synthetic studies of the same model; nothing beyond that |
+| V1 OpenFOAM canyon | The same canyon in OpenFOAM with a body-fitted mesh | **Open**; the backend still runs its two generated cases |
+| V2 Measured data | Rides or wind-tunnel data under a frozen protocol | **Open**; no data ([protocol](https://github.com/dietmarwo/CFD-craft/blob/main/validation/protocols/mobile-rides.md)) |
+
 ## Milestones
 
 | Milestone | Exit gate in the plan | State in 0.1.1 |
@@ -19,15 +48,15 @@ wall and throughput tasks below remain.
 | M1a Grid and elliptic operators | Uniform staggered grid, mask topology, pressure reference, projection identities, manufactured Poisson | Done. The matrix-free operator matches an independently assembled reference on a masked grid with an outlet, a sealed pocket and a periodic axis (products to 1e-12, solutions to 1e-10). One gauge per closed component; projection and adjoint identities; second-order Poisson convergence |
 | M1b Verified laminar flow | Documented time scheme, channel/cavity/manufactured flow, bounded execution, CPU profile | Mostly. Periodic shear has spatial and temporal order 2.00 and 2.01, with Poiseuille, Couette and the Re=100 cavity ([decisions](decisions.md)). Diffusion is explicit by default and in transient runs, where it limits the time step; the opt-in implicit steady algorithms treat viscosity implicitly. Measured CPU time and memory are in RESULTS |
 | M2 Passive transport and response matrices | Sources/receptors, analytic transport, superposition, synthetic inverse tutorial, small command job | Done, without area sources. Point, line and volume sources; the Gaussian order is 2.32; superposition holds to 2.2e-16; there is a SciPy reference, the source-inference tutorial and the command launcher. The discrete adjoint is a later extension |
-| M3a Neutral ABL package | k-ε with consistent wall, inlet and top; empty-domain profiles pass | Partly. The empty ABL drifts 0.23 % (U), 0.94 % (k) and 2.68 % (ε) in H..5H, under gates of 2 % and 5 %. Below H, ε drifts up to 16 %. There is one top configuration, the open atmosphere. The building-wall roughness is tied to the cell width, which the plan rules out (§5.3) |
+| M3a Neutral ABL package | k-ε with consistent wall, inlet and top; empty-domain profiles pass | Partly. The empty ABL drifts 0.23 % (U), 0.94 % (k) and 2.68 % (ε) in H..5H, under gates of 2 % and 5 %. Below H, ε drifts up to 16 %. There is one top configuration, the open atmosphere. By default the building-wall roughness is tied to the cell width, which the plan rules out (§5.3); the optional `building_roughness_m` sets it independently |
 | M3b Finite canyon evaluation | Grid and domain studies, development and held-out cases, external comparison, experimental verdict | Not passed. The development case (W/H = 1, 270°) and the held-out analogs (W/H = 2; 225°) are steady on 18x16x12. The resolution series does not finish, there is no external comparison, and the experimental verdict is `blocked_data` |
 | M4 Application integration | Scalar adapter, budgets and cancellation, campaign reporting, replay | Partly, ahead of order. An fcmaes worker runs evaluate, BiteOpt retry and the GP surrogate, within the evaluation's thread allowance and with cancellation. There is also the command launcher. There is no experiment-craft campaign or fine-grid replay yet |
-| M5a Particle settling | Bin schema, settling and capture tests, mass budgets | Not started. Depends only on M2, so it can proceed in parallel |
-| M5b Vegetation and deposition | Drag and deposition checks, factorial scenarios | Not started; needs M3b |
+| M5a Particle settling | Bin schema, settling and capture tests, mass budgets | Implemented as opt-in particle size classes with settling, ground, roof and leaf deposition and PM2.5 and PM10 sums; the settling fixtures and the mass budget pass ([urban record](../evidence/urban-extension.md#particle-and-vegetation-verification)). Not validated |
+| M5b Vegetation and deposition | Drag and deposition checks, factorial scenarios | Partly, ahead of M3b: opt-in porous vegetation with drag, canopy turbulence terms and leaf deposition; the drag and deposition checks pass. No factorial scenarios, and M3b is still not passed |
 | M6 Mitigation optimization | Budget-matched baseline, held-out scenarios, fine-grid replay | Not started; needs M4 and validated physics |
-| M7 Neighborhood and climatology | City geometry, conditional scenario maps, separate annual gate | Not started |
+| M7 Neighborhood and climatology | City geometry, conditional scenario maps, separate annual gate | Partly: polygon prisms, a map converter and a twelve-direction campaign exist. No direction of the district demonstration converged in its budget; there are no scenario maps and no climatology |
 | M8 Time-resolved turbulence | LES with spin-up and averaging studies | Not started |
-| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](../evidence/native-cpu-performance.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in unmasked [symmetric multigrid](pressure-multigrid.md) and opt-in implicit steady pseudo-time (P4/P5) are implemented; masked multigrid and semi-implicit transient diffusion remain open |
+| M9 Acceleration | One targeted experiment on a measured bottleneck | First native CPU experiment done: the [performance results](../evidence/native-cpu-performance.md) measure faster pressure solves and stencils at fixed work, with unchanged fields and gates and a higher memory estimate. Opt-in [symmetric multigrid](pressure-multigrid.md), also for grids with buildings, and opt-in implicit steady pseudo-time (P4/P5) are implemented; multigrid with buildings shows no consistent end-to-end gain, and semi-implicit transient diffusion remains open |
 
 The [performance results](../evidence/native-cpu-performance.md) give paired
 CPU and memory measurements of the current implementation against the previous
@@ -37,9 +66,10 @@ with both backends on one machine: OpenFOAM is 4.7–5.5 times faster than nativ
 steady mode, mostly because the native method needs about three times as many
 explicit pseudo-time steps, each with a PCG pressure solve. The opt-in
 implicit steady algorithms ([results](../evidence/implicit-steady.md))
-have since reversed that on the cavity at matched accuracy; masked extensions
-of the optional multigrid preconditioner (P2b) and its setup cost (P2c) remain
-the next pressure candidates. The anisotropic line/semicoarsening substep is implemented;
+have since reversed that on the cavity at matched accuracy. The masked
+extension of the optional multigrid preconditioner (P2b) and the measurement
+of its setup cost (P2c) are done; they cut pressure iterations without a
+consistent gain in run time. The anisotropic line/semicoarsening substep is implemented;
 its [results](../evidence/anisotropic-pressure.md) and a fresh
 [gap status and iteration list](../evidence/performance-gap-status.md)
 separate throughput from accuracy. Accepted
@@ -87,20 +117,20 @@ See [Releasing](releasing.md).
 |---|---|
 | 1. Wind direction and a canyon sensor | Partly: `canyon_study.py` with smoke, sensitivity and study presets and a prompt. Wind-convention regressions cover the cardinal and oblique directions and the inlet/outlet classification. There are no measured data, and the grid series does not finish |
 | 2. What sensors tell about emissions | Done on prescribed flow: superposition, held-out receptors, an unidentifiable pair (rank 2), bounded noise, and model mismatch from changed inflow and grid. The LP, SQP and adjoint extensions are not started |
-| 3. Trees, ventilation and particle removal | Not started (M5) |
+| 3. Trees, ventilation and particle removal | Partly: [chapter 22](../guide/22-urban-geometry-particles-vegetation.md) runs particles and a hedge on the coarse canyon. There is no study with scenarios and no validation |
 | 4. Improving a design without exploiting the simulator | Partly: `integrations/run_jobs.py` compares evaluate, BiteOpt retry and the GP surrogate at 24 evaluations each, with no failed evaluations. Held-out and fine-grid replay are not started |
-| 5. A neighborhood map and the limits of annual claims | Not started (M7) |
+| 5. A neighborhood map and the limits of annual claims | Partly: map import and a twelve-direction campaign (chapter 22); the district demonstration did not converge, and there is no annual statistic |
 
 ## Remaining differences from the plan
 
-- **Building-wall roughness (§5.3):** it is the smaller of the ground roughness and 0.001 cell widths. The plan asks for a wall property specified independently of the ground.
+- **Building-wall roughness (§5.3):** by default it is the smaller of the ground roughness and 0.001 cell widths. `building_roughness_m` specifies it independently of the ground and the grid, as the plan asks; it is optional, and the default did not change.
 - **Top boundary (§5.3):** only the open-atmosphere configuration exists; a wind-tunnel reproduction needs its own.
 - **Diffusion (§5.2):** explicit by default and in transient runs; implicit only in the opt-in steady algorithms.
 - **Sources (§5.4):** there are no area sources. A source that intersects a solid is rejected outright, so no redistribution policy is needed yet.
 - **Preview (§6.2):** it publishes the derived case and its geometry, and it rejects vanished boxes, topology changes and solid-volume changes above 20 %. It does not list per-box changes against the original.
-- **Geometry evidence (§5.1):** it has no facade/ground classification and no resolved street widths.
+- **Geometry evidence (§5.1):** it records, per shape, the exact and represented volume and the narrowest street in cells. It has no facade/ground classification.
 - **`verify` (§6.2):** it runs the pressure fixture of one case. The suites run through the validation scripts.
-- **Flow cache (§4.4):** a converged flow is not yet reused for several passive releases.
+- **Flow cache (§4.4):** the library reuses one accepted flow for several releases (`mobile_response::PreparedFlow`, used by the mobile study). The command line has no such option.
 - **Guideline document:** the COST 732 numbers behind W002 and W003 come from secondary summaries. The primary document was not retrieved.
 
 ## The gate that decides what comes next
@@ -120,7 +150,7 @@ P5d (scalar transport) and the matched-accuracy measurement M are implemented
 as opt-in choices with unchanged defaults; the conditional P5b was not needed
 ([matched accuracy](../evidence/matched-accuracy.md),
 [performance iterations](../evidence/performance-iterations.md)).
-Open: a decision on defaults, masked multigrid P2b and setup costs P2c.
+The decision on defaults is made: they stay. Masked multigrid (P2b) and its setup-cost measurement (P2c) are done, without a consistent end-to-end gain.
 
 The [mesh-initialization plan](../history/05-mesh-initialization-plan.md)
 provides an explicit accepted-coarse-to-new-fine start, verified against a cold
@@ -152,16 +182,17 @@ coarse-to-fine initialization exists for accepted cold sources; conservative
 interpolation, chained sources and an accepted fine/coarse turbulent pair
 remain work.
 
-1. **Throughput (M1b, M3b):** masked multigrid for the pressure equation (P2b; unmasked multigrid and the implicit steady algorithms exist); semi-implicit diffusion for transient runs; and solving the passive scalar after the flow has converged, with the flow cached for several releases. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
+1. **Throughput (M1b, M3b):** the measured profile of the district runs puts scalar sub-steps, canopy coefficients, the momentum residual and turbulence ahead of pressure, so these come first; line smoothing for multigrid with buildings; semi-implicit diffusion for transient runs; and solving the passive scalar after the flow has converged in the command line too. Each change is accepted only if the verification suite and the empty-ABL check pass with unchanged tolerances.
 2. **Near-wall consistency (M3a):** a log-consistent velocity gradient in wall-adjacent cells, so the empty ABL also stays homogeneous below H, and a building-wall roughness specified independently of the ground and the grid.
 3. **Resolution study (M3b):** the canyon at 10 or more cells per building height, a domain that meets the COST 732 clearances, and a GCI where the sequence supports one.
 4. **Measured data (M3b):**
    - CODASC or the Hamburg datasets; access requests are prepared for the owner to send.
    - A protocol frozen before evaluation.
    - A pinned OpenFOAM run of the same case.
-5. **Replay and particles, in parallel:**
+5. **Replay and the open city-block gates, in parallel:**
    - Fine-grid, held-out replay of the optimizer tutorial (M4).
-   - Particle settling (M5a), which depends only on M2.
+   - The rotated-canyon study (G3) with wider streets and a full refinement series.
+   - A district run that converges, before any district optimization.
 
 Domain questions that would sharpen M3 onward:
 - Which practical question matters most: mean sensor interpretation, source attribution, mitigation comparison or short-term peaks?

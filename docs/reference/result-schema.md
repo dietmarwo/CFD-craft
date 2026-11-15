@@ -27,12 +27,14 @@ Unknown fields are rejected.
 | `experimental_validation` | `string` | required | Always `not_validated; see validation/data-inventory.json`: numerical acceptance is not experimental validation. |
 | `fluid_cells` | `integer` (>= 0) | required | Number of fluid cells. |
 | `fluid_components` | `integer` (>= 0) | required | Number of face-connected fluid regions, each with its own pressure gauge unless it touches an outlet. |
+| `frozen_flow` | [FrozenFlowEvidence](#frozenflowevidence) or `null` | optional | Optional verified fixed-flow initialization and zero-flow-update evidence. Ordinary coupled runs omit this field. |
 | `initial_state_sha256` | `string` | required | SHA-256 of the starting state (cold or restored), so restarts from different states stay distinguishable. |
 | `mask_sha256` | `string` | required | SHA-256 of the cell mask, one byte per cell (1 fluid, 0 solid) in cell order; also in geometry.json. |
 | `model_scope` | `string` | required | Model label: `incompressible_laminar`, `prescribed_flow_passive_transport` or `neutral_k_epsilon_rough_wall`; the CLI prefixes `preview: ` for a coarsened preview. |
 | `momentum_residual` | `number` or `null` | optional | Largest normalized momentum residual, null for prescribed flow. |
 | `momentum_solver_iterations` | `integer` or `null` (>= 0) | optional | Inner iterations of implicit momentum-correction solves, when selected. |
 | `name` | `string` | required | The case name. |
+| `particulate_matter` | object with string keys and values of [ParticulateEvidence](#particulateevidence) | optional | PM2.5/PM10 airborne mass and receptor sums for spherical particle bins. No interpolation within a bin: its representative aerodynamic diameter is either below the cutoff or excluded. Omitted without particles. |
 | `physical_time_s` | `number` | required | Time covered in seconds; pseudo-time in steady mode. |
 | `physics_sha256` | `string` | required | Physics hash of the case: the case without `name`, `run` and `output`. Checkpoints are compatible across cases with the same value. |
 | `pressure_iterations` | `integer` (>= 0) | required | Cumulative pressure PCG iterations of the retained steps. |
@@ -45,6 +47,7 @@ Unknown fields are rejected.
 | `threads` | `integer` (>= 0) | required | The case's declared `run.threads`, not a measurement of the pool. |
 | `turbulence_residual` | `number` or `null` | optional | Largest normalized k or epsilon residual, `neutral_rans` only. |
 | `turbulent_floor_events` | `integer` (>= 0) | required | Turbulence updates that hit the k or epsilon floor; any event fails the turbulence checks. |
+| `vegetation` | [Evidence](#evidence) or `null` | optional | Recomputed porous canopy drag/coverage, absent without nonzero LAD. |
 | `velocity_max_m_s` | `number` | required | Largest absolute face velocity in m/s. |
 
 ### Check
@@ -61,6 +64,61 @@ Unknown fields are rejected.
 | `threshold` | `number` | required | Largest accepted value, a fixed gate or the tolerance from the case. |
 | `value` | `number` or `null` | optional | The measured value, or null when it is not finite or not available, such as `monitor_stability` before three full monitor windows. A null value fails. |
 
+### Evidence
+
+Instantaneous canopy evidence; integrated drag is per unit air density.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `drag_power_per_density_m5_s3` | `number` | required | Positive rate of work against canopy drag, divided by density (m5/s3). |
+| `drag_quadrature` | `string` | required | Quadrature of the actual staggered momentum sink over active face dual volumes (area times face gradient distance). |
+| `integrated_drag_acceleration_m4_s2` | array of 3 `number` | required | Integral of drag acceleration over fluid volume (m4/s2), with its sign. |
+| `validation` | `string` | required | The model remains numerically verified and physically unvalidated. |
+| `volume_fluid_cells` | object with string keys and values of `integer` (>= 0) | required | Number of represented fluid cells per vegetation ID; overlaps count twice. |
+
+### FrozenFlowEvidence
+
+Provenance for scalar responses on one accepted, immutable flow state.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `assessment` | `string` | required | Source flow assessment; only steady_discrete_solution is accepted. |
+| `flow_physics_sha256` | `string` | required | Physics hash of the source flow-only case. |
+| `flow_state_sha256` | `string` | required | SHA-256 of length-prefixed little-endian f64 velocity,p,k,epsilon arrays. |
+| `initialization` | `string` | required | The transport starts from the declared (required zero) concentration field. |
+| `native_flow_solves` | `integer` (>= 0) | required | Number of nonprescribed native flow solves: 0 for analytic prescribed flow,1 otherwise. |
+| `preparation_steps` | `integer` (>= 0) | required | Coupled flow steps used in the preparation, counted separately. |
+| `response_flow_updates` | `integer` (>= 0) | required | Flow updates during this scalar response; always zero. |
+| `source_sha256` | `string` | required | Source implementation of the accepted flow preparation. |
+
+### ParticulateEvidence
+
+Sum over particle bins passing an aerodynamic-size cutoff.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `mass_kg` | `number` | required | Integrated airborne mass, in kg. |
+| `receptors_kg_m3` | object with string keys and values of `number` | required | Local-source concentration increments at receptors, in kg/m3. |
+
+### PathEvidence
+
+A path receptor sampled from one constituent's returned concentration field.
+
+Unknown fields are rejected.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `concentrations_kg_m3` | array of `number` | required | Linear-interpolated concentration increments, in kg/m3. |
+| `distance_m` | array of `number` | required | Arc length from the first route vertex, in meters. |
+| `mean_kg_m3` | `number` | required | Arc-length trapezoidal mean, also in receptors_kg_m3 for this ID. |
+| `points_m` | array of array of 3 `number` | required | Local east/north/up positions in meters, in route order. |
+
 ### ScalarEvidence
 
 Evidence for one constituent at the returned state: mass budget, extrema, the steady residual, instantaneous rates and receptor values. Cumulative quantities are in kg, rates in kg/s, concentrations in kg/m3.
@@ -69,9 +127,12 @@ Unknown fields are rejected.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `aerodynamic_diameter_m` | `number` or `null` | optional | Unit-density equivalent aerodynamic diameter used for PM sums. |
 | `boundary_inflow_rate_kg_s` | `number` | required | Current rate of mass entering through boundary faces. |
 | `boundary_outflow_rate_kg_s` | `number` | required | Current rate of mass leaving through boundary faces. |
 | `budget_defect_kg` | `number` | required | `mass_kg` minus initial, emitted and inflow mass plus outflow mass. |
+| `deposited_kg` | object with string keys and values of `number` | optional | Cumulative particle deposition by surface class, in kg. |
+| `deposition_rate_kg_s` | object with string keys and values of `number` | optional | Current deposition rate by surface class, in kg/s. |
 | `emitted_kg` | `number` | required | Cumulative mass emitted by the sources. |
 | `id` | `string` | required | The constituent ID. |
 | `inflow_kg` | `number` | required | Cumulative mass that entered through boundary faces. |
@@ -80,8 +141,10 @@ Unknown fields are rejected.
 | `minimum_kg_m3` | `number` | required | Smallest concentration over the fluid cells. |
 | `negative_mass_kg` | `number` | required | Mass of the negative concentrations, as a positive number; never clipped. |
 | `outflow_kg` | `number` | required | Cumulative mass that left through boundary faces. |
+| `paths` | object with string keys and values of [PathEvidence](#pathevidence) | optional | Ordered path samples and their arc-length means, keyed by path ID. Omitted when no path receptor is declared, preserving legacy output bytes. |
 | `receptors_kg_m3` | object with string keys and values of `number` | required | Concentration at each receptor, keyed by receptor ID. JSON maps are sorted lexically (`R10` before `R2`), so look values up by ID. |
 | `relative_budget_defect` | `number` | required | Absolute budget defect over the sum of initial, emitted, inflow and outflow mass; the `mass_budget` check requires at most 1e-9. |
+| `settling_velocity_m_s` | `number` or `null` | optional | Resolved particle settling speed; omitted for gases. |
 | `source_rate_kg_s` | `number` | required | Emission rate of the represented sources. |
 | `steady_residual` | `number` | required | Largest steady-equation residual \|dc/dt\| over the cells, normalized by the velocity scale, the length scale and `maximum_kg_m3`. |
 

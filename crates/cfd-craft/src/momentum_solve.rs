@@ -221,13 +221,29 @@ pub fn solve_viscous(
     b: &[f64],
     control: &Control,
 ) -> Result<(Vec<f64>, SolveInfo)> {
+    solve_viscous_with_drag(stencil, viscosity, dt, b, &[], control)
+}
+/// Viscous correction with an additional fixed, nonnegative canopy diagonal.
+/// An empty diagonal exactly retains the original viscous solve arithmetic.
+pub fn solve_viscous_with_drag(
+    stencil: &Stencil,
+    viscosity: f64,
+    dt: f64,
+    b: &[f64],
+    drag: &[f64],
+    control: &Control,
+) -> Result<(Vec<f64>, SolveInfo)> {
     let mut measured = control.span(crate::profiling::Phase::MomentumSolve);
     let n = b.len();
     let apply = |x: &[f64], y: &mut [f64]| {
         stencil.viscous(viscosity, x, y);
         for i in 0..n {
             y[i] = if stencil.unknown[i] {
-                x[i] - dt * y[i]
+                if drag.is_empty() {
+                    x[i] - dt * y[i]
+                } else {
+                    (1.0 + dt * drag[i]) * x[i] - dt * y[i]
+                }
             } else {
                 0.0
             };
@@ -237,7 +253,14 @@ pub fn solve_viscous(
         .viscous_diagonal(viscosity)
         .iter()
         .zip(&stencil.unknown)
-        .map(|(d, u)| if *u { 1.0 / (1.0 - dt * d) } else { 0.0 })
+        .enumerate()
+        .map(|(i, (d, u))| {
+            if *u {
+                1.0 / (1.0 - dt * d + if drag.is_empty() { 0.0 } else { dt * drag[i] })
+            } else {
+                0.0
+            }
+        })
         .collect();
     let dot = |x: &[f64], y: &[f64]| x.iter().zip(y).map(|(a, b)| a * b).sum::<f64>();
     let mut x = vec![0.0; n];
@@ -398,6 +421,15 @@ impl Stencil {
 }
 
 impl Matrix {
+    /// Add a frozen nonnegative porous-canopy diagonal in 1/s. The unchanged
+    /// full nonlinear drag remains in the residual, preserving its fixed point.
+    pub fn add_drag(&mut self, drag: &[f64]) {
+        for (diagonal, coefficient) in self.diagonal.iter_mut().zip(drag) {
+            if *diagonal != 0.0 {
+                *diagonal += coefficient;
+            }
+        }
+    }
     /// `y = A x` on the unknowns of `stencil`; zero on the other faces.
     pub fn apply(&self, stencil: &Stencil, x: &[f64], y: &mut [f64]) {
         for (fi, out) in y.iter_mut().enumerate() {

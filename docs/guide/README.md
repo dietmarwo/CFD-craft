@@ -1,10 +1,11 @@
 # About the guide
 
-The guide teaches CFD-craft in 21 chapters, ordered by difficulty. Each chapter
+The guide teaches CFD-craft in 24 chapters, ordered by difficulty. Each chapter
 is self-contained: it starts with a setup, uses one small case and ends with
 links to the next steps. It covers the native solver (constant-density
-incompressible flow and passive gas on uniform Cartesian grids), its Python
-binding, and the separate OpenFOAM backend.
+incompressible flow with passive gas and particles on uniform Cartesian
+grids), its Python binding, the tools for city blocks and mobile measurements,
+and the separate OpenFOAM backend.
 
 Version 0.1.1 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction.
@@ -18,10 +19,13 @@ experimentally validated prediction.
 | III Automation | 11 [Python](11-python.md) · 12 [Many runs](12-studies.md) · 13 [Optimization lessons F1 to F3](13-optimization-lessons.md) · 14 [Optimization jobs](14-optimization-jobs.md) |
 | IV OpenFOAM backend | 15 [Install and run a cavity](15-openfoam-first-run.md) · 16 [Compare solvers and measurements](16-compare-solvers.md) · 17 [Continue a solve, start a finer mesh](17-continuation-and-mapping.md) · 18 [Audit a wall-resolved backstep](18-backstep-resolution.md) · 19 [A bounded refinement campaign](19-refinement-campaign.md) |
 | V Embedding and help | 20 [The Rust library](20-rust-library.md) · 21 [Troubleshooting](21-troubleshooting.md) |
+| VI City blocks and mobile measurements | 22 [Urban geometry, particles and vegetation](22-urban-geometry-particles-vegetation.md) · 23 [Mobile paths and virtual rides](23-mobile-paths-and-virtual-rides.md) · 24 [Source inference and route selection from rides](24-mobile-source-inference.md) |
 
 Chapters 1 and 2 need only `pip install cfd-craft`. From chapter 3 on, commands
 run from the root of a checkout. Part IV needs Linux and an OpenFOAM
-Foundation 13 runtime, which chapter 15 installs.
+Foundation 13 runtime, which chapter 15 installs. Part VI builds on chapters
+5 and 10; its map and inference tools need the optional Python packages of
+`integrations/requirements-mobile.txt`.
 
 ## Which interface
 
@@ -33,10 +37,13 @@ Foundation 13 runtime, which chapter 15 installs.
 | Embed the solver in a Rust program | `cfd_craft::solver::run` | chapter 20 |
 | Run optimization jobs or campaigns | the fcmaes worker and `optimization-run` | chapters 13 and 14 |
 | Run or compare with OpenFOAM | `integrations/openfoam_backend.py` | chapter 15 |
+| Import buildings from a map, run a wind-direction campaign | `integrations/urban_map.py`, `validation/urban_campaign.py` | chapter 22 |
+| Simulate a sensor ride | a `path` receptor and `integrations/virtual_ride.py` | chapter 23 |
+| Infer street emissions from rides, plan routes | `tutorials/mobile_measurements.py`, `integrations/mobile_inference.py` | chapter 24 |
 
 The Python package installs from PyPI without a toolchain. The command and the
-library are built with Rust 1.88 or newer. The analysis scripts and the
-OpenFOAM tools are run from a checkout. The native solver does not need
+library are built with Rust 1.88 or newer. The analysis scripts, the map and
+ride tools and the OpenFOAM tools are run from a checkout. The native solver does not need
 OpenFOAM, and the adapter starts OpenFOAM as separate programs.
 
 ## How to read the code blocks

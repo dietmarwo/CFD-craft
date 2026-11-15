@@ -17,6 +17,7 @@ cargo build --release --workspace --locked
 cargo build --release --workspace --examples --locked
 python -m pip install -r requirements-validation.txt
 python -m pip install fcmaes-rust==0.2.1 lp-ip-craft==0.29.0
+python -m pip install -r integrations/requirements-mobile.txt
 python scripts/check_docs.py --smoke > runs/docs-check.json
 python scripts/check_docs.py docs/guide/03-cli-and-archive.md
 ```
@@ -24,7 +25,8 @@ python scripts/check_docs.py docs/guide/03-cli-and-archive.md
 `--smoke` does not execute pages and sections marked `long`; their blocks are
 still parsed, their script paths must exist and their JSON cases still pass
 `cfd-craft check`. Without `--smoke` (full mode) everything runs except the
-OpenFOAM and jobs sections. On a 2-core host the default set takes about
+OpenFOAM and jobs sections. The last install line (Shapely) is needed in full
+mode only, for the map section of chapter 22. On a 2-core host the default set takes about
 2.5 minutes in smoke mode and 3.5 minutes in full mode. The report on standard
 output lists, per page, the blocks run, the `text` blocks compared, the `json`
 blocks validated, the blocks not run and every unchecked block with its
@@ -90,7 +92,9 @@ change that a reviewer sees in the diff.
 2. Show selected fields with a short `python` block and its `text` output, made
    by running it; add the tolerance marker and sentence if a float is shown.
 3. Mark sections over about a minute `long`, OpenFOAM sections `openfoam`,
-   sections that need `optimization-run` `jobs`.
+   sections that need `optimization-run` `jobs`. A section that needs a
+   package the job `docs` does not install is also marked `long` (the map
+   section of chapter 22 needs Shapely).
 4. Run the check on the page, then `--write-counts`, and add the page to
    `docs/SUMMARY.md`.
 
@@ -105,7 +109,12 @@ more jobs run what needs a runtime. `runner-integration` runs chapter 14 with
 because the OpenFOAM runtime does not exist on the host where the
 documentation was written. The F1 section of chapter 13 (`jobs`) is executed
 by no job: `runner-integration` does not install the two optimization
-packages, so its blocks are checked for syntax and script paths only. Full
+packages, so its blocks are checked for syntax and script paths only. The
+same holds for the map section of chapter 22 (`long`, needs Shapely) and the
+wind-direction command of chapter 14 (an `sh` block); the job `urban-mobile` runs
+the tests of the converters, the ride tool, the inference and the campaign
+instead. Chapter 24 runs in the job `docs`: it needs the example
+`mobile_response`, NumPy, SciPy and LP-IP-craft, which the job has. Full
 mode for chapters 18 and 19 takes hours and is not part of any job. `validation/manual_examples.py` still runs its fixed suite
 of 11 native steps in the job `numerical` and its 8 OpenFOAM steps in
 `external-backend`; `validation/test_manual_examples.py` requires those steps

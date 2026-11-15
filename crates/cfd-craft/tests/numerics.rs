@@ -106,6 +106,7 @@ fn pressure_has_one_gauge_per_closed_component() {
     };
     c.boundaries.x = Boundary::Wall;
     c.geometry.push(Block {
+        footprint_m: None,
         id: "barrier".into(),
         min_m: [0.375, 0., 0.],
         max_m: [0.625, 1., 1.],
@@ -247,6 +248,7 @@ fn source_integrals_and_solid_rejection() {
         acceleration_m_s2: [0.; 3],
     };
     c.geometry.push(Block {
+        footprint_m: None,
         id: "solid".into(),
         min_m: [1., 1., 0.],
         max_m: [3., 3., 3.],
@@ -263,6 +265,7 @@ fn receptor_cannot_interpolate_through_wall() {
         acceleration_m_s2: [0.; 3],
     };
     c.geometry.push(Block {
+        footprint_m: None,
         id: "solid".into(),
         min_m: [2., 0., 0.],
         max_m: [3., 6., 6.],
@@ -422,11 +425,13 @@ fn a_steady_source_in_a_sealed_component_is_rejected() {
     c.run.mode = Mode::Steady;
     c.geometry = vec![
         Block {
+            footprint_m: None,
             id: "left".into(),
             min_m: [2., 0., 0.],
             max_m: [2.5, 6., 6.],
         },
         Block {
+            footprint_m: None,
             id: "right".into(),
             min_m: [4., 0., 0.],
             max_m: [4.5, 6., 6.],

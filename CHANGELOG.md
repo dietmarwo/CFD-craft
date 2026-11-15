@@ -2,6 +2,60 @@
 
 ## [Unreleased]
 
+City blocks and mobile measurements: buildings from a map, particle size classes, vegetation, concentrations along a route, virtual sensor rides and street emissions inferred from rides. Every feature is opt-in. A case that uses none of the new fields gives byte-identical numerical state and fields; the code review compared 20 runs of the committed cases with the 0.1.1 binary. The new models are numerically verified and not experimentally validated; the open gates are listed under Known limitations.
+
+### Added
+
+- Polygon-prism buildings: a `geometry` entry with `footprint_m` is a vertical prism with a simple polygon footprint, represented by whole cells. `geometry.json` and `check` report, per shape, the exact and represented volume and the narrowest street in cells; `geometry_min_passage_cells` asks for a warning (`CFD-W011`), `building_roughness_m` sets the roughness of building walls independently of the grid (`CFD-E084`, `CFD-E085`). [Guide chapter 22](docs/guide/22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint).
+- Pressure multigrid for cases with buildings and with several separate fluid regions (`numerics.pressure_preconditioner = multigrid`), which were rejected before. [Chapter 22](docs/guide/22-urban-geometry-particles-vegetation.md#multigrid-with-buildings), [developer page](docs/developer/pressure-multigrid.md#masked-connected-aggregates).
+- Map converter `integrations/urban_map.py`: projected GeoJSON or CityJSON building footprints to a case with prisms, with crop, rotation, clearances and a provenance file of every assumption (`CFD-M001`). [Chapter 22](docs/guide/22-urban-geometry-particles-vegetation.md#import-buildings-from-a-map).
+- Particle size classes: a constituent with `particle` settles (Stokes with Cunningham correction, or a supplied speed) and deposits on ground and roofs; the result reports settling speed, aerodynamic diameter, deposited mass and rate per surface and `particulate_matter` sums for PM2.5 and PM10 (`CFD-E080`, `CFD-E081`). [Chapter 22](docs/guide/22-urban-geometry-particles-vegetation.md#particle-size-classes), [transport model card](docs/model-cards/transport.md#particle-bins).
+- Porous vegetation: `vegetation` volumes with leaf area density, drag, two canopy coefficient sets for the k-epsilon model (`green1992`, `sanz2003`) and leaf deposition of particles; `summary.vegetation` reports the drag work rate and force (`CFD-E082`, `CFD-E083`). [Chapter 22](docs/guide/22-urban-geometry-particles-vegetation.md#hedges-and-trees), [flow model card](docs/model-cards/flow.md#porous-vegetation).
+- Wind-direction campaign `validation/urban_campaign.py`: twelve cold-start directions with budgets, an independent field check per direction and retained failed rows; optionally as `optimization-run` command jobs. The optional fcmaes worker gains the model `app.cfd.wind-direction`. [Chapter 22](docs/guide/22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions), [chapter 14](docs/guide/14-optimization-jobs.md#wind-direction-jobs-for-a-city-block).
+- Path receptors: a receptor of kind `path` samples the field along a route at a constant height and reports the samples and their mean (`CFD-E086` to `CFD-E088`). `integrations/virtual_ride.py` computes the reading of a first-order sensor on a ride through an accepted steady field (`CFD-M004`). [Chapter 23](docs/guide/23-mobile-paths-and-virtual-rides.md).
+- Line sources from street data: `integrations/traffic_sources.py` adds line sources from street centerlines and a table of supplied emission rates (`CFD-M002`). [Chapter 24](docs/guide/24-mobile-source-inference.md#street-emissions-from-map-data).
+- Frozen-flow source responses (`cfd_craft::mobile_response::PreparedFlow`, example `mobile_response`): one accepted flow, then one transport run per source group without any flow update (`CFD-E089`). `tutorials/mobile_measurements.py` builds a ride response matrix, fits street emission rates with a rank and ambiguity report, plans the number of passes and selects routes under a time budget with the mixed-integer solver of LP-IP-craft (`CFD-M003`). [Chapter 24](docs/guide/24-mobile-source-inference.md).
+- `validation/check_fields.py` recomputes, independently of the solver, polygon masks and per-shape evidence, deposition rates, particle classification, vegetation drag, path samples and means, and the hash of a frozen flow.
+- Five verification cases under `cases/verification/` (polygon prism, particle settling, steady particle column, vegetation force balance, leaf decay), the example `examples/manual/path-ride.json` and ten test files under `validation/`, run by the new CI job `urban-mobile`.
+- Evidence records for the [urban features](docs/evidence/urban-extension.md) and the [mobile measurements](docs/evidence/mobile-measurements.md), failed rows included.
+- Guide Part VI, "City blocks and mobile measurements" (chapters 22 to 24), with examples that the documentation check runs; 20 new tasks on the [how-to page](docs/how-to.md); the new scripts in the [scripts reference](docs/reference/scripts.md); units of the new quantities in [units and conventions](docs/reference/units-and-conventions.md).
+
+### Changed
+
+- **Rust library users must update code.** The public structs `Block`, `Constituent`, `Budget`, `ScalarEvidence`, `Summary` and `GeometryEvidence` gained fields, and the enum `Receptor` gained the variant `Path`. Code that constructs these structs with a literal or matches `Receptor` exhaustively no longer compiles until the new fields and the variant are handled.
+- `geometry.json` of every case with solids, also a case with boxes only, gains the member `shapes`. The manifest hash of such an archive therefore differs; the numerical state, the fields, the checkpoint and `probes.csv` do not.
+- `describe` gains `geometry_kinds`, `receptor_kinds`, `path_sampling` and `urban_extensions`, new optional members in the case and result schemas, and a changed `limitations` list. No required member was added.
+- `CFD-E034` is no longer raised for multigrid with a geometry mask. `CFD-E035` also covers the coarse factor of a masked grid. `CFD-E020` and `CFD-E043` accept a steady particle source whose way out is deposition; a gas still needs an open boundary. `CFD-W004` has its own text for a case with geometry. [Diagnostics](docs/diagnostics.md).
+- The documentation describes one product: the README, the landing page, the agent page, the comparison page and the roadmap no longer treat these features as a separate extension, and the guide has 24 chapters.
+- `AGENTS.md`: the scope paragraph names the optional features that exist.
+
+### Fixed
+
+Found by the code review of the features above, before any release contained them:
+
+- A cell center exactly on a slanted edge shared by two polygon footprints could fall in neither footprint and leave sealed fluid cells inside a merged building. Edge crossings are now evaluated from the lower endpoint, so the result does not depend on winding or on the first vertex; the independent checker uses the same rule.
+- `CFD-W004` claimed line smoothing for a case with buildings; the masked path has point smoothing only, and the message and the pages now say so.
+- A request `geometry_min_passage_cells` on a grid above ten million cells was silently not evaluated; it now draws `CFD-W011` with the text "not evaluated".
+- Route selection certified its result against the objective value of the incumbent instead of the solver's proven bound; a selection without a finite proven bound is no longer certified.
+- The mobile study trusted each archive's own frozen-flow hash; it now recomputes the hash of every archive of a wind and requires equality, and it records a malformed archive as a failed audit instead of stopping.
+- `validation/check_fields.py` accepted an archive whose per-shape geometry records had been deleted, extra deposition surfaces and deposition of a passive gas; all are rejected now.
+- `validation/summarize_urban.py` stopped with an exception on an interrupted run or a missing pair member; such rows are retained.
+- The map converter replaced a nonfinite height or level count by the default height, accepted a GeoJSON `crs` member naming geographic coordinates, and answered malformed input with a traceback; all are `CFD-M001` now. The street converter rejects a geographic `crs` member and deeply nested input with `CFD-M002`.
+- The map converter looked for its default `--template` and `--binary` in the current directory and failed with `CFD-M001` when started elsewhere; like the other tools it now takes them from the checkout that holds the script.
+- Tests that did not test what they said (polygon self-intersection, building roughness in the wall functions, PM sums by aerodynamic diameter, rotation of map geometry with the wind, refusal of prescribed wind in the campaign) now fail without the code they cover.
+
+### Known limitations
+
+- Nothing in this list of features is experimentally validated. No urban comparison with OpenFOAM and no comparison with measured urban data exists.
+- Multigrid with buildings needs 3 to 6 times fewer pressure iterations on isotropic canyon grids, but the measured end-to-end time is about the same as with the default `ic0` (ratios 1.05 at 27k cells, 0.94 at 93k cells, 0.91 on a synthetic block), and it is slower under strong grid anisotropy. The default stays `ic0`. [Urban record](docs/evidence/urban-extension.md#pressure-multigrid-with-buildings-no-consistent-gain).
+- The canyon rotated by 45 degrees did not pass its frozen study (one case rejected, two timed out); independence of grid orientation is not shown.
+- No wind direction of the Delft district demonstration converged within its short budget; a district workflow is not qualified.
+- Inference from rides and route selection are verified on synthetic data of the same model only.
+- A vegetation volume that contains no fluid cell center is accepted without a message and has no effect; a building in that situation is `CFD-E028`.
+- A wind-direction campaign run through `optimization-run`: on a timeout only the runner is stopped; the processes it started may keep running. The worker model `app.cfd.wind-direction` has no automated test in the repository.
+- Particle settling is first order and is upwinded separately from the air motion. Vertical walls collect no particles. A size class is counted in PM2.5 or PM10 completely or not at all.
+- The map converter assumes flat ground and refuses holes in footprints.
+
 ## [0.1.1] - 2026-11-14
 
 A documentation release of the research prototype. A user gains one guide of 21 chapters ordered by difficulty, a task index, a reference section generated from `describe` and the Python docstrings, and a documentation site at <https://dietmarwo.github.io/CFD-craft/>; the code blocks of these pages are run and their outputs compared by a CI check. Solver behavior is unchanged: the same case gives the same numerical results, and the case and result schemas are unchanged; the build version and the source and executable fingerprints in a result differ, because the version and the sources changed. One runtime string changed: the schema description of the multigrid option in `describe` links the new page. Experimental canyon validation and a successful fine-grid resolution study remain open gates.

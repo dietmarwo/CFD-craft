@@ -36,6 +36,7 @@ fn cases() -> Vec<(&'static str, Case)> {
     cavity.grid.cells = [7, 3, 6];
     let mut masked = cavity.clone();
     masked.geometry.push(Block {
+        footprint_m: None,
         id: "step".into(),
         min_m: [0.4, 0.0, 0.0],
         max_m: [0.7, 1.0, 0.35],

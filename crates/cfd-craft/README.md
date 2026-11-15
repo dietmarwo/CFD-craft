@@ -1,13 +1,16 @@
 # cfd-craft
 
 The core library of [CFD-craft](https://github.com/dietmarwo/CFD-craft): a
-bounded CPU research solver for incompressible Cartesian flow and passive-gas
-dispersion, built to be driven and checked by agents.
+bounded CPU research solver for incompressible Cartesian flow and the
+dispersion of gases and particles around buildings, built to be driven and
+checked by agents.
 
 - Staggered finite volumes with matrix-free pressure projection (IC(0) or
   multigrid), laminar flow and one neutral k–epsilon package, explicit or
-  implicit steady pseudo-time.
-- Passive transport with point, line and volume sources and receptors.
+  implicit steady pseudo-time; box and polygon-prism buildings, optional
+  porous vegetation.
+- Transport of passive gases and particle size classes (settling, deposition)
+  with point, line and volume sources and point, volume and path receptors.
 - Strict case and result schemas, explicit work, time, memory and output
   budgets, cooperative cancellation and independent result checks.
 

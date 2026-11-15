@@ -121,6 +121,11 @@
       "text": 0,
       "json": 0
     },
+    "docs/evidence/mobile-measurements.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
     "docs/evidence/momentum-verification.md": {
       "run": 0,
       "text": 0,
@@ -167,6 +172,11 @@
       "json": 0
     },
     "docs/evidence/steady-continuation.md": {
+      "run": 0,
+      "text": 0,
+      "json": 0
+    },
+    "docs/evidence/urban-extension.md": {
       "run": 0,
       "text": 0,
       "json": 0
@@ -306,6 +316,21 @@
     "docs/guide/21-troubleshooting.md": {
       "run": 3,
       "text": 1,
+      "json": 0
+    },
+    "docs/guide/22-urban-geometry-particles-vegetation.md": {
+      "run": 11,
+      "text": 5,
+      "json": 4
+    },
+    "docs/guide/23-mobile-paths-and-virtual-rides.md": {
+      "run": 5,
+      "text": 3,
+      "json": 1
+    },
+    "docs/guide/24-mobile-source-inference.md": {
+      "run": 5,
+      "text": 4,
       "json": 0
     },
     "docs/guide/README.md": {

@@ -41,24 +41,21 @@ fn default_serialization_and_physics_hash_remain_compatible() {
     assert!(serde_json::from_value::<Case>(v).is_err());
 }
 #[test]
-fn masks_fail_explicitly_and_preflight_accounts_for_hierarchy_storage() {
+fn masks_are_supported_and_preflight_accounts_for_hierarchy_storage() {
     let mut c = case([12, 2, 12], Boundary::Wall);
     let mg = c.check().estimated_peak_mib;
     c.numerics.pressure_preconditioner = PressurePreconditioner::Ic0;
     assert!(c.check().estimated_peak_mib < mg);
     c.numerics.pressure_preconditioner = PressurePreconditioner::Multigrid;
     c.geometry.push(Block {
+        footprint_m: None,
         id: "solid".into(),
         min_m: [0.4, 0.0, 0.4],
         max_m: [0.6, 1.0, 0.6],
     });
     let r = c.check();
-    assert!(!r.valid);
-    assert!(
-        r.diagnostics
-            .iter()
-            .any(|d| d.code == "CFD-E034" && d.path == "numerics.pressure_preconditioner")
-    );
+    assert!(r.valid, "{:?}", r.diagnostics);
+    assert!(Grid::build(&c).is_ok());
 }
 #[test]
 fn strong_anisotropy_between_coarsened_axes_is_a_check_warning() {
@@ -76,6 +73,27 @@ fn strong_anisotropy_between_coarsened_axes_is_a_check_warning() {
     c.domain.size_m = [1.0, 0.1, 0.1];
     assert!(warned(&c)); // ratio 100
     assert!(c.check().valid);
+    // The masked path has no line blocks, and its warning must not claim them.
+    let message = |c: &Case| {
+        c.check()
+            .diagnostics
+            .into_iter()
+            .find(|d| d.code == "CFD-W004")
+            .unwrap()
+            .message
+    };
+    assert!(message(&c).contains("selects symmetric line-block smoothing"));
+    let mut masked = c.clone();
+    masked.geometry.push(Block {
+        footprint_m: None,
+        id: "solid".into(),
+        min_m: [0.4, 0.0, 0.04],
+        max_m: [0.6, 0.1, 0.06],
+    });
+    assert!(warned(&masked) && masked.check().valid);
+    assert!(message(&masked).contains("no line-block smoothing"));
+    assert!(message(&masked).contains("point smoothing"));
+    assert!(Grid::build(&masked).unwrap().fluid.contains(&false));
     // A coarsened span axis of eight cells, 64 times weaker than x and z.
     let mut c = case([64, 8, 64], Boundary::Wall);
     c.domain.size_m = [1.0, 1.0, 1.0];

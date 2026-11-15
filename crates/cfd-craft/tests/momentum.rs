@@ -128,6 +128,7 @@ fn a_solid_barrier_insulates_near_side_momentum() {
     pool.install(|| {
         let mut c = periodic(16);
         c.geometry.push(Block {
+            footprint_m: None,
             id: "barrier".into(),
             min_m: [0.5, 0.0, 0.0],
             max_m: [0.625, 1.0, 1.0],
@@ -424,6 +425,7 @@ fn second_order_schemes_keep_a_solid_barrier_insulating() {
         for (name, scheme, limiter) in SCHEMES {
             let mut c = with_scheme(periodic(16), scheme, limiter);
             c.geometry.push(Block {
+                footprint_m: None,
                 id: "barrier".into(),
                 min_m: [0.5, 0.0, 0.0],
                 max_m: [0.625, 1.0, 1.0],

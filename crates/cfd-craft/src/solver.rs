@@ -196,6 +196,9 @@ pub struct Budget {
     pub inflow_kg: f64,
     /// Mass that left through boundary faces so far.
     pub outflow_kg: f64,
+    /// Cumulative removed particle mass by surface class, including restarts.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub deposited_kg: BTreeMap<String, f64>,
 }
 /// The complete solver state: what fields.json archives and a checkpoint
 /// restores. Vectors follow the grid layout of [`Grid`]: one value per face
@@ -296,6 +299,18 @@ pub struct ScalarEvidence {
     pub inflow_kg: f64,
     /// Cumulative mass that left through boundary faces.
     pub outflow_kg: f64,
+    /// Cumulative particle deposition by surface class, in kg.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub deposited_kg: BTreeMap<String, f64>,
+    /// Current deposition rate by surface class, in kg/s.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub deposition_rate_kg_s: BTreeMap<String, f64>,
+    /// Resolved particle settling speed; omitted for gases.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settling_velocity_m_s: Option<f64>,
+    /// Unit-density equivalent aerodynamic diameter used for PM sums.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aerodynamic_diameter_m: Option<f64>,
     /// `mass_kg` minus initial, emitted and inflow mass plus outflow mass.
     pub budget_defect_kg: f64,
     /// Absolute budget defect over the sum of initial, emitted, inflow and
@@ -319,6 +334,32 @@ pub struct ScalarEvidence {
     pub boundary_outflow_rate_kg_s: f64,
     /// Concentration at each receptor, keyed by receptor ID. JSON maps are
     /// sorted lexically (`R10` before `R2`), so look values up by ID.
+    pub receptors_kg_m3: BTreeMap<String, f64>,
+    /// Ordered path samples and their arc-length means, keyed by path ID.
+    /// Omitted when no path receptor is declared, preserving legacy output bytes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub paths: BTreeMap<String, PathEvidence>,
+}
+/// A path receptor sampled from one constituent's returned concentration field.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PathEvidence {
+    /// Local east/north/up positions in meters, in route order.
+    pub points_m: Vec<[f64; 3]>,
+    /// Arc length from the first route vertex, in meters.
+    pub distance_m: Vec<f64>,
+    /// Linear-interpolated concentration increments, in kg/m3.
+    pub concentrations_kg_m3: Vec<f64>,
+    /// Arc-length trapezoidal mean, also in receptors_kg_m3 for this ID.
+    pub mean_kg_m3: f64,
+}
+/// Sum over particle bins passing an aerodynamic-size cutoff.
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ParticulateEvidence {
+    /// Integrated airborne mass, in kg.
+    pub mass_kg: f64,
+    /// Local-source concentration increments at receptors, in kg/m3.
     pub receptors_kg_m3: BTreeMap<String, f64>,
 }
 /// The result of one native run (schema `cfd-craft.result/0.1`), written as
@@ -394,6 +435,14 @@ pub struct Summary {
     pub checks: Vec<Check>,
     /// Evidence for each constituent, in case order.
     pub constituents: Vec<ScalarEvidence>,
+    /// PM2.5/PM10 airborne mass and receptor sums for spherical particle bins.
+    /// No interpolation within a bin: its representative aerodynamic diameter
+    /// is either below the cutoff or excluded. Omitted without particles.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub particulate_matter: BTreeMap<String, ParticulateEvidence>,
+    /// Recomputed porous canopy drag/coverage, absent without nonzero LAD.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vegetation: Option<crate::vegetation::Evidence>,
     /// Largest absolute face velocity in m/s.
     pub velocity_max_m_s: f64,
     /// Largest normalized momentum residual, null for prescribed flow.
@@ -414,6 +463,10 @@ pub struct Summary {
     pub build_version: String,
     /// The case's declared `run.threads`, not a measurement of the pool.
     pub threads: usize,
+    /// Optional verified fixed-flow initialization and zero-flow-update evidence.
+    /// Ordinary coupled runs omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen_flow: Option<crate::mobile_response::FrozenFlowEvidence>,
 }
 /// The cold-start state of a case: face velocities from
 /// [`Flow::vector`], zero pressure, the `neutral_rans` equilibrium k and
@@ -428,6 +481,7 @@ pub fn initial_state(c: &Case, g: &Grid) -> State {
             emitted_kg: 0.0,
             inflow_kg: 0.0,
             outflow_kg: 0.0,
+            deposited_kg: BTreeMap::new(),
         })
         .collect();
     let k = (0..g.count())
@@ -500,10 +554,24 @@ fn validate_with_history(c: &Case, g: &Grid, s: &State, history: &[Vec<f64>]) ->
             [b.initial_kg, b.emitted_kg, b.inflow_kg, b.outflow_kg]
                 .iter()
                 .any(|v| !v.is_finite() || *v < 0.0)
+                || b.deposited_kg.iter().any(|(surface, v)| {
+                    !matches!(surface.as_str(), "ground" | "roof" | "vegetation")
+                        || !v.is_finite()
+                        || *v < 0.0
+                })
         })
         || history.iter().flatten().any(|v| !v.is_finite())
     {
         return Err("CFD-E051: nonfinite or invalid state".into());
+    }
+    if c.constituents
+        .iter()
+        .zip(&s.budgets)
+        .any(|(sp, b)| sp.particle.is_none() && !b.deposited_kg.is_empty())
+    {
+        return Err(
+            "CFD-E051: budgets.deposited_kg: passive gas cannot have particle deposition".into(),
+        );
     }
     // Transport never changes a solid cell, so a state with mass there is not one it produced.
     if s.concentrations
@@ -514,7 +582,7 @@ fn validate_with_history(c: &Case, g: &Grid, s: &State, history: &[Vec<f64>]) ->
     }
     Ok(())
 }
-fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
+pub(crate) fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
     let sc = if let Flow::NeutralRans {
         turbulent_schmidt, ..
     } = &c.flow
@@ -538,7 +606,13 @@ fn diffusivity(c: &Case, nut: &[f64], s: usize) -> Vec<f64> {
 pub fn timestep(c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
     timestep_for(c.numerics.steady_algorithm, c, g, s, nut)
 }
-fn timestep_for(algorithm: SteadyAlgorithm, c: &Case, g: &Grid, s: &State, nut: &[f64]) -> f64 {
+pub(crate) fn timestep_for(
+    algorithm: SteadyAlgorithm,
+    c: &Case,
+    g: &Grid,
+    s: &State,
+    nut: &[f64],
+) -> f64 {
     let mut umax = [0.0f64; 3];
     for (f, u) in g.faces.iter().zip(&s.velocity) {
         umax[f.axis] = umax[f.axis].max(u.abs());
@@ -559,11 +633,29 @@ fn timestep_for(algorithm: SteadyAlgorithm, c: &Case, g: &Grid, s: &State, nut: 
         .map(|x| x.diffusivity_m2_s + maxnut / sc)
         .fold(c.flow.viscosity() + maxnut, f64::max);
     let diffusion = 2.0 * dmax * g.dx.iter().map(|h| 1.0 / (h * h)).sum::<f64>();
+    // Settling and surface deposition share the forward-Euler positivity
+    // allowance with advection/diffusion; SSPRK2 retains that same bound.
+    let particle_loss = c
+        .constituents
+        .iter()
+        .filter_map(|sp| sp.particle.as_ref())
+        .map(|p| {
+            (p.settling_speed()
+                + p.ground_deposition_velocity_m_s
+                    .max(p.roof_deposition_velocity_m_s))
+                / g.dx[2]
+        })
+        .fold(0.0, f64::max);
+    let leaf_loss = if c.constituents.iter().any(|sp| sp.particle.is_some()) {
+        crate::vegetation::maximum_leaf_loss(c, g)
+    } else {
+        0.0
+    };
     match algorithm {
-        SteadyAlgorithm::Explicit => c
-            .numerics
-            .max_time_step_s
-            .min(c.numerics.advective_cfl_max.min(0.45) / (adv + diffusion).max(1e-30)),
+        SteadyAlgorithm::Explicit => c.numerics.max_time_step_s.min(
+            c.numerics.advective_cfl_max.min(0.45)
+                / (adv + diffusion + particle_loss + leaf_loss).max(1e-30),
+        ),
         // Implicit viscosity removes the diffusive limit; advection stays explicit.
         SteadyAlgorithm::ImplicitViscous => c
             .numerics
@@ -591,6 +683,7 @@ fn flow_euler(
     };
     let velocity_update = control.span(Phase::VelocityUpdate);
     let grad = g.gradient(p);
+    let drag = crate::vegetation::face_drag(c, g, u);
     let mut inner = 0;
     let mut v: Vec<_> = if c.numerics.steady_algorithm == SteadyAlgorithm::ImplicitViscous {
         // Delta form: (I - dt L_nu) delta = dt R with the full steady residual R.
@@ -598,15 +691,28 @@ fn flow_euler(
         let stencil = g
             .momentum_stencil
             .get_or_init(|| crate::momentum_solve::Stencil::build(c, g));
-        let (delta, info) =
-            crate::momentum_solve::solve_viscous(stencil, c.flow.viscosity(), dt, &b, control)?;
+        let (delta, info) = crate::momentum_solve::solve_viscous_with_drag(
+            stencil,
+            c.flow.viscosity(),
+            dt,
+            &b,
+            &drag,
+            control,
+        )?;
         inner = info.iterations;
         u.iter().zip(delta).map(|(u, d)| u + d).collect()
     } else {
         u.iter()
             .zip(rhs)
             .zip(grad)
-            .map(|((u, r), p)| u + dt * (r - p))
+            .enumerate()
+            .map(|(i, ((u, r), p))| {
+                if drag.is_empty() {
+                    u + dt * (r - p)
+                } else {
+                    u + dt * (r - p) / (1.0 + dt * drag[i])
+                }
+            })
             .collect()
     };
     g.enforce_velocity(c, &mut v);
@@ -646,11 +752,12 @@ fn implicit_iteration(
     let stencil = g
         .momentum_stencil
         .get_or_init(|| crate::momentum_solve::Stencil::build(c, g));
-    let matrix = if c.flow.rans() {
+    let mut matrix = if c.flow.rans() {
         stencil.implicit_matrix_rans(c, g, u, nut, dt)
     } else {
         stencil.implicit_matrix(u, c.flow.viscosity(), dt)
     };
+    matrix.add_drag(&crate::vegetation::face_drag(c, g, u));
     drop(velocity_update);
     let (delta, info) =
         crate::momentum_solve::solve_implicit(stencil, &matrix, &residual, control)?;
@@ -689,7 +796,7 @@ pub fn scalar_substeps(dt: f64, stable: f64) -> (usize, f64) {
 
 /// Reused buffers of the SSPRK2 scalar step.
 #[derive(Default)]
-struct ScalarBuffers {
+pub(crate) struct ScalarBuffers {
     r1: Vec<f64>,
     stage: Vec<f64>,
     r2: Vec<f64>,
@@ -698,9 +805,10 @@ struct ScalarBuffers {
 /// One SSPRK2 step of scalar transport, with its budget increments, written
 /// into `concentration` in place.
 #[allow(clippy::too_many_arguments)]
-fn advance_scalar(
+pub(crate) fn advance_scalar(
     c: &Case,
     g: &Grid,
+    species: usize,
     concentration: &mut [f64],
     velocity: &[f64],
     d: &[f64],
@@ -713,29 +821,45 @@ fn advance_scalar(
     let ScalarBuffers { r1, stage, r2 } = buffers;
     // Linear upwind with a fixed flow: evaluate from the gathered faces.
     let fixed = fixed.filter(|_| c.numerics.transport == crate::case::Advection::LinearUpwind);
-    let rhs = |x: &[f64], out: &mut Vec<f64>| match fixed {
-        Some(op) => op.eval(x, source, out),
-        None => transport::rhs_into(
-            g,
-            x,
-            velocity,
-            d,
-            source,
-            c.numerics.transport,
-            |_| 0.0,
-            out,
-        ),
+    let rhs = |x: &[f64], out: &mut Vec<f64>| {
+        let (emitted, inflow, mut outflow) = match fixed {
+            Some(op) => op.eval(x, source, out),
+            None => transport::rhs_into(
+                g,
+                x,
+                velocity,
+                d,
+                source,
+                c.numerics.transport,
+                |_| 0.0,
+                out,
+            ),
+        };
+        let mut deposited = BTreeMap::new();
+        if let Some(particle) = &c.constituents[species].particle {
+            let (leaving, surfaces) = transport::particle_terms(c, g, particle, x, out);
+            outflow += leaving;
+            deposited = surfaces;
+            let leaves = crate::vegetation::leaf_terms(c, g, x, out);
+            if leaves != 0.0 {
+                deposited.insert("vegetation".into(), leaves);
+            }
+        }
+        (emitted, inflow, outflow, deposited)
     };
-    let (source1, inflow1, outflow1) = rhs(concentration, r1);
+    let (source1, inflow1, outflow1, deposition1) = rhs(concentration, r1);
     stage.clear();
     stage.extend(concentration.iter().zip(r1.iter()).map(|(a, b)| a + dt * b));
-    let (source2, inflow2, outflow2) = rhs(stage, r2);
+    let (source2, inflow2, outflow2, deposition2) = rhs(stage, r2);
     for ((a, b), r) in concentration.iter_mut().zip(stage.iter()).zip(r2.iter()) {
         *a = 0.5 * (*a + b + dt * r);
     }
     budget.emitted_kg += 0.5 * dt * (source1 + source2);
     budget.inflow_kg += 0.5 * dt * (inflow1 + inflow2);
     budget.outflow_kg += 0.5 * dt * (outflow1 + outflow2);
+    for (surface, rate) in deposition1.into_iter().chain(deposition2) {
+        *budget.deposited_kg.entry(surface).or_insert(0.0) += 0.5 * dt * rate;
+    }
 }
 
 /// Advances `s` by one step (one outer iteration with an implicit steady
@@ -849,6 +973,7 @@ pub fn step(
                 advance_scalar(
                     c,
                     g,
+                    j,
                     &mut concentration,
                     &next.velocity,
                     &d,
@@ -1055,8 +1180,11 @@ pub fn assess(
         let values = &s.concentrations[j];
         let mass = values.iter().sum::<f64>() * g.volume;
         let b = &s.budgets[j];
-        let defect = mass - b.initial_kg - b.emitted_kg - b.inflow_kg + b.outflow_kg;
-        let scale = (b.initial_kg + b.emitted_kg + b.inflow_kg + b.outflow_kg).max(1e-30);
+        let deposited_mass = b.deposited_kg.values().sum::<f64>();
+        let defect =
+            mass - b.initial_kg - b.emitted_kg - b.inflow_kg + b.outflow_kg + deposited_mass;
+        let scale =
+            (b.initial_kg + b.emitted_kg + b.inflow_kg + b.outflow_kg + deposited_mass).max(1e-30);
         let minimum = values
             .iter()
             .enumerate()
@@ -1065,7 +1193,7 @@ pub fn assess(
             .fold(f64::INFINITY, f64::min);
         let maximum = values.iter().copied().fold(0.0, f64::max);
         let negative = -values.iter().filter(|v| **v < 0.0).sum::<f64>() * g.volume;
-        let rhs = transport::rhs(
+        let mut rhs = transport::rhs(
             g,
             values,
             &s.velocity,
@@ -1074,6 +1202,18 @@ pub fn assess(
             c.numerics.transport,
             |_| 0.0,
         );
+        let mut deposition_rate_kg_s = BTreeMap::new();
+        if let Some(particle) = &sp.particle {
+            let (leaving, surfaces) =
+                transport::particle_terms(c, g, particle, values, &mut rhs.values);
+            rhs.outflow += leaving;
+            deposition_rate_kg_s = surfaces;
+            let leaves = crate::vegetation::leaf_terms(c, g, values, &mut rhs.values);
+            if leaves != 0.0 {
+                deposition_rate_kg_s.insert("vegetation".into(), leaves);
+            }
+        }
+        let deposited_rate = deposition_rate_kg_s.values().sum::<f64>();
         let residual = rhs.values.iter().map(|v| v.abs()).fold(0.0, f64::max) * length
             / (speed * maximum.max(1e-30));
         add(
@@ -1089,18 +1229,18 @@ pub fn assess(
                 c.numerics.steady_residual_tolerance,
             );
             let flux_scale = if rhs.source + rhs.inflow > 0.0 {
-                rhs.source + rhs.inflow + rhs.outflow
+                rhs.source + rhs.inflow + rhs.outflow + deposited_rate
             } else {
-                rhs.outflow.max(b.initial_kg * speed / length)
+                (rhs.outflow + deposited_rate).max(b.initial_kg * speed / length)
             }
             .max(1e-30);
             add(
                 &format!("{}.steady_mass_balance", sp.id),
-                (rhs.source + rhs.inflow - rhs.outflow).abs() / flux_scale,
+                (rhs.source + rhs.inflow - rhs.outflow - deposited_rate).abs() / flux_scale,
                 1e-6,
             );
         }
-        let receptors = c
+        let receptors: BTreeMap<String, f64> = c
             .receptors
             .iter()
             .zip(weights)
@@ -1111,12 +1251,42 @@ pub fn assess(
                 )
             })
             .collect();
+        let paths = c
+            .receptors
+            .iter()
+            .filter(|r| matches!(r, Receptor::Path { .. }))
+            .map(|r| {
+                let path =
+                    transport::receptor_path_weights(g, r).expect("path receptor passed preflight");
+                let concentrations = path
+                    .weights
+                    .iter()
+                    .map(|weights| weights.iter().map(|(cell, w)| values[*cell] * w).sum())
+                    .collect();
+                (
+                    r.id().to_string(),
+                    PathEvidence {
+                        points_m: path.samples.points_m,
+                        distance_m: path.samples.distance_m,
+                        concentrations_kg_m3: concentrations,
+                        mean_kg_m3: receptors[r.id()],
+                    },
+                )
+            })
+            .collect();
         scalars.push(ScalarEvidence {
             id: sp.id.clone(),
             mass_kg: mass,
             emitted_kg: b.emitted_kg,
             inflow_kg: b.inflow_kg,
             outflow_kg: b.outflow_kg,
+            deposited_kg: b.deposited_kg.clone(),
+            deposition_rate_kg_s,
+            settling_velocity_m_s: sp.particle.as_ref().map(ParticleBin::settling_speed),
+            aerodynamic_diameter_m: sp
+                .particle
+                .as_ref()
+                .map(ParticleBin::aerodynamic_diameter_m),
             budget_defect_kg: defect,
             relative_budget_defect: defect.abs() / scale,
             minimum_kg_m3: minimum,
@@ -1127,6 +1297,7 @@ pub fn assess(
             boundary_inflow_rate_kg_s: rhs.inflow,
             boundary_outflow_rate_kg_s: rhs.outflow,
             receptors_kg_m3: receptors,
+            paths,
         });
     }
     if c.run.mode == Mode::Steady {
@@ -1149,6 +1320,41 @@ pub struct RunResult {
     /// Cell counts, fluid components and mask hash (geometry.json).
     pub geometry: GeometryEvidence,
 }
+
+fn particulate_sums(c: &Case, scalars: &[ScalarEvidence]) -> BTreeMap<String, ParticulateEvidence> {
+    let mut sums = BTreeMap::new();
+    if !c.constituents.iter().any(|sp| sp.particle.is_some()) {
+        return sums;
+    }
+    for (name, cutoff) in [("PM2.5", 2.5e-6), ("PM10", 10e-6)] {
+        let mut evidence = ParticulateEvidence {
+            mass_kg: 0.0,
+            receptors_kg_m3: c
+                .receptors
+                .iter()
+                .map(|r| (r.id().to_string(), 0.0))
+                .collect(),
+        };
+        for (sp, scalar) in c.constituents.iter().zip(scalars) {
+            if sp
+                .particle
+                .as_ref()
+                .is_some_and(|p| p.aerodynamic_diameter_m() <= cutoff)
+            {
+                evidence.mass_kg += scalar.mass_kg;
+                for (rid, value) in &scalar.receptors_kg_m3 {
+                    *evidence
+                        .receptors_kg_m3
+                        .get_mut(rid)
+                        .expect("declared receptor") += value;
+                }
+            }
+        }
+        sums.insert(name.to_string(), evidence);
+    }
+    sums
+}
+
 /// Solves a case within the limits of `control`, from the cold-start state or
 /// from a `restart` state, and returns the inspectable outcome.
 ///
@@ -1320,9 +1526,35 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
     if c.run.mode == Mode::Transient && state.time_s >= c.run.end_time_s * (1.0 - 1e-13) {
         termination = "completed".into();
     }
+    Ok(finish_run(
+        c,
+        &g,
+        state,
+        &sources,
+        &weights,
+        termination,
+        error,
+        initial_state_sha256,
+        control,
+    ))
+}
+
+/// Shared unchanged numerical assessment and archive result construction.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn finish_run(
+    c: &Case,
+    g: &Grid,
+    state: State,
+    sources: &[Vec<f64>],
+    weights: &[transport::Weights],
+    termination: String,
+    error: Option<String>,
+    initial_state_sha256: String,
+    control: &Control,
+) -> RunResult {
     let (checks, constituents, momentum_residual, turbulence_residual) = {
         let _phase = control.span(Phase::Assessment);
-        assess(c, &g, &state, &sources, &weights)
+        assess(c, g, &state, sources, weights)
     };
     let passed = checks.iter().all(|x| x.passed);
     let assessment = if termination == "completed" && passed {
@@ -1346,7 +1578,15 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         termination,
         assessment: assessment.into(),
         error,
-        model_scope: if c.flow.rans() {
+        model_scope: if c.constituents.iter().any(|sp| sp.particle.is_some()) {
+            if c.flow.rans() {
+                "neutral_k_epsilon_particle_transport"
+            } else if c.flow.prescribed() {
+                "prescribed_flow_particle_transport"
+            } else {
+                "incompressible_laminar_particle_transport"
+            }
+        } else if c.flow.rans() {
             "neutral_k_epsilon_rough_wall"
         } else if c.flow.prescribed() {
             "prescribed_flow_passive_transport"
@@ -1368,6 +1608,8 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         mask_sha256: geo.mask_sha256.clone(),
         estimated_peak_mib: c.check().estimated_peak_mib,
         checks,
+        vegetation: crate::vegetation::evidence(c, g, &state.velocity),
+        particulate_matter: particulate_sums(c, &constituents),
         constituents,
         velocity_max_m_s: state.velocity.iter().map(|v| v.abs()).fold(0.0, f64::max),
         momentum_residual,
@@ -1376,10 +1618,11 @@ pub fn run(c: &Case, control: &Control, restart: Option<State>) -> Result<RunRes
         source_sha256: crate::SOURCE_SHA256.into(),
         build_version: format!("{}; {}", env!("CARGO_PKG_VERSION"), crate::RUSTC_VERSION),
         threads: c.run.threads,
+        frozen_flow: None,
     };
-    Ok(RunResult {
+    RunResult {
         summary,
         state,
         geometry: geo,
-    })
+    }
 }

@@ -1,11 +1,11 @@
-//! Fixed symmetric geometric multigrid for the unmasked pressure equation.
+//! Fixed symmetric multigrid for the unchanged Cartesian pressure equation.
 //! This is an original implementation; no external CFD implementation is used.
 //!
 //! Selected with `numerics.pressure_preconditioner = multigrid`, it
 //! preconditions the same PCG solve as IC(0), with the same fine equation and
-//! acceptance gates. It requires one connected fluid component without
-//! masks (CFD-E034). Coarse levels are Galerkin products of linear
-//! interpolation; strongly anisotropic spacings select exact line or small
+//! acceptance gates. Unmasked coarse levels are Galerkin products of linear
+//! interpolation; masks use connected aggregates with one gauge per sealed
+//! component and componentwise coarse solves. strongly anisotropic spacings select exact line or small
 //! plane block smoothing and semicoarsening. The hierarchy is cached in the
 //! grid and rebuilt when the face coefficients change. The public types
 //! report its storage ([`MultigridStats`], from
@@ -24,6 +24,7 @@ use std::{collections::BTreeMap, sync::Mutex};
 const COARSE_CELLS: usize = 32;
 const SWEEPS: usize = 2;
 mod line;
+mod masked;
 use line::BlockSmoother;
 pub use line::BlockSmootherStats;
 
@@ -144,10 +145,12 @@ pub(crate) struct Cached {
     pub hierarchy: Hierarchy,
 }
 
-/// Multigrid needs one connected, unmasked fluid component.
+/// Reject an empty represented pressure space. Masks use connected aggregates.
 pub(crate) fn validate(g: &Grid) -> Result<()> {
-    if g.fluid.iter().any(|v| !v) || g.components.len() != 1 {
-        return Err("CFD-E034: numerics.pressure_preconditioner: multigrid requires an unmasked connected Cartesian grid".into());
+    if g.components.is_empty() {
+        return Err(
+            "CFD-E034: numerics.pressure_preconditioner: multigrid requires fluid cells".into(),
+        );
     }
     Ok(())
 }
@@ -174,7 +177,8 @@ fn face_entry(g: &Grid, f: &crate::grid::Face) -> Option<(u8, usize, usize, u64)
 #[derive(Debug)]
 pub(crate) struct Signature {
     n: [usize; 3],
-    anchored: bool,
+    anchored: Vec<bool>,
+    fluid: Vec<bool>,
     spacing: [u64; 3],
     faces: Vec<(u8, usize, usize, u64)>,
 }
@@ -193,13 +197,17 @@ impl Signature {
         }
         Ok(Self {
             n: g.n,
-            anchored: g.anchored[0],
+            anchored: g.anchored.clone(),
+            fluid: g.fluid.clone(),
             spacing: g.dx.map(f64::to_bits),
             faces,
         })
     }
     pub(crate) fn matches(&self, g: &Grid) -> bool {
-        if self.n != g.n || self.anchored != g.anchored[0] || self.spacing != g.dx.map(f64::to_bits)
+        if self.n != g.n
+            || self.anchored != g.anchored
+            || self.fluid != g.fluid
+            || self.spacing != g.dx.map(f64::to_bits)
         {
             return false;
         }
@@ -515,10 +523,19 @@ impl Level {
 #[derive(Debug)]
 pub(crate) struct Hierarchy {
     levels: Vec<Level>,
+    masked: Option<masked::MaskedHierarchy>,
     pub stats: MultigridStats,
 }
 impl Hierarchy {
     pub fn build(g: &Grid, control: &Control) -> Result<Self> {
+        if g.fluid.iter().any(|v| !v) || g.components.len() != 1 {
+            let masked = masked::MaskedHierarchy::build(g, control)?;
+            return Ok(Self {
+                levels: vec![],
+                stats: masked.stats.clone(),
+                masked: Some(masked),
+            });
+        }
         let mut n = g.n;
         let axes = line_axes(g.n, g.dx);
         let mut centers: [Vec<f64>; 3] =
@@ -620,12 +637,16 @@ impl Hierarchy {
                     })
                     .sum::<usize>(),
         };
-        Ok(Self { levels, stats })
+        Ok(Self {
+            levels,
+            stats,
+            masked: None,
+        })
     }
     pub fn work(&self, built: bool) -> MultigridWork {
         MultigridWork {
             hierarchy_builds: u64::from(built),
-            hierarchy_levels: self.levels.len() as u64,
+            hierarchy_levels: self.stats.level_cells.len() as u64,
             hierarchy_cells: self.stats.level_cells.iter().sum::<usize>() as u64,
             hierarchy_nonzeros: self.stats.level_nonzeros.iter().sum::<usize>() as u64,
             hierarchy_bytes: self.stats.allocated_bytes as u64,
@@ -633,6 +654,10 @@ impl Hierarchy {
         }
     }
     pub fn apply(&mut self, rhs: &[f64], z: &mut [f64], work: &mut MultigridWork) {
+        if let Some(masked) = &mut self.masked {
+            masked.apply(rhs, z, work);
+            return;
+        }
         self.levels[0].rhs.copy_from_slice(rhs);
         cycle(&mut self.levels, work);
         z.copy_from_slice(&self.levels[0].x);

@@ -9,6 +9,7 @@ reported it.
 | `CFD-X`, `CFD-D` | The OpenFOAM adapter and the reference data | [External backend and reference data](#external-backend-and-reference-data) |
 | `CFD-P` | The Python package | [Tools, examples and scripts](#tools-examples-and-scripts) |
 | `CFD-U`, `CFD-T`, `CFD-R` | Example programs, optimization lessons, release and documentation tools | [Tools, examples and scripts](#tools-examples-and-scripts) |
+| `CFD-M` | The map and street converters, the ride tool and the mobile study | [City blocks and mobile measurements](#city-blocks-and-mobile-measurements) |
 | `CFD-B` | Performance probes, comparisons and sweeps | [Tools, examples and scripts](#tools-examples-and-scripts); [Native profiling and accuracy-sweep diagnostics](#native-profiling-and-accuracy-sweep-diagnostics) |
 
 ## Tools, examples and scripts
@@ -136,7 +137,7 @@ after each fix.
 | CFD-E017 | error | Source support degenerate or outside the domain |
 | CFD-E018 | error | More than one initial condition per constituent, or an undeclared one |
 | CFD-E019 | error | Receptor ID missing or repeated |
-| CFD-E020 | error | Steady sources without an open boundary to remove their mass |
+| CFD-E020 | error | Steady sources without an open boundary to remove their mass; a particle source also passes with a declared ground, roof or leaf deposition candidate |
 | CFD-E021 | error | Invalid moving wall |
 | CFD-E022 | error | Wall-time limit above seven days or physical horizon above 1e12 s |
 | CFD-E023 | error | Laminar flow with `ground_open_top`; its open top exists only in the RANS closure |
@@ -144,18 +145,18 @@ after each fix.
 | CFD-E025 | error | Negative or nonfinite initial concentration |
 | CFD-E026 | error | Invalid periodic Gaussian initial condition |
 | CFD-E027 | error | Receptor support degenerate or outside the domain |
-| CFD-E028 | error | A box contains no cell center, so the grid would not represent it; the path names the box |
+| CFD-E028 | error | A box or polygon prism contains no cell center, so the grid would not represent it; the path names the shape |
 | CFD-E030 | error | The geometry leaves no fluid cells |
-| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid was selected with a mask; the library also rejects a masked/disconnected grid or nonpositive/nonfinite pressure weights |
+| CFD-E034 | error | `numerics.pressure_preconditioner`: multigrid on a grid without fluid components, or with nonpositive/nonfinite pressure weights. A geometry mask and several fluid components are supported and do not raise it |
 | CFD-E036 | error | `numerics.pressure_preconditioner`: a principal line-block Cholesky pivot is nonpositive/nonfinite; no diagonal repair or fallback |
-| CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite; no diagonal repair or hidden fallback is applied |
+| CFD-E035 | error | `numerics.pressure_preconditioner`: the multigrid coarse Cholesky factor is not positive definite (on a masked grid, the factor of one fluid component), or masked aggregation could not reduce a connected component; no diagonal repair or hidden fallback is applied |
 | CFD-E037 | error | `numerics.momentum_limiter`: `limited_upwind` without a limiter, or a limiter with another momentum scheme |
 | CFD-E045 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm in transient mode |
 | CFD-E047 | error | `numerics.steady_algorithm`: an implicit pseudo-time algorithm with prescribed flow, or `implicit_viscous` with `neutral_rans` |
 | CFD-E040 | error | A source intersects a solid cell |
 | CFD-E041 | error | A source has no support on the grid |
 | CFD-E042 | error | A receptor is empty or samples a solid cell |
-| CFD-E043 | error | A steady source in a fluid component without an outlet |
+| CFD-E043 | error | A steady source in a fluid component without an outlet; a particle source also passes with a represented ground, roof or leaf deposition sink in that component |
 | CFD-E044 | error | The represented source density is not finite |
 | CFD-E070 | error | `run`, `profile` and `preview`: the estimated peak exceeds 80 % of this host's available memory |
 | CFD-E072 | error | `preview` only: coarsening changes the solid volume by more than 20 % or the number of fluid components |
@@ -163,7 +164,7 @@ after each fix.
 | CFD-W001 | warning | A box spans fewer than 10 vertical cells: too coarse for physical interpretation |
 | CFD-W002 | warning | RANS blockage ratio above the COST 732 recommendation of 3 % |
 | CFD-W003 | warning | RANS domain clearance below the COST 732 recommendation (about 5 H_max upstream, at the sides and above; 15 H_max downstream). Every open, slip or wall side is checked; periodic sides are not |
-| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. See the [pressure guide](developer/pressure-multigrid.md) and anisotropy results |
+| CFD-W004 | warning | `numerics.pressure_preconditioner`: pressure weights select symmetric line/small-plane blocks and semicoarsening (ratio above 25, including stiff two-cell axes). Setup and memory increase; compare total cost with IC(0), especially for extreme stretching. Weak two-cell spans alone do not trigger this policy. With geometry the same weight ratio draws the warning, but the masked path has no line blocks: it keeps point smoothing and can need more iterations and time than IC(0). See the [pressure guide](developer/pressure-multigrid.md) and anisotropy results |
 | CFD-W070 | warning | `check` only: the estimated peak exceeds 80 % of this host's available memory; the grid checks are skipped |
 
 W002 and W003 encode the COST 732 best-practice guideline (Franke et al., 2007) as summarized by secondary sources that cite it. The primary document was not retrieved from its distribution share; `validation/data-inventory.json` records that. They are warnings because best-practice distances depend on the scenario: a wind-tunnel reproduction may use the tunnel's own dimensions.
@@ -266,3 +267,81 @@ measurement-time checks but fails revalidation after all child runs. The row
 retains `accepted_at_measurement`, gains `collection_verified=false` and is
 excluded from qualifying costs. `sweep.collection.manifest` identifies a changed
 sealed manifest. Collection does not repair files or relax archive checks.
+
+`CFD-E080 constituents[i].particle.<field>` rejects a nonfinite or out-of-range
+spherical aerosol diameter (1e-8..1e-4 m), density (above reference air and at most
+30000 kg/m3), or settling/deposition speed (0..10 m/s). `CFD-E081
+constituents[i].particle.settling_velocity_m_s` rejects a computed
+Stokes–Cunningham speed outside its creeping-flow range (particle Reynolds
+number above 0.1). A separately justified direct speed bypasses that formula;
+it does not validate the particle physics.
+
+`CFD-E082 vegetation[i].<field>` rejects a duplicate/empty canopy ID, an
+invalid box, or nonfinite/out-of-range canopy parameters: LAD 0..100 m2/m3,
+drag coefficient 0..10, leaf collection velocity 0..10 m/s.
+`CFD-E083 vegetation[i].drag_coefficient` rejects positive drag with a
+prescribed velocity, because no momentum response would be solved. Use zero
+drag for a prescribed-flow leaf-collection study, or solve laminar/RANS flow.
+
+## City blocks and mobile measurements
+
+| Code | Path | Meaning |
+|---|---|---|
+| CFD-E084 | `geometry[i].footprint_m`, `geometry_min_passage_cells` | Invalid/self-intersecting polygon, mismatched footprint bounds or nonpositive passage-resolution request |
+| CFD-E085 | `building_roughness_m` | Building roughness must be finite, positive and used with neutral RANS |
+| CFD-W011 | `geometry_min_passage_cells` | A represented horizontal street between solids has fewer cells than requested, or the request was not evaluated because the grid has more than 10000000 cells (the message says which; `geometry.json` still records the passage of every shape) |
+| CFD-M001 | `map` | Converter rejected source geometry, coordinates, elevation range, provenance or native case check; the message names the reason |
+
+The wind-direction campaign (`validation/urban_campaign.py`) has no code of
+its own. It refuses invalid budgets or a case without `neutral_rans` flow with
+a Python `ValueError`, and each direction that fails keeps a row with
+`accepted: false` and an `error` text such as `campaign_budget_exhausted`,
+`worker_watchdog_timeout`, `worker_failed` or `no_native_archive`.
+
+`CFD-E028` is an error also when a polygon prism contains no cell center: a
+warning must never silently remove a building from the physics.
+
+For particle bins, `CFD-E020 run.mode` admits a closed-air source only with
+a declared removal candidate, and `CFD-E043 sources[i]` then requires an actual
+positive represented ground/roof/leaf removal mechanism in the same fluid
+component as each source support cell. A sink in another component or a canopy
+volume that misses all fluid-cell centers does not qualify. Passive gases keep
+the original outlet requirement. Admissibility does not establish convergence.
+
+`CFD-M002` covers the optional supplied-street emission converter. Paths identify
+`rates.columns`, `rates.rows[CSV line].<field>`, `streets.crs`, `streets.features[i].<field>`,
+`streets['ID'].segments[i]`, `map_provenance.<field>`, `height_m`, `case.sources`,
+`native_check` or `output`. It rejects missing/nonfinite/negative rates, missing
+or mismatched kg/s/m units, duplicate/unknown IDs, invalid coordinates or map
+transforms, continuous building intersections and failed native case preflight.
+Intersecting sources are never relocated; positive-rate omissions from clipping
+and unrated streets remain explicit in the provenance. See
+[the traffic converter](../integrations/traffic-sources.md).
+
+`CFD-E086 receptors[i].polyline_m`, `.height_m` or `.sample_spacing_m`
+rejects an invalid path receptor: 2..4097 finite in-domain vertices, positive
+segment lengths, in-domain height and finite positive spacing are required.
+`CFD-E087 receptors[i]` rejects any path segment that enters a represented solid
+cell, even between generated samples, or any sample interpolation stencil with
+positive solid support. `CFD-E088 receptors[i].sample_spacing_m` rejects more
+than 20001 generated samples per path; `CFD-E088 receptors` rejects more than
+50000 across a case. Both limits apply before sample allocation.
+
+`CFD-M004 virtual_ride` identifies invalid/nonfinite speed, interval, response
+time or sensor series, an unaccepted/non-steady source field, consumed archive
+checksum problems, a missing route/constituent, a ride exceeding 200000 samples,
+or an existing/unwritable result file. The tool's output is an idealized pass
+through a steady mean local increment, not time-resolved atmospheric validation.
+
+`CFD-E089 mobile_response.case` rejects nonlinear transport, nonzero initial
+scalar conditions, a non-steady run or changed frozen-flow physics/controls.
+`mobile_response.flow` rejects an incomplete/unaccepted, mismatched or changed
+flow preparation; identities and actual field gates are recomputed. A retained
+flow/diffusivity allocation exceeding `run.memory_limit_mib` is also rejected.
+The ordinary run and restart contracts are unchanged.
+
+`CFD-M003 mobile_inference` covers invalid matrix/observation identities,
+nonfinite values, noise/pass assumptions, malformed study inputs, unsafe IDs,
+duplicate training/held-out identities and execution/output errors in the
+optional mobile study driver. Bounded native or integer-solver failures remain
+in the report, and the study then does not pass.

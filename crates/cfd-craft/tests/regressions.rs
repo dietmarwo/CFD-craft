@@ -100,6 +100,7 @@ fn laminar_flow_rejects_the_rans_open_top() {
 fn a_box_without_cell_centers_is_rejected() {
     let mut c = canyon();
     c.geometry.push(Block {
+        footprint_m: None,
         id: "thin".into(),
         min_m: [10.0, 3.0, 0.0],
         max_m: [10.01, 13.0, 1.0],
@@ -198,6 +199,7 @@ fn the_mask_topology_matches_the_built_grid() {
             acceleration_m_s2: [0.0; 3],
         };
         c.geometry.push(Block {
+            footprint_m: None,
             id: "wall".into(),
             min_m: [5.0, 0.0, 0.0],
             max_m: [7.0, c.domain.size_m[1], c.domain.size_m[2]],
@@ -225,12 +227,26 @@ fn an_empty_box_error_names_its_index() {
     let mut c = canyon();
     // "we st" begins with the ID of box "west"; the error must still name the new box.
     c.geometry.push(Block {
+        footprint_m: None,
         id: "we st".into(),
         min_m: [10.0, 3.0, 0.0],
         max_m: [10.01, 13.0, 1.0],
     });
     let e = Grid::build(&c).unwrap_err();
     assert!(e.starts_with("CFD-E028: geometry[2] (box we st)"), "{e}");
+}
+
+#[test]
+fn an_empty_prism_error_calls_it_a_prism() {
+    let mut c = canyon();
+    c.geometry.push(Block {
+        footprint_m: Some(vec![[10.0, 3.0], [10.01, 3.0], [10.01, 13.0], [10.0, 13.0]]),
+        id: "thin".into(),
+        min_m: [10.0, 3.0, 0.0],
+        max_m: [10.01, 13.0, 1.0],
+    });
+    let e = Grid::build(&c).unwrap_err();
+    assert!(e.starts_with("CFD-E028: geometry[2] (prism thin)"), "{e}");
 }
 
 #[test]
@@ -286,9 +302,9 @@ fn the_output_estimate_counts_receptors_and_history() {
     for i in 0..25_000 {
         let mut r = receptor.clone();
         match &mut r {
-            Receptor::Point { id, .. } | Receptor::VolumeAverage { id, .. } => {
-                *id = format!("p{i}")
-            }
+            Receptor::Point { id, .. }
+            | Receptor::VolumeAverage { id, .. }
+            | Receptor::Path { id, .. } => *id = format!("p{i}"),
         }
         c.receptors.push(r);
     }
@@ -427,6 +443,7 @@ fn the_masked_pressure_operator_matches_an_assembled_reference() {
             .iter()
             .enumerate()
             .map(|(i, (lo, hi))| Block {
+                footprint_m: None,
                 id: format!("shell{i}"),
                 min_m: *lo,
                 max_m: *hi,
@@ -845,6 +862,7 @@ fn kernels_keep_their_recorded_bits() {
     cavity.grid.cells = [9, 3, 7];
     let mut masked = cavity.clone();
     masked.geometry.push(Block {
+        footprint_m: None,
         id: "step".into(),
         min_m: [0.4, 0.0, 0.0],
         max_m: [0.7, 1.0, 0.35],

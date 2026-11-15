@@ -1,6 +1,12 @@
 # Performance gap: current state and remaining stages
-
 <!-- check: none: record of past runs -->
+
+Masked multigrid (P2b) is implemented and its setup and reuse costs are
+recorded (P2c), with independent topology/nullspace/SPD/reference tests.
+The coupled urban throughput gate remains open; see the
+[urban features record](urban-extension.md). Historical measurements below
+retain their original implementation and scope.
+
 
 ## After P5c, P5d and ten performance iterations (1 November 2026)
 

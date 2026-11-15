@@ -208,3 +208,6 @@ mass stays at 1e-6 kg. Negative concentrations are never clipped: they fail.
 
 - [Chapter 6](06-flow-cavity.md): a flow that the solver computes.
 - [Chapter 12](12-studies.md): response matrices and source inference.
+- [Chapter 22](22-urban-geometry-particles-vegetation.md#particle-size-classes):
+  particles that settle and deposit. [Chapter 23](23-mobile-paths-and-virtual-rides.md):
+  a receptor along a route.

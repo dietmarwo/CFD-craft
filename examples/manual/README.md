@@ -1,6 +1,6 @@
 # User-manual examples
 
-The case and the programs that the [guide](../../docs/guide/README.md) runs.
+The cases and the programs that the [guide](../../docs/guide/README.md) runs.
 Run commands from the repository root, build with the lockfiles and choose new
 output names.
 
@@ -22,6 +22,7 @@ validation.
 | File | Used in | Standalone command |
 |---|---|---|
 | [point-source.json](point-source.json) | [Chapter 1](../../docs/guide/01-first-run.md), [chapter 3](../../docs/guide/03-cli-and-archive.md) and most native chapters | `target/release/cfd-craft run examples/manual/point-source.json --output runs/point` |
+| [path-ride.json](path-ride.json) | [Chapter 23](../../docs/guide/23-mobile-paths-and-virtual-rides.md): a point source with a path receptor | `target/release/cfd-craft run examples/manual/path-ride.json --output runs/path-field` |
 | [cli_workflow.py](cli_workflow.py) | [Chapter 11](../../docs/guide/11-python.md#the-whole-native-workflow-in-one-script) | `python examples/manual/cli_workflow.py --output runs/cli` |
 | [manual_library.rs](../../crates/cfd-craft/examples/manual_library.rs) | [Chapter 20](../../docs/guide/20-rust-library.md#solve-in-process) | `cargo run --release --locked -p cfd-craft --example manual_library` |
 | [manual_control.rs](../../crates/cfd-craft/examples/manual_control.rs) | [Chapter 20](../../docs/guide/20-rust-library.md#cancellation-and-deadlines) | `cargo run --release --locked -p cfd-craft --example manual_control` |

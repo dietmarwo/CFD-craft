@@ -1,9 +1,9 @@
 # CFD-craft for Python
 <!-- check: rel=1e-4 -->
 
-A native Rust research solver for incompressible flow and passive-gas
-dispersion, called in-process from Python 3.10 or newer. No NumPy, OpenFOAM or
-subprocess is needed.
+A native Rust research solver for incompressible flow and the dispersion of
+gases and particles around buildings, called in-process from Python 3.10 or
+newer. No NumPy, OpenFOAM or subprocess is needed.
 
 ```sh
 python -m pip install cfd-craft

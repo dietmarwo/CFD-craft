@@ -13,7 +13,7 @@
 //! default, or [multigrid](crate::multigrid)) and accepts a solution only
 //! after recomputing its residual from the face definitions. Failures are
 //! `CFD-E031` (incompatible flux), `CFD-E032` (lost positive definiteness)
-//! and `CFD-E033` (iteration limit); multigrid adds `CFD-E034` (masked grid),
+//! and `CFD-E033` (iteration limit); multigrid adds `CFD-E034` (invalid topology or weights),
 //! `CFD-E035` and `CFD-E036`. A stop requested by the
 //! [`Control`] returns its `cancelled` or
 //! `wall_time_limit`.
@@ -594,6 +594,7 @@ mod tests {
                 *initial_velocity_m_s = [1.0, 0.0, 0.0];
             }
             c.geometry.push(Block {
+                footprint_m: None,
                 id: "barrier".into(),
                 min_m: [2.0, 0.0, 0.0],
                 max_m: [3.0, 3.0, 2.0],
@@ -632,6 +633,7 @@ mod tests {
                 }
             }
             c.geometry.push(Block {
+                footprint_m: None,
                 id: "barrier".into(),
                 min_m: [2.0, 0.0, 0.0],
                 max_m: [3.0, 3.0, 2.0],
@@ -678,6 +680,7 @@ mod tests {
         let mut c = case([18, 9, 33]);
         c.domain.size_m = [7.15, 42.45, 38.31];
         c.geometry.push(Block {
+            footprint_m: None,
             id: "barrier".into(),
             min_m: [2.0, 0.0, 0.0],
             max_m: [3.0, 20.0, 15.0],
@@ -752,6 +755,7 @@ mod tests {
                 *initial_velocity_m_s = [1.0, 0.0, 0.0];
             }
             c.geometry.push(Block {
+                footprint_m: None,
                 id: "barrier".into(),
                 min_m: [2.0, 0.0, 0.0],
                 max_m: [3.0, 3.0, 2.0],

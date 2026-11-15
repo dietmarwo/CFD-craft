@@ -14,7 +14,7 @@ catalog). Do not edit generated text by hand.
 | [Result schema](result-schema.md) | generated from `describe` | Fields of `summary.json` and of the phase profile |
 | [Python API](python-api.md) | generated from the docstrings | `describe`, `check`, `simulate`, `CfdError` and the console script |
 | [Command line](cli.md) | hand-written, with two generated blocks | Each `cfd-craft` command: inputs, outputs, exit codes |
-| [Units and conventions](units-and-conventions.md) | hand-written | Units, coordinates, wind direction, array ordering |
+| [Units and conventions](units-and-conventions.md) | hand-written | Units, coordinates, wind direction, particles, rotated map frames, array ordering |
 | [Scripts](scripts.md) | hand-written | The Python tools: arguments and exit codes |
 
 Reference pages that live one level up:

@@ -45,6 +45,12 @@
 - [20. The Rust library](guide/20-rust-library.md)
 - [21. Troubleshooting](guide/21-troubleshooting.md)
 
+# Part VI: City blocks and mobile measurements
+
+- [22. Urban geometry, particles and vegetation](guide/22-urban-geometry-particles-vegetation.md)
+- [23. Mobile paths and virtual rides](guide/23-mobile-paths-and-virtual-rides.md)
+- [24. Source inference and route selection from rides](guide/24-mobile-source-inference.md)
+
 # Reference
 
 - [Reference](reference/README.md)
@@ -83,6 +89,8 @@
   - [Mesh initialization](evidence/mesh-initialization.md)
   - [Refinement campaign](evidence/refinement-campaign.md)
   - [Optimization lessons](evidence/optimization-lessons.md)
+  - [Urban features](evidence/urban-extension.md)
+  - [Mobile measurements](evidence/mobile-measurements.md)
 
 # Developer
 

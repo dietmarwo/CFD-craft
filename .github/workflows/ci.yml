@@ -614,6 +614,33 @@ jobs:
             runs/**/report.json
             runs/**/summary.json
             runs/**/*.png
+  urban-mobile:
+    # The tests of the map and street converters, the virtual ride, mobile
+    # inference and route selection, the urban campaign and the field
+    # checker's urban and mobile checks. About ten seconds after the builds.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: cargo build --release --workspace --locked
+      - run: cargo build --release --workspace --examples --locked
+      # test_mobile_fields skips without this example; here it must run.
+      - run: test -x target/release/examples/mobile_response
+      - run: python -m pip install -r requirements-validation.txt -r integrations/requirements-mobile.txt
+      - run: |
+          for name in mobile_fields mobile_inference mobile_study traffic_sources \
+              urban_campaign urban_fields urban_geometry_evidence urban_map \
+              urban_summary virtual_ride; do
+            python validation/test_$name.py -v
+            python -O validation/test_$name.py -v
+          done
   docs:
     # The code blocks of the guide, the reference, the entry pages and the
     # READMEs (scripts/check_docs.py, smoke mode: sections marked `long` are
@@ -638,11 +665,15 @@ jobs:
       - run: python -m pip install -r requirements-validation.txt
       # The versions of guide chapter 13.
       - run: python -m pip install fcmaes-rust==0.2.1 lp-ip-craft==0.29.0
+      # The map converter of guide chapter 22 (Shapely).
+      - run: python -m pip install -r integrations/requirements-mobile.txt
       - run: python scripts/generate_reference.py --check
       - run: python validation/test_check_docs.py -v
       - run: python -O validation/test_check_docs.py -v
       - run: python validation/test_generate_reference.py -v
       - run: python -O validation/test_generate_reference.py -v
+      - run: python validation/test_mdbook_links.py -v
+      - run: python -O validation/test_mdbook_links.py -v
       - run: mkdir -p runs
       - run: python scripts/check_docs.py --smoke > runs/docs-check.json
       - run: python -O scripts/check_docs.py --smoke > runs/docs-check-optimized.json

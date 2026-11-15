@@ -1,0 +1,5 @@
+# Mobile-study scripts only; native CFD core stays dependency-free of these.
+-r requirements-urban.txt
+numpy>=1.26,<3
+scipy>=1.11,<2
+lp-ip-craft==0.29.0

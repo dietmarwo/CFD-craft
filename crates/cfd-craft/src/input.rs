@@ -109,7 +109,7 @@ pub fn full_check(c: &Case) -> (CheckReport, Option<GeometryEvidence>) {
         Ok(g) => g,
         Err(e) => {
             let (code, message) = coded(&e, "CFD-E030");
-            // Box errors start with the element path, for example "geometry[3] (box b) ...".
+            // Shape errors start with the element path, for example "geometry[3] (box b) ...".
             let path = message
                 .split_once(' ')
                 .map(|(p, _)| p)

@@ -26,6 +26,55 @@ pub fn cell_at(g: &Grid, p: [f64; 3]) -> usize {
         std::array::from_fn(|a| ((p[a] / g.dx[a]).floor() as usize).min(g.n[a] - 1)),
     )
 }
+/// Whether a particle has a represented positive removal mechanism in each
+/// fluid component. This is a connectivity/admissibility screen, not proof of
+/// scalar reachability or numerical convergence. Gases keep the outlet rule.
+fn particle_component_sinks(c: &Case, g: &Grid, particle: &ParticleBin) -> Vec<bool> {
+    let mut sinks = vec![false; g.components.len()];
+    let settling = particle.settling_speed();
+    for face in &g.faces {
+        if face.axis != 2 || face.lo.is_some() {
+            continue;
+        }
+        let Some(cell) = face.hi else {
+            continue;
+        };
+        let rate = match face.kind {
+            FaceKind::Wall => {
+                let ground = face.coord[2] == 0 && c.boundaries.z != Boundary::Periodic;
+                settling
+                    + if ground {
+                        particle.ground_deposition_velocity_m_s
+                    } else {
+                        particle.roof_deposition_velocity_m_s
+                    }
+            }
+            FaceKind::Inlet | FaceKind::Outlet | FaceKind::Slip
+                if c.boundaries.z == Boundary::Open && face.coord[2] == 0 =>
+            {
+                settling
+            }
+            _ => 0.0,
+        };
+        if rate > 0.0 {
+            sinks[g.component[cell]] = true;
+        }
+    }
+    for (cell, fluid) in g.fluid.iter().enumerate() {
+        if !fluid {
+            continue;
+        }
+        let point = g.center(cell);
+        if c.vegetation.iter().any(|v| {
+            v.leaf_area_density_m2_m3 > 0.0
+                && v.leaf_deposition_velocity_m_s > 0.0
+                && (0..3).all(|axis| v.min_m[axis] <= point[axis] && point[axis] < v.max_m[axis])
+        }) {
+            sinks[g.component[cell]] = true;
+        }
+    }
+    sinks
+}
 /// The represented source density of each constituent, in kg/(m3 s) per
 /// cell and in case order. Each source's integrated [`Source::rate`] is
 /// distributed over its support (the point's cell, the cells a line crosses,
@@ -92,15 +141,26 @@ pub fn source_fields(c: &Case, g: &Grid) -> Result<Vec<Vec<f64>>> {
                 s.id()
             ));
         }
+        let particle_sinks = if c.run.mode == Mode::Steady && s.rate() > 0.0 {
+            c.constituents[si]
+                .particle
+                .as_ref()
+                .map(|particle| particle_component_sinks(c, g, particle))
+        } else {
+            None
+        };
         if c.run.mode == Mode::Steady
             && s.rate() > 0.0
-            && weights
-                .iter()
-                .enumerate()
-                .any(|(i, w)| *w > 1e-14 && !g.anchored[g.component[i]])
+            && weights.iter().enumerate().any(|(i, w)| {
+                *w > 1e-14
+                    && !g.anchored[g.component[i]]
+                    && !particle_sinks
+                        .as_ref()
+                        .is_some_and(|sinks| sinks[g.component[i]])
+            })
         {
             return Err(format!(
-                "CFD-E043: steady source {} has no outlet in its fluid component",
+                "CFD-E043: steady source {} has no outlet or represented particle deposition sink in its fluid component",
                 s.id()
             ));
         }
@@ -116,6 +176,191 @@ pub fn source_fields(c: &Case, g: &Grid) -> Result<Vec<Vec<f64>>> {
         return Err("CFD-E044: represented source density is nonfinite".into());
     }
     Ok(fields)
+}
+/// Geometry and arc-length quadrature of a path receptor.
+#[derive(Clone, Debug)]
+pub struct PathSamples {
+    /// Ordered three-dimensional positions, in local meters.
+    pub points_m: Vec<[f64; 3]>,
+    /// Distance from the first vertex, in meters, including zero and full length.
+    pub distance_m: Vec<f64>,
+    /// Normalized trapezoidal coefficient of each sample in the path mean.
+    pub mean_weights: Vec<f64>,
+}
+/// A path's geometry and ordinary linear interpolation weights for every sample.
+#[derive(Clone, Debug)]
+pub struct PathWeights {
+    /// Generated sample geometry and path-mean quadrature.
+    pub samples: PathSamples,
+    /// Cell interpolation weights, one sparse vector per generated sample.
+    pub weights: Vec<Weights>,
+}
+/// Generate equally spaced arc-length samples with both endpoints included.
+/// The actual spacing is length/ceil(length/requested_spacing). No flow or
+/// transport equation is changed. Invalid paths/sample counts are CFD-E086/88.
+pub fn path_samples(receptor: &Receptor) -> Result<PathSamples> {
+    let Receptor::Path {
+        polyline_m,
+        height_m,
+        ..
+    } = receptor
+    else {
+        return Err("CFD-E086: receptors: path sampling requires a path receptor".into());
+    };
+    let count = receptor.path_sample_count().unwrap_or(usize::MAX);
+    if count > PATH_SAMPLES_MAX {
+        return Err(format!(
+            "CFD-E088: receptor {} exceeds 20001 path samples",
+            receptor.id()
+        ));
+    }
+    if !(2..=4097).contains(&polyline_m.len())
+        || !height_m.is_finite()
+        || polyline_m.iter().flatten().any(|v| !v.is_finite())
+    {
+        return Err(format!(
+            "CFD-E086: receptor {} has invalid path vertices/height",
+            receptor.id()
+        ));
+    }
+    let mut cumulative = vec![0.0];
+    for segment in polyline_m.windows(2) {
+        let length = (segment[1][0] - segment[0][0]).hypot(segment[1][1] - segment[0][1]);
+        if length <= 0.0 {
+            return Err(format!(
+                "CFD-E086: receptor {} has a zero-length segment",
+                receptor.id()
+            ));
+        }
+        cumulative.push(cumulative.last().unwrap() + length);
+    }
+    let length = *cumulative.last().unwrap();
+    let intervals = count - 1;
+    let mut result = PathSamples {
+        points_m: Vec::with_capacity(count),
+        distance_m: Vec::with_capacity(count),
+        mean_weights: Vec::with_capacity(count),
+    };
+    let mut segment = 0;
+    for sample in 0..count {
+        let distance = if sample == intervals {
+            length
+        } else {
+            length * sample as f64 / intervals as f64
+        };
+        while segment + 2 < cumulative.len() && cumulative[segment + 1] < distance {
+            segment += 1;
+        }
+        let t = ((distance - cumulative[segment])
+            / (cumulative[segment + 1] - cumulative[segment]))
+            .clamp(0.0, 1.0);
+        let point = if sample == intervals {
+            let p = polyline_m.last().unwrap();
+            [p[0], p[1], *height_m]
+        } else {
+            let from = polyline_m[segment];
+            let to = polyline_m[segment + 1];
+            [
+                from[0] + t * (to[0] - from[0]),
+                from[1] + t * (to[1] - from[1]),
+                *height_m,
+            ]
+        };
+        result.points_m.push(point);
+        result.distance_m.push(distance);
+        result
+            .mean_weights
+            .push(if sample == 0 || sample == intervals {
+                0.5 / intervals as f64
+            } else {
+                1.0 / intervals as f64
+            });
+    }
+    Ok(result)
+}
+fn check_path_segments(g: &Grid, receptor: &Receptor) -> Result<()> {
+    let Receptor::Path {
+        polyline_m,
+        height_m,
+        ..
+    } = receptor
+    else {
+        return Ok(());
+    };
+    if polyline_m.iter().any(|p| {
+        p[0] < 0.0
+            || p[1] < 0.0
+            || p[0] >= g.n[0] as f64 * g.dx[0]
+            || p[1] >= g.n[1] as f64 * g.dx[1]
+    }) || *height_m < 0.0
+        || *height_m >= g.n[2] as f64 * g.dx[2]
+    {
+        return Err(format!(
+            "CFD-E086: receptor {} path is outside the domain",
+            receptor.id()
+        ));
+    }
+    for (segment_index, segment) in polyline_m.windows(2).enumerate() {
+        let mut crossings = vec![0.0, 1.0];
+        for (axis, (&start, &end)) in segment[0].iter().zip(&segment[1]).enumerate() {
+            let delta = end - start;
+            if delta == 0.0 {
+                continue;
+            }
+            for k in 1..g.n[axis] {
+                let t = (k as f64 * g.dx[axis] - start) / delta;
+                if t > 0.0 && t < 1.0 {
+                    crossings.push(t);
+                }
+            }
+        }
+        crossings.sort_by(f64::total_cmp);
+        for pair in crossings.windows(2) {
+            if pair[1] <= pair[0] {
+                continue;
+            }
+            let t = 0.5 * (pair[0] + pair[1]);
+            let point = [
+                segment[0][0] + t * (segment[1][0] - segment[0][0]),
+                segment[0][1] + t * (segment[1][1] - segment[0][1]),
+                *height_m,
+            ];
+            if !g.fluid[cell_at(g, point)] {
+                return Err(format!(
+                    "CFD-E087: receptor {} path segment {segment_index} crosses a represented solid cell",
+                    receptor.id()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+/// Build the ordinary point interpolation weights of every generated path
+/// sample. Entire segments are checked for solid crossings, including between
+/// sample positions; each point also retains the strict through-wall stencil rule.
+pub fn receptor_path_weights(g: &Grid, receptor: &Receptor) -> Result<PathWeights> {
+    let samples = path_samples(receptor)?;
+    check_path_segments(g, receptor)?;
+    let weights = samples
+        .points_m
+        .iter()
+        .map(|point| {
+            receptor_weights(
+                g,
+                &Receptor::Point {
+                    id: receptor.id().to_string(),
+                    point_m: *point,
+                },
+            )
+            .map_err(|e| {
+                format!(
+                    "CFD-E087: receptor {} path sample has invalid interpolation support: {e}",
+                    receptor.id()
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(PathWeights { samples, weights })
 }
 /// The normalized sampling weights of a receptor: trilinear interpolation
 /// between cell centers (clamped at the domain boundary) for a point, exact
@@ -163,6 +408,16 @@ pub fn receptor_weights(g: &Grid, r: &Receptor) -> Result<Weights> {
                     result.push((i, w));
                 }
             }
+        }
+        Receptor::Path { .. } => {
+            let path = receptor_path_weights(g, r)?;
+            let mut combined = std::collections::BTreeMap::<usize, f64>::new();
+            for (weights, coefficient) in path.weights.iter().zip(&path.samples.mean_weights) {
+                for (cell, value) in weights {
+                    *combined.entry(*cell).or_default() += coefficient * value;
+                }
+            }
+            result = combined.into_iter().collect();
         }
     }
     if result.is_empty() || result.iter().any(|(i, _)| !g.fluid[*i]) {
@@ -467,6 +722,68 @@ pub(crate) fn rhs_into(
     (source.iter().sum::<f64>() * g.volume, inflow, outflow)
 }
 
+/// Add conservative downward settling and absorbing ground/roof fluxes to an
+/// already evaluated gas RHS. Returns additional open-boundary outflow and
+/// deposition rates by surface. Interior settling uses first-order upwind;
+/// the same flux is applied with opposite signs to neighboring fluid cells.
+pub fn particle_terms(
+    case: &Case,
+    g: &Grid,
+    particle: &ParticleBin,
+    concentrations: &[f64],
+    values: &mut [f64],
+) -> (f64, std::collections::BTreeMap<String, f64>) {
+    let settling = particle.settling_speed();
+    let mut outflow = 0.0;
+    let mut deposited = std::collections::BTreeMap::new();
+    for f in &g.faces {
+        if f.axis != 2 {
+            continue;
+        }
+        match f.kind {
+            FaceKind::Interior => {
+                let (Some(lo), Some(hi)) = (f.lo, f.hi) else {
+                    continue;
+                };
+                if lo == hi {
+                    continue; // one-cell periodic axis: exactly zero drift operator
+                }
+                let flux = settling * concentrations[hi] * f.area / g.volume;
+                values[lo] += flux;
+                values[hi] -= flux;
+            }
+            FaceKind::Inlet | FaceKind::Outlet | FaceKind::Slip
+                if case.boundaries.z == Boundary::Open =>
+            {
+                // Downward drift carries zero incremental concentration into the
+                // upper boundary, and removes mass at an open lower boundary.
+                if let (None, Some(hi)) = (f.lo, f.hi) {
+                    let flux = settling * concentrations[hi] * f.area;
+                    values[hi] -= flux / g.volume;
+                    outflow += flux;
+                }
+            }
+            FaceKind::Wall => {
+                if let (None, Some(hi)) = (f.lo, f.hi) {
+                    let (name, extra) =
+                        if f.coord[2] == 0 && case.boundaries.z != Boundary::Periodic {
+                            ("ground", particle.ground_deposition_velocity_m_s)
+                        } else {
+                            ("roof", particle.roof_deposition_velocity_m_s)
+                        };
+                    let flux = (settling + extra) * concentrations[hi] * f.area;
+                    values[hi] -= flux / g.volume;
+                    if flux != 0.0 {
+                        *deposited.entry(name.to_string()).or_insert(0.0) += flux;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    (outflow, deposited)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,6 +803,7 @@ mod tests {
         let mut masked = canyon.clone();
         masked.boundaries.y = Boundary::Periodic;
         masked.geometry.push(Block {
+            footprint_m: None,
             id: "extra".into(),
             min_m: [12.0, 0.0, 0.0],
             max_m: [13.0, 16.0, 2.0],

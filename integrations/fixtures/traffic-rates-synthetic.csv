@@ -1,0 +1,5 @@
+street_id,constituent,rate_kg_s_m,units
+main,tracer,1e-7,kg/s/m
+elbow,tracer,2e-7,kg/s/m
+branches,tracer,3e-7,kg/s/m
+outside,tracer,4e-7,kg/s/m

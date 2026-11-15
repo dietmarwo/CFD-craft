@@ -44,7 +44,7 @@ d = json.load(open("runs/worker-description.json"))
 print(sorted(x["profile"] for x in d["examples"]))
 ```
 
-The worker registers one model, `app.cfd.source-allocation`, version 1. It consumes a hashed case and requires prescribed flow, exactly three sources with equal positive base rates, one constituent and at least one receptor. Its built-in example uses `cases/verification/source-response.json`.
+The worker registers two models. `app.cfd.source-allocation`, version 1, is the model of this chapter's four jobs. It consumes a hashed case and requires prescribed flow, exactly three sources with equal positive base rates, one constituent and at least one receptor. Its built-in example uses `cases/verification/source-response.json`. `app.cfd.wind-direction`, version 1, is described [below](#wind-direction-jobs-for-a-city-block).
 
 It exposes two box-bounded parameters, `x0` and `x1` in [0.1, 1.4]. The three source multipliers are `x0`, `x1` and `3 - x0 - x1`; the third lies in [0.2, 2.8], so every source stays positive and the total emission is preserved for equal base rates. The objective is the largest receptor concentration divided by 1e-8 kg/m3. Lesson F1 of [chapter 13](13-optimization-lessons.md) solves the same problem as a linear program.
 
@@ -105,6 +105,25 @@ Keep objective calls, SDK rechecks, failed and canceled work and CFD steps apart
 The command and optimizer files written by `run_jobs.py` are ordinary `execution.command/0.1` and `optimization.job/0.1` envelopes, so [experiment-craft](https://github.com/dietmarwo/experiment-craft) can schedule them as dependent campaign steps without a new CFD protocol or server. experiment-craft owns placement, dependencies and transfer; CFD-craft owns cases and CFD evidence. `command.json` names the Python interpreter that ran `run_jobs.py` as `argv[0]`; replace it with the interpreter of the target node when reusing the file.
 
 Not tested in this release: a full multi-node CFD campaign, remote machine commissioning and transfer of large fields.
+
+## Wind-direction jobs for a city block
+
+`app.cfd.wind-direction` optimizes over the wind direction of a case with buildings. It consumes a checked `neutral_rans` case with one constituent, sources and receptors. Its one parameter is the meteorological wind direction in the model frame, where the wind comes from, in [0, 360]. The objective is the largest receptor concentration divided by 1e-8 kg/m3. Every evaluation starts cold and must end as an accepted steady solution; anything else is returned to the optimizer as an error, never as a number. The model returns a scalar, not a field archive, and it has no automated test in the repository yet.
+
+For full archives use the campaign of [chapter 22](22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions) with `--runner PATH/optimization-run`:
+
+```sh
+python validation/urban_campaign.py run runs/district/case.json \
+  --output runs/district-rose-jobs --run-budget-s 120 --campaign-budget-s 1200 \
+  --runner ../optimization-jobs/target/release/optimization-run
+```
+
+Each direction becomes an `execution.command/0.1` job with the case, the job description, the launcher `integrations/launch_urban_command.py`, the campaign worker, the field checker and the solver binary as hashed inputs. A job returns its result row and the complete run archive as a ZIP file; the runner limits each collected file to 64 MiB. Failed and timed-out directions are kept as rows. Without `--runner` the same campaign runs as local processes.
+
+Limits:
+
+- An accepted command job is not an accepted run, and neither is a validated result. Read the row of each direction.
+- On a timeout the campaign stops only the runner process. The processes the runner started (launcher, worker, solver) may keep running; check for them and stop them yourself.
 
 ## A task for an agent
 

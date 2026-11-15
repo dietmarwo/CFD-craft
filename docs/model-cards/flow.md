@@ -2,7 +2,7 @@
 
 ## Scope
 
-Constant-density incompressible flow, flat ground, uniform Cartesian cells, box masks, CPU f64. Face velocities and cell pressure share the same divergence/gradient definition. Local coordinates are east/north/up. Pressure is kinematic pressure in m2/s2; the isotropic 2k/3 contribution is absorbed in RANS pressure.
+Constant-density incompressible flow, flat ground, uniform Cartesian cells, box and optional polygon-prism masks, CPU f64. Face velocities and cell pressure share the same divergence/gradient definition. Local coordinates are east/north/up. Pressure is kinematic pressure in m2/s2; the isotropic 2k/3 contribution is absorbed in RANS pressure.
 
 Within one face evaluation, the advective samples and the viscous coefficients
 use the same staggered neighbor faces: wall ghosts at wall and blocked faces,
@@ -171,7 +171,7 @@ This coefficient choice supports the high-Re neutral log-layer equilibrium, rath
 
 The inlet profiles are U = u_star/kappa log((z+z0)/z0), k = u_star²/sqrt(C_mu), and epsilon = u_star³/(kappa(z+z0)). Wind direction is meteorological direction from, so horizontal components are [-U sin(theta), -U cos(theta)].
 
-Ground momentum uses a log-law stress based on adjacent tangential velocity. Wall dissipation follows C_mu^(3/4) k^(3/2)/(kappa distance), which remains meaningful at stagnation cells. Wall production uses the stress and k-derived friction scale. A cell with several wall faces, such as a canyon floor cell between two buildings, uses the mean of the wall production and of the wall dissipation over those faces, with equal weights. Building faces use a documented small effective roughness min(inlet z0, 0.001 cell width); this adaptation has no independent urban-wall validation yet.
+Ground momentum uses a log-law stress based on adjacent tangential velocity. Wall dissipation follows C_mu^(3/4) k^(3/2)/(kappa distance), which remains meaningful at stagnation cells. Wall production uses the stress and k-derived friction scale. A cell with several wall faces, such as a canyon floor cell between two buildings, uses the mean of the wall production and of the wall dissipation over those faces, with equal weights. Omitting `building_roughness_m` preserves the legacy small effective non-ground wall roughness min(inlet z0, 0.001 cell width). Supplying it uses that positive physical z0 for non-ground wall stress, production and dissipation, independent of cell width. Ground z0 is unchanged. Neither wall option has independent urban-wall validation yet.
 
 That building-wall adaptation depends on cell width. A future qualification study must replace it with an explicit physical wall parameterization before treating refinement as a pure discretization study. The current canyon grid experiments combine numerical and wall-model sensitivity.
 
@@ -205,6 +205,77 @@ The counter covers state-update floors. The wall algebraic relation itself has a
 
 Verification covers Poisson/projection identities, gauges, analytic channels, Couette flow, periodic viscous shear and the Re=100 lid cavity. The empty-ABL test compares near-outlet U/k/epsilon to the inlet at heights H..5H under frozen tolerances. It is a consistency check for this setup. The suite also reports, without a gate, the drift below H. There the cell-centered velocity gradient of the second cell overestimates the logarithmic gradient, so production and epsilon run high: on the canonical empty-ABL grid epsilon is up to 16 % above the inlet profile below H (U 4 %, k 4 %), and more on coarser vertical grids. A log-consistent near-wall gradient is an open improvement.
 
-The illustrative canyon examples are not exact CODASC geometry/inflow reproductions. Their coarse-grid numerical convergence does not validate urban dispersion. Fine-grid pressure/explicit-time throughput is an open performance gate. No buoyancy, stratification, traffic turbulence, particles, vegetation, chemistry or unsteady turbulent statistics are represented.
+The illustrative canyon examples are not exact CODASC geometry/inflow reproductions. Their coarse-grid numerical convergence does not validate urban dispersion. Fine-grid pressure/explicit-time throughput is an open performance gate. No buoyancy, stratification, traffic turbulence, chemistry or unsteady turbulent statistics are represented. Opt-in vegetation (below) and opt-in particles (transport model card) have their own numerical verification and no experimental validation.
 
 Method references: Richards and Hoxey (1993), Richards and Norris (2011), and Hargreaves and Wright, "On the use of the k–ε model in commercial CFD software to model the neutral atmospheric boundary layer", J. Wind Eng. Ind. Aerodyn. 95 (2007) 355–369. No OpenFOAM source code is included or was consulted for these methods.
+
+## Porous vegetation
+
+`vegetation` contains axis-aligned volumes with `id`, `min_m`, `max_m`,
+`leaf_area_density_m2_m3` (LAD, inverse meters), `drag_coefficient` (Cd),
+optional `leaf_deposition_velocity_m_s`, and `turbulence_closure`.
+Membership uses fluid-cell centers; overlapping boxes add their coefficients.
+Buildings keep their existing impermeable mask. Vegetation changes momentum,
+turbulence and particle transport; it does not change the pressure equation.
+
+The momentum acceleration is \(-C_d\,\mathrm{LAD}|U|U_i\).
+At staggered faces, the nonnegative cell coefficient
+\(C_d\,\mathrm{LAD}|U|\) is averaged from adjacent fluid cells and multiplies
+the native face component. It enters both the full nonlinear residual and a
+frozen implicit diagonal. The explicit-pseudo-time path uses a positive
+semi-implicit drag correction; implicit-viscous and implicit-projection paths
+include it in their correction matrices. All have the same steady fixed point.
+The transient canopy drag fixture verifies first-order time convergence for
+this semi-implicit treatment. The gas SSPRK2 second-order claim does not apply
+to canopy momentum. General unsteady urban canopy accuracy remains unvalidated.
+
+The canopy contributions are
+
+\[
+S_k=C_d\,\mathrm{LAD}(\beta_p |U|^3-\beta_d |U|k),\qquad
+S_\epsilon=C_d\,\mathrm{LAD}(C_{\epsilon4}\beta_p|U|^3\epsilon/k
+-C_{\epsilon5}\beta_d|U|\epsilon).
+\]
+
+| Source coefficient set | beta_p | beta_d | C_e4 | C_e5 |
+|---|---:|---:|---:|---:|
+| `green1992` (default) | 1 | 4 | 1.5 | 1.5 |
+| `sanz2003` | 1 | 5.1 | 0.9 | 0.9 |
+
+The equations and coefficient convention are documented by
+[Viana Parente Lopes, Palma and Silva Lopes (2021), equations 1.1–1.3 and table 1](https://doi.org/10.1017/jfm.2020.927).
+`green1992` is the set of Green (1992) in that table. `sanz2003` is the set of
+Sanz (2003) as tabulated there, where it is listed under
+[Katul et al. (2004)](https://doi.org/10.1023/B:BOUN.0000037333.48760.e5).
+Only canopy source coefficients switch; the existing ambient k-epsilon
+constants, wall functions and upper-boundary treatment remain fixed. This is
+a model-range comparison within the existing closure, not a reproduction of
+all settings used by those publications. Both explicit and implicit turbulence
+updates retain canopy destruction implicitly and evaluate the same residual.
+Algebraic epsilon wall cells keep the established wall condition.
+
+Particle leaf removal is \(\mathrm{LAD}\,v_{leaf}\,c\), integrated in the
+same SSPRK2 budget as settling; the CFL allowance includes this loss rate.
+Removed mass is `deposited_kg.vegetation`, with its current rate reported per
+bin. Gases have no leaf sink. A prescribed-flow study must set
+Cd=0; positive canopy drag is rejected rather than silently ignored.
+
+With zero LAD, all additional operators return before changing arithmetic;
+whole returned state bytes, including k/epsilon and counters, match a case
+without vegetation. The empty-ABL zero-LAD fixture checks this explicitly.
+Nonzero-LAD fixtures verify uniform force/drag equilibrium,
+pressure-drop/integrated-drag balance, prescribed-flow exponential leaf decay,
+leaf-block spatial attenuation/refinement and both published source formulas.
+`summary.vegetation` stores current drag power per unit density (m5/s3), volume
+integrated drag acceleration (m4/s2), represented cells and an explicit
+`verified_numerics_unvalidated_physics` label. It is an instantaneous work rate,
+not a reconstructed history of cumulative mechanical work. The independent
+checker recomputes these from the archived face velocities and canopy boxes.
+Drag power uses the actual staggered momentum sink, summed over active face
+dual volumes (face area times pressure-gradient distance), including half
+volumes at outlets. `drag_quadrature` identifies this convention; the power is
+the exact discrete sink work in that face inner product, rather than a separate
+cell-centered estimate.
+
+No heat, cooling, radiation, seasonal leaf dynamics, leaf-size dependence,
+wake-resolved flow or experimental urban-canopy qualification is claimed.

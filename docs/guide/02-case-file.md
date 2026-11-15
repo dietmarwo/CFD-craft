@@ -50,17 +50,18 @@ Nothing outside the case file configures the solver. Its top-level fields are:
 | `domain`, `grid` | Lengths of the box in meters; three cell counts |
 | `boundaries` | One condition per axis: `periodic`, `open`, `wall`, `slip` or, for z, `ground_open_top` |
 | `flow`, `moving_walls` | Prescribed, laminar or neutral-RANS flow; moving lids |
-| `geometry` | Solid boxes (buildings), each with an ID |
-| `constituents`, `initial_conditions` | Passive gases with their diffusivity; their starting concentration |
+| `geometry` | Solid buildings, each with an ID: boxes, or prisms with a polygon footprint |
+| `constituents`, `initial_conditions` | Passive gases and particle size classes with their diffusivity; their starting concentration |
 | `sources`, `receptors` | Where mass enters and where concentration is reported, each with an ID |
 | `numerics` | Schemes, time step limit, tolerances, monitor window |
 | `run` | Mode (`steady` or `transient`), endpoint, and the budgets for steps, wall time, threads and memory |
 | `output` | Whether fields and a checkpoint are kept; the output budget |
+| `vegetation`, `building_roughness_m`, `geometry_min_passage_cells` | Optional fields for city blocks ([chapter 22](22-urban-geometry-particles-vegetation.md)) |
 
 The six lists (`moving_walls`, `geometry`, `constituents`,
 `initial_conditions`, `sources`, `receptors`) are empty when omitted, and the
-opt-in numerics of [chapter 9](09-opt-in-numerics.md) have defaults. Every
-other field is required. The [case schema](../reference/case-schema.md) lists
+opt-in numerics of [chapter 9](09-opt-in-numerics.md) have defaults. The
+fields of the last row may be omitted. Every other field is required. The [case schema](../reference/case-schema.md) lists
 each field with its type, default and meaning.
 
 ## Units and coordinates

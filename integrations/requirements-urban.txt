@@ -1,0 +1,2 @@
+# Optional converter only; no new native solver dependencies.
+shapely>=2.1,<3

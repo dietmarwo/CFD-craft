@@ -230,10 +230,16 @@ pub fn implicit_step(
     let mut info = StepInfo::default();
 
     let no_fixed = vec![false; n];
-    let k_sink: Vec<_> = (0..n).map(|i| old_e[i] / old_k[i]).collect();
-    let k_rhs: Vec<_> = (0..n)
+    let mut k_sink: Vec<_> = (0..n).map(|i| old_e[i] / old_k[i]).collect();
+    let mut k_rhs: Vec<_> = (0..n)
         .map(|i| terms.k_transport[i] + terms.production[i] - old_e[i] * k[i] / old_k[i])
         .collect();
+    if let Some(canopy) = &terms.canopy {
+        for i in 0..n {
+            k_sink[i] += canopy.k_sink[i];
+            k_rhs[i] += canopy.k_source[i] - canopy.k_sink[i] * k[i];
+        }
+    }
     let k_operator = Transport::new(g, u, &terms.dk, &terms.k_top);
     let (dk, iterations) = solve(
         g,
@@ -263,8 +269,8 @@ pub fn implicit_step(
             new_k[i] = k[i];
         }
     }
-    let e_sink: Vec<_> = (0..n).map(|i| C2 * old_e[i] / old_k[i]).collect();
-    let e_rhs: Vec<_> = (0..n)
+    let mut e_sink: Vec<_> = (0..n).map(|i| C2 * old_e[i] / old_k[i]).collect();
+    let mut e_rhs: Vec<_> = (0..n)
         .map(|i| match terms.wall_epsilon[i] {
             Some(value) => value * (new_k[i] / old_k[i]).powf(1.5) - eps[i],
             None => {
@@ -273,6 +279,14 @@ pub fn implicit_step(
             }
         })
         .collect();
+    if let Some(canopy) = &terms.canopy {
+        for i in 0..n {
+            if !wall[i] {
+                e_sink[i] += canopy.e_sink[i];
+                e_rhs[i] += canopy.e_source[i] - canopy.e_sink[i] * eps[i];
+            }
+        }
+    }
     let e_operator = Transport::new(g, u, &terms.de, &terms.e_top);
     let (de, iterations) = solve(
         g,

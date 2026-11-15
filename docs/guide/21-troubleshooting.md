@@ -67,6 +67,18 @@ documentation check requires an exact match.
 | Turbulence floors or very large eddy viscosity | `turbulent_floor_events`, `CFD-E054` | A numerical failure of this regime, not something to clip away. [Chapter 10](10-street-canyon.md#the-result) |
 | OpenFOAM timeout or invalid mesh | `CFD-X004`, `CFD-X006` and the logs | An earlier snapshot is not a final solution. [Chapter 15](15-openfoam-first-run.md#trusted-inputs-only) |
 | An example script fails | `CFD-U001 manual.<field>` and the saved logs | Build the examples and check the paths. [Chapter 11](11-python.md#the-whole-native-workflow-in-one-script) |
+| A building footprint is rejected | `CFD-E084` at `geometry[i].footprint_m` | Remove crossing edges, holes and a repeated last vertex; make `min_m` and `max_m` the bounds of the polygon. [Chapter 22](22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint) |
+| A building or a street is too small for the grid | `CFD-E028`, `CFD-W011` | Refine the grid or drop the shape yourself; read `shapes` in `geometry.json`. [Chapter 22](22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint) |
+| Building roughness is rejected | `CFD-E085` | Use a positive value with `neutral_rans` flow. [Chapter 22](22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint) |
+| Multigrid is slower than the default | `CFD-W004` | With buildings and strongly unequal cell widths keep `ic0`. [Chapter 22](22-urban-geometry-particles-vegetation.md#multigrid-with-buildings) |
+| The map converter stops | `CFD-M001 map` and `check.json` in the output | Reproject to meters, check heights and holes, or give a `--template` with larger budgets. [Chapter 22](22-urban-geometry-particles-vegetation.md#import-buildings-from-a-map) |
+| A particle bin is rejected | `CFD-E080`, `CFD-E081` | Keep diameter, density and speeds in range; above a particle Reynolds number of 0.1 give `settling_velocity_m_s`. [Chapter 22](22-urban-geometry-particles-vegetation.md#particle-size-classes) |
+| A vegetation volume is rejected or has no effect | `CFD-E082`, `CFD-E083`; `volume_fluid_cells` of 0 | Fix the box or the range; use drag 0 with prescribed flow; make the volume contain a fluid cell center. [Chapter 22](22-urban-geometry-particles-vegetation.md#hedges-and-trees) |
+| A wind-direction campaign exits 2 | `accepted` and `error` of each row in `report.json` | A timeout is an incomplete run; raise the budgets or coarsen the case. [Chapter 22](22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions) |
+| A path receptor is rejected | `CFD-E086`, `CFD-E087`, `CFD-E088` | Keep the route inside the domain and out of buildings; use fewer samples. [Chapter 23](23-mobile-paths-and-virtual-rides.md#declare-a-path-receptor) |
+| The ride tool refuses a run | `CFD-M004 virtual_ride` | Give it an accepted steady run, an existing path and a new output file. [Chapter 23](23-mobile-paths-and-virtual-rides.md#simulate-a-ride) |
+| The street converter stops | `CFD-M002` and `diagnostic.json` in the output | Supply rates in `kg/s/m`; a street that touches a building is rejected, not moved. [Chapter 24](24-mobile-source-inference.md#street-emissions-from-map-data) |
+| A frozen-flow response or the study is rejected | `CFD-E089`, `CFD-M003 mobile_inference` | Use steady `linear_upwind` transport without initial concentration on an accepted flow. [Chapter 24](24-mobile-source-inference.md#one-flow-one-transport-run-per-street) |
 
 ## Reproduce the common ones
 
@@ -125,4 +137,5 @@ separate code families, so a code also tells you which part reported it.
 ## Next
 
 - [Diagnostics](../diagnostics.md) and the [result contract](../result-contract.md).
+- [Chapter 22](22-urban-geometry-particles-vegetation.md): Part VI, city blocks and mobile measurements.
 - [Guide index](README.md): all chapters.

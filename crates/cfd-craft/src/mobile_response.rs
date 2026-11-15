@@ -1,4 +1,5 @@
-//! R3: one accepted flow preparation per wind, then cold scalar-only solves.
+//! Frozen-flow source responses: one accepted flow preparation per wind, then
+//! cold scalar-only solves.
 //!
 //! The original scalar SSPRK2 step, stability cap and full returned-field gates
 //! are shared with the coupled solver. No pressure, momentum or turbulence

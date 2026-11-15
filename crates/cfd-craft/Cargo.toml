@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Research solver for incompressible Cartesian flow and passive-gas dispersion with bounded, independently checked runs"
+description = "Research solver for incompressible Cartesian flow and the dispersion of gases and particles around buildings, with bounded, independently checked runs"
 
 [build-dependencies]
 sha2.workspace = true

@@ -2,18 +2,19 @@
 #![warn(missing_docs)]
 //! The core library of [CFD-craft](https://github.com/dietmarwo/CFD-craft): a
 //! bounded, inspectable CPU research solver for incompressible flow on
-//! uniform Cartesian grids and conservative passive-gas dispersion, built to
-//! be driven and checked by programs and agents.
+//! uniform Cartesian grids and conservative dispersion of passive gases and
+//! particle size classes, built to be driven and checked by programs and
+//! agents.
 //!
 //! A case is data: one strict JSON document ([`case::Case`]) declares the
-//! domain, grid, boundaries, flow model, solid boxes, constituents, sources,
-//! receptors, numerics and every budget. A run reports why it stopped, what
+//! domain, grid, boundaries, flow model, solid boxes and polygon prisms,
+//! vegetation, constituents, sources, receptors, numerics and every budget. A run reports why it stopped, what
 //! its recomputed numerical checks support, the model scope, and the identity
 //! of its input, initial state and build.
 //!
 //! # Status
 //!
-//! Version 0.1.1 is a **research prototype**. The coarse finite-canyon
+//! Version 0.2.0 is a **research prototype**. The coarse finite-canyon
 //! examples converge under independent continuity and mass checks.
 //! Experimental canyon validation (blocked by access to raw benchmark data)
 //! and a successful fine-grid resolution study remain open; the first
@@ -22,29 +23,35 @@
 //! experimentally validated urban CFD, and every result says so in
 //! [`Summary::experimental_validation`](solver::Summary::experimental_validation).
 //!
-//! The released 0.1.1 scope is uniform grids, box geometry, passive gas and CPU
-//! execution. Particles, vegetation, LES, chemistry, annual statistics,
-//! stretched grids and GPU execution are not implemented. This unreleased source
-//! extension adds masked multigrid, polygon prisms, spherical particle settling
-//! and porous vegetation; these physics remain experimentally unvalidated.
+//! The 0.2.0 scope is uniform grids, buildings as boxes and polygon prisms,
+//! passive gases, particle size classes with settling and deposition, porous
+//! vegetation, and CPU execution. These features are numerically verified and
+//! not experimentally validated. LES, chemistry, annual statistics, stretched
+//! grids and GPU execution are not implemented.
 //! See the [roadmap](https://github.com/dietmarwo/CFD-craft/blob/main/docs/developer/roadmap.md),
 //! the [recorded results](https://github.com/dietmarwo/CFD-craft/blob/main/docs/evidence/native-verification.md)
 //! and the [model cards](https://github.com/dietmarwo/CFD-craft/blob/main/docs/model-cards/README.md).
 //!
 //! # What is implemented
 //!
-//! - Staggered finite volumes with face velocities, box masks and
-//!   fluid-component discovery ([`grid`]).
+//! - Staggered finite volumes with face velocities, masks of boxes and
+//!   polygon prisms rasterized by cell centers, and fluid-component discovery
+//!   ([`grid`], [`geometry`]).
 //! - Matrix-free pressure projection with one gauge per closed fluid
 //!   component, IC(0)-preconditioned PCG by default and opt-in symmetric
-//!   multigrid on unmasked grids ([`pressure`], [`multigrid`]).
+//!   multigrid, also on grids with buildings ([`pressure`], [`multigrid`]).
 //! - Laminar flow, moving walls and one neutral k-epsilon package with
 //!   rough-wall functions ([`flow`]); donor-cell or opt-in conservative
 //!   second-order momentum advection; SSPRK2 pseudo-time or opt-in implicit
 //!   steady algorithms ([`momentum_solve`], [`turbulence_solve`]).
-//! - Passive gas with point, line and volume sources and point or
-//!   volume-average receptors, by first-order upwind or bounded MUSCL
-//!   transport ([`transport`]).
+//! - Passive gases and particle size classes (Stokes settling with Cunningham
+//!   correction, ground, roof and leaf deposition) with point, line and volume
+//!   sources and point, volume-average or path receptors, by first-order
+//!   upwind or bounded MUSCL transport ([`transport`]).
+//! - Porous vegetation with leaf drag and canopy turbulence terms
+//!   ([`vegetation`]).
+//! - Source responses on one accepted, frozen flow: one transport run per
+//!   source group without a flow update ([`mobile_response`]).
 //! - Explicit step, time, memory and output budgets, cooperative
 //!   cancellation, transactional steps, checksummed restarts and run archives
 //!   ([`solver`], [`output`]), and opt-in phase profiling ([`profiling`]).

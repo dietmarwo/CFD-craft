@@ -16,7 +16,7 @@ checked by agents.
 
 ```toml
 [dependencies]
-cfd-craft = "0.1"
+cfd-craft = "0.2"
 ```
 
 The command-line interface (fields, checksummed run archives, restarts,
@@ -24,7 +24,7 @@ profiles) is the [`cfd-craft-cli`](https://crates.io/crates/cfd-craft-cli)
 crate (`cargo install cfd-craft-cli --locked`); the Python package is
 [`cfd-craft` on PyPI](https://pypi.org/project/cfd-craft/).
 
-Version 0.1.1 is a research prototype. A numerically accepted run is not an
+Version 0.2.0 is a research prototype. A numerically accepted run is not an
 experimentally validated prediction. Experimental canyon validation (blocked by
 access to raw benchmark data) and a successful fine-grid resolution study
 remain open.

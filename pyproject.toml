@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "cfd-craft"
 version = "0.2.0"
-description = "Native Cartesian flow and passive-gas dispersion research solver"
+description = "Native Cartesian flow and gas and particle dispersion research solver"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]

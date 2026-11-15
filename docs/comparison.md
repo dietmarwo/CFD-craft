@@ -1,18 +1,12 @@
 # CFD-craft, OpenFOAM and Ansys Fluent
 
-The unreleased source adds optional polygon prisms, masked multigrid, particle
-settling/deposition and porous vegetation. These additions are numerically
-verified and experimentally unvalidated; the district throughput/rotation gates
-remain open. The released 0.1.1 comparisons below keep their recorded scope.
-See [the urban evidence](evidence/urban-extension.md) for source-extension results.
-
 Version 0.1.1 is a research prototype. A numerically accepted run is not an experimentally validated prediction.
 
-This page compares CFD-craft 0.1.1 with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
+This page compares CFD-craft with OpenFOAM (Foundation version 13, package `20260407`; version 14 was released in July 2026 [O13], but the bounded backend pins 13) and, for features only, with Ansys Fluent (public documentation of Release 2026 R1). It was checked on 14 November 2026.
 
-The short answer: OpenFOAM and Fluent cover far more physics, far more mesh and geometry types and far larger problems. CFD-craft covers one narrow task, neutral passive-gas dispersion on uniform grids around boxes, and puts its effort into checked input, stated stopping reasons and recomputed evidence.
+The short answer: OpenFOAM and Fluent cover far more physics, far more mesh and geometry types and far larger problems. CFD-craft covers one narrow task, neutral dispersion of gases and particles on uniform grids around box-like buildings, with scripts from a city map to a simulated sensor ride, and puts its effort into checked input, stated stopping reasons and recomputed evidence.
 
-**Every speed and accuracy number on this page comes from one case: the laminar, two-dimensional Re = 100 lid-driven cavity. None of it says anything about urban flows.** There is no OpenFOAM canyon recipe, so no canyon comparison exists.
+**Every speed and accuracy number on this page comes from one case: the laminar, two-dimensional Re = 100 lid-driven cavity. None of it says anything about urban flows.** There is no OpenFOAM canyon recipe, so no canyon comparison exists, and no particle, vegetation or district result has been compared with another code.
 
 ## What CFD-craft is for
 
@@ -23,28 +17,28 @@ These properties can be checked in this repository:
 - **Budgets and a stated stopping reason.** The case sets step, wall-time, memory and output budgets. SIGINT or SIGTERM ends a CLI run as `cancelled`; it still writes its archive and exits 2. The result names why the run stopped (`termination`) ([case schema, Run](reference/case-schema.md#run), [guide chapter 7](guide/07-budgets-preview-cancel.md#budgets-are-part-of-the-case)).
 - **Three separate verdicts.** Termination (did the run complete?), numerical assessment (is the result accepted?) and experimental validation (`describe` reports `not_validated`) are separate fields ([result contract, Status](result-contract.md#status), [guide chapter 4](guide/04-reading-a-result.md#four-questions-four-kinds-of-evidence)).
 - **Provenance hashes.** Every archive has a manifest with file hashes, the input case hash, the initial-state hash and source, executable and build identity, plus a completion marker written last ([result contract, Files](result-contract.md#files)).
-- **An independent field checker.** [`validation/check_fields.py`](https://github.com/dietmarwo/CFD-craft/blob/main/validation/check_fields.py) recomputes continuity, mass accounting and receptor values from the stored fields.
+- **An independent field checker.** [`validation/check_fields.py`](https://github.com/dietmarwo/CFD-craft/blob/main/validation/check_fields.py) recomputes continuity, mass accounting, receptor values, building masks, deposition and path samples from the stored fields.
 - **A bounded OpenFOAM backend as a cross-check.** The same cavity runs through OpenFOAM Foundation 13 with recorded executable hashes ([OpenFOAM backend model card](model-cards/openfoam-backend.md)).
 
 ## Features
 
 Cells about other tools are facts from their current public documentation (sources at the end). "None documented" names the pages read that do not describe the feature; it says nothing about features those pages do not cover. The Fluent column is features only: this repository has no Fluent measurement.
 
-| Feature | CFD-craft 0.1.1 | OpenFOAM Foundation 13 | Ansys Fluent 2026 R1 |
+| Feature | CFD-craft | OpenFOAM Foundation 13 | Ansys Fluent 2026 R1 |
 |---|---|---|---|
 | License and source | MIT, source on GitHub ([LICENSE](https://github.com/dietmarwo/CFD-craft/blob/main/LICENSE)) | GNU GPL version 3, source pack published [O1] | Licensed product; PyFluent needs a licensed local Fluent installation [F8] |
 | Install | `pip install cfd-craft` (Python binding) or `cargo install cfd-craft-cli` ([releasing](developer/releasing.md)) | Packages for Ubuntu 22.04, 24.04 and 25.04; Windows through WSL; macOS through Multipass; source pack [O1] | Installers for Linux x64 (Red Hat, SUSE, Ubuntu 22.04 and 24.04, Rocky) and Windows 11 or Server 2022 and 2025 [F13, F14]; a license is required [F8] |
 | Case definition | One strict JSON file ([case schema](reference/case-schema.md)) | A case directory of text dictionaries: `system`, `constant`, time directories [O5] | GUI, text console in Scheme, journal files [F1, F6]; Python through PyFluent [F8] |
 | Input check before a run | `check`: coded diagnostics with field paths, memory and output estimates ([diagnostics](diagnostics.md), [chapter 2](guide/02-case-file.md#a-wrong-field-is-an-error)) | `checkMesh` checks a mesh [O6]; a whole-case check is not documented in [O5, O6, O7, O11] | Mesh check (topology, face handedness, volumes) and a case check of models, boundaries and solver settings with recommendations [F18, F19] |
 | Mesh | Uniform Cartesian only ([flow model card](model-cards/flow.md#scope)) | Arbitrary polyhedral cells; `blockMesh`, `snappyHexMesh` [O2, O6] | Triangle to polyhedral cells; structured, unstructured, hybrid, non-conformal and overset meshes [F2] |
-| Geometry | Axis-aligned boxes only ([chapter 10](guide/10-street-canyon.md#the-case-boxes-open-top-wind)) | `snappyHexMesh` refines and snaps to surface geometry [O6] | CAD and STL import in meshing mode; watertight-geometry and fault-tolerant meshing workflows [F15, F16] |
+| Geometry and map import | Axis-aligned boxes and vertical prisms with a polygon footprint, represented by whole cells of the uniform grid: no cut cells, no terrain ([chapter 10](guide/10-street-canyon.md#the-case-boxes-open-top-wind), [chapter 22](guide/22-urban-geometry-particles-vegetation.md#a-building-with-a-polygon-footprint)); a converter for projected GeoJSON and CityJSON building footprints ([chapter 22](guide/22-urban-geometry-particles-vegetation.md#import-buildings-from-a-map)) | `snappyHexMesh` refines and snaps to surface geometry [O6] | CAD and STL import in meshing mode; watertight-geometry and fault-tolerant meshing workflows [F15, F16] |
 | Flow models | Constant-density incompressible: prescribed uniform, laminar, neutral RANS | Incompressible, compressible, density-based, multiphase (VoF, Euler), films [O3] | Pressure-based and density-based solvers [F4]; hypersonic, moving frames, dynamic meshes [F1] |
 | Turbulence | One neutral k-epsilon package with wall functions; no LES ([flow model card](model-cards/flow.md#neutral-turbulence-package)) | RAS (k-epsilon, k-omega SST, Reynolds stress and others), LES, DES [O4] | Spalart-Allmaras, k-epsilon, k-omega, transition, Reynolds stress, SAS, DES, LES [F3] |
-| Scalar transport | Passive gas; point, line and volume sources; point and volume receptors; audited mass budget ([transport model card](model-cards/transport.md)) | `scalarTransport` function object; multicomponent flow module [O3, O8] | Species transport [F1] |
-| Other physics | None: no buoyancy, heat transfer, particles, chemistry, multiphase or compressibility | Heat transfer, combustion, Lagrangian particles, multiphase, solids [O1, O3] | Heat transfer, combustion, pollutants, discrete phase, multiphase, FSI, batteries and more [F1] |
+| Scalar transport | Passive gases and particle size classes; point, line and volume sources; point, volume and path receptors; audited mass budget ([transport model card](model-cards/transport.md)) | `scalarTransport` function object; multicomponent flow module [O3, O8] | Species transport [F1] |
+| Other physics | Opt-in, numerically verified and not validated: spherical particle size classes transported as concentrations, with settling and deposition on ground, roofs and leaves ([chapter 22](guide/22-urban-geometry-particles-vegetation.md#particle-size-classes)); porous vegetation with drag and canopy turbulence terms ([chapter 22](guide/22-urban-geometry-particles-vegetation.md#hedges-and-trees)). No buoyancy, heat transfer, chemistry, multiphase or compressibility | Heat transfer, combustion, Lagrangian particles, multiphase, solids [O1, O3] | Heat transfer, combustion, pollutants, discrete phase, multiphase, FSI, batteries and more [F1] |
 | Steady algorithm | Explicit pseudo-time (default); SIMPLEC-type `implicit_projection` (opt-in) ([flow model card](model-cards/flow.md#steady-pseudo-time-algorithms)) | SIMPLE for steady cases, PIMPLE, local pseudo-time stepping [O7, O9] | SIMPLE, SIMPLEC, PISO, Fractional Step, Coupled [F4]; pseudo time method [F4] |
 | Momentum advection | First-order donor-cell (default); second-order upwind, limited with van Albada, van Leer or monotonized central (opt-in) | Upwind, linear, linearUpwind, LUST, limitedLinear and other schemes [O9] | First- and second-order upwind, QUICK, third-order MUSCL, bounded central [F5] |
-| Pressure solver | IC(0)-preconditioned CG (default); geometric multigrid on grids without solids (opt-in) ([pressure multigrid](developer/pressure-multigrid.md)) | PCG or PBiCGStab with DIC, FDIC or GAMG preconditioning; GAMG solver [O7] | Algebraic multigrid in the pressure-based and density-based implicit solvers [F17] |
+| Pressure solver | IC(0)-preconditioned CG (default); geometric multigrid (opt-in) ([pressure multigrid](developer/pressure-multigrid.md)), also with buildings, where it cut pressure iterations but gave no consistent gain in run time ([chapter 22](guide/22-urban-geometry-particles-vegetation.md#multigrid-with-buildings)) | PCG or PBiCGStab with DIC, FDIC or GAMG preconditioning; GAMG solver [O7] | Algebraic multigrid in the pressure-based and density-based implicit solvers [F17] |
 | Parallelism | Threads on one machine (1 to 64); no MPI, no GPU ([chapter 7](guide/07-budgets-preview-cancel.md#threads)) | MPI domain decomposition (`decomposePar`, Open MPI by default) [O10] | MPI across compute nodes [F9]; native GPU solver on one or several GPUs [F10] |
 | Budgets and cancellation | Steps, wall time, memory and output in the case; signal or cancel file stops cleanly ([chapter 7](guide/07-budgets-preview-cancel.md#cancel-a-run)) | End time; `stopAtClockTime` and `stopAtFile` function objects [O8, O11] | Number of iterations and convergence conditions; the Stop button or Ctrl+C interrupts after the current iteration [F20, F21]; a wall-time budget is not documented there |
 | What a result reports | Termination, assessment, recomputed checks, validation label ([result contract](result-contract.md), [chapter 4](guide/04-reading-a-result.md#assessment-what-the-checks-support)) | Logs and function-object output such as residuals and probes [O8] | Convergence monitors and conditions [F4]; simulation reports [F1] |
@@ -54,6 +48,7 @@ Cells about other tools are facts from their current public documentation (sourc
 | Post-processing | VTK export for ParaView; no built-in viewer ([chapter 3](guide/03-cli-and-archive.md#look-at-the-fields-in-paraview)) | ParaView reader, `foamToVTK`, `writeVTK` [O6, O8, O12] | Built-in graphics and reports; export to EnSight and CFD-Post [F1, F6] |
 | Experimental validation | None: `not_validated`; canyon data not available ([data inventory](https://github.com/dietmarwo/CFD-craft/blob/main/validation/data-inventory.json), [evidence index](evidence/README.md)) | Comparison with measurements is not documented in the tutorial pages [O14, O15] | Verification manual: 78 Fluent and CFX cases against theory or published experiments [F11] |
 | Maturity | First version 0.1.0, 4 November 2026 ([changelog](https://github.com/dietmarwo/CFD-craft/blob/main/CHANGELOG.md)) | Major versions every July since at least 2017; 13 in July 2025, 14 in July 2026 [O1, O13] | Releases 2024 R2, 2025 R1, 2025 R2 and 2026 R1 are supported by PyFluent [F8] |
+| Measurement-campaign support | Scripts, verified on synthetic data only: a wind-direction campaign that keeps failed rows ([chapter 22](guide/22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions)), virtual sensor rides along a route ([chapter 23](guide/23-mobile-paths-and-virtual-rides.md#simulate-a-ride)), line sources from supplied street rates, emission rates fitted to rides with a rank report, pass planning and route selection ([chapter 24](guide/24-mobile-source-inference.md)) | Probes and graph function objects sample fields at points and along lines [O8]; a moving sensor, source inference from measurements and route planning are not documented in [O8] | Not documented in the chapter list of the user's guide [F1] |
 | Optimization | Optimization-job worker and fcmaes adapter ([chapter 14](guide/14-optimization-jobs.md#the-application-worker)); LP, MIP and black-box lessons ([chapter 13](guide/13-optimization-lessons.md#f1-a-linear-problem-hides-in-the-simulator)) | Not documented in the v13 user guide [O12] | Adjoint solver, gradient-based optimizer, mesh morphing [F12] |
 
 ## Measured against OpenFOAM: the Re = 100 cavity
@@ -96,10 +91,11 @@ Practitioners in urban air quality also use dedicated tools. PALM is a large-edd
 
 ## Where the others are ahead
 
-- **Physics.** OpenFOAM and Fluent model heat transfer, compressible and multiphase flow, particles and combustion [O3, F1]. CFD-craft has none of these.
-- **Turbulence.** They offer many RANS models plus LES and DES [O4, F3]. CFD-craft has one neutral k-epsilon package.
-- **Geometry and meshing.** They use unstructured and polyhedral meshes fitted to surface geometry [O2, O6, F2]. CFD-craft has uniform Cartesian grids and boxes.
-- **Validation.** Fluent publishes a verification manual with cases against published experiments [F11]; the OpenFOAM v13 tutorial pages do not document a comparison with measurements [O14, O15]. CFD-craft 0.1.1 has no experimental validation.
+- **Physics.** OpenFOAM and Fluent model heat transfer, compressible and multiphase flow and combustion [O3, F1]. CFD-craft has none of these, so it has no thermal effects such as buoyancy or stratification.
+- **Particles and canopies.** OpenFOAM tracks Lagrangian particle clouds and Fluent has a discrete phase model [O3, O8, F1], and porous zones are documented for Fluent [F1]. CFD-craft has concentration bins of spherical particles and one porous canopy model, both verified against analytic cases only and not validated.
+- **Turbulence.** They offer many RANS models plus LES and DES [O4, F3]. CFD-craft has one neutral k-epsilon package and no LES.
+- **Geometry and meshing.** They use unstructured and polyhedral meshes fitted to surface geometry [O2, O6, F2]. CFD-craft has uniform Cartesian grids on flat ground, without terrain; a slanted wall becomes a staircase of cells, and a canyon rotated by 45 degrees did not pass its grid study ([urban record](evidence/urban-extension.md)).
+- **Validation.** Fluent publishes a verification manual with cases against published experiments [F11]; the OpenFOAM v13 tutorial pages do not document a comparison with measurements [O14, O15]. CFD-craft has no experimental validation.
 - **Community and maturity.** OpenFOAM has released a major version every year since at least 2017 [O13], and Fluent names an R1 and an R2 release in each of 2025 and 2026 [F8]. CFD-craft had its first release on 4 November 2026.
 - **Parallel scaling.** Both run in parallel with MPI [O10, F9]; Fluent also on GPUs [F10]. CFD-craft uses threads on one machine.
 
@@ -109,7 +105,7 @@ Version 0.1.1 is a research prototype. A numerically accepted run is not an expe
 
 - A real geometry, real physics or a result for a decision: OpenFOAM or Fluent.
 - Urban microclimate, heat or LES of a city quarter: PALM or ENVI-met.
-- Many small, scripted, checkable passive-gas runs on a box geometry, for example inside an optimizer: CFD-craft.
+- Many small, scripted, checkable dispersion runs around box-like buildings, for example inside an optimizer or to plan a measurement campaign before any data exist: CFD-craft.
 - Testing what an agent or a script does with a CFD tool, with coded errors and stated stopping reasons: CFD-craft.
 - Checking a CFD-craft cavity result against an established code: the bounded OpenFOAM backend.
 
@@ -126,7 +122,7 @@ All checked on 14 November 2026.
 | O5 | OpenFOAM | Case file structure (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/case-file-structure |
 | O6 | OpenFOAM | Utilities: checkMesh, snappyHexMesh, foamDictionary, foamToVTK (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/standard-utilities |
 | O7 | OpenFOAM | Linear solvers, SIMPLE and PIMPLE (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/fvsolution |
-| O8 | OpenFOAM | Function objects: scalarTransport, stop, residuals, probes, writeVTK (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/post-processing-functionality |
+| O8 | OpenFOAM | Function objects: scalarTransport, stop, residuals, probes, graphs, particles, writeVTK (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/post-processing-functionality |
 | O9 | OpenFOAM | Discretization schemes (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/fvschemes |
 | O10 | OpenFOAM | Parallel running (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/running-applications-parallel |
 | O11 | OpenFOAM | Run control and restart (v13) | https://doc.cfd.direct/openfoam/user-guide-v13/controldict |

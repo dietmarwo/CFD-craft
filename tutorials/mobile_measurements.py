@@ -22,7 +22,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "integrations"))
 sys.path.insert(0, str(ROOT / "validation"))
-from check_fields import check  # noqa:E402
+from check_fields import check, flow_state_fingerprint  # noqa:E402
 from virtual_ride import read_path, ride  # noqa:E402
 from mobile_inference import (
     exhaustive_route_check,
@@ -250,6 +250,54 @@ def controlled_winds(plan):
         )
 
 
+def frozen_flow_identity(folder, native):
+    """Recompute that every archive of one wind used the one prepared flow.
+
+    The flow archive, each response column and the truth archive must store
+    the same flow arrays as the native identity, and every response must carry
+    frozen-flow evidence without flow updates. Column and truth emission rates
+    are compared with the archived source rates the independent audit checked.
+    """
+    expected = native["flow_state_sha256"]
+    columns = native["columns"]
+    names = ["flow", *[column["archive"] for column in columns], "truth"]
+    for name in names:
+        safe_id(name)
+    require(len(set(names)) == len(names), "duplicate native archive names")
+    rates = []
+    for name in names:
+        archive = folder / name
+        fields = json.loads((archive / "fields.json").read_text())
+        require(
+            flow_state_fingerprint(fields) == expected,
+            f"{name} flow differs from the prepared frozen flow",
+        )
+        if name == "flow":
+            continue
+        summary = json.loads((archive / "summary.json").read_text())
+        frozen = summary.get("frozen_flow") or {}
+        require(
+            frozen.get("flow_state_sha256") == expected
+            and frozen.get("response_flow_updates") == 0,
+            f"{name} lacks frozen flow response evidence",
+        )
+        require(len(summary["constituents"]) == 1, f"{name} constituent count")
+        rates.append(summary["constituents"][0]["source_rate_kg_s"])
+    reference = [column["integrated_reference_rate_kg_s"] for column in columns]
+    truth = native["truth"]["multipliers"]
+    expected_rates = [
+        *reference,
+        math.fsum(q * r for q, r in zip(truth, reference, strict=True)),
+    ]
+    for name, archived, declared in zip(names[1:], rates, expected_rates, strict=True):
+        require(
+            math.isfinite(declared)
+            and abs(archived - declared) <= 1e-12 * max(abs(declared), 1e-300),
+            f"{name} archived source rate differs from the native reference rate",
+        )
+    return dict(flow_state_sha256=expected, archives=names)
+
+
 def observed_ride(archive, plan, path_id):
     summary = json.loads((archive / "summary.json").read_text())
     require(
@@ -335,7 +383,7 @@ def run(plan, binary, out):
                     continue
                 try:
                     audit = check(archive)
-                except (ValueError, OSError, KeyError) as exc:
+                except (ValueError, OSError, KeyError, IndexError, TypeError) as exc:
                     audit = dict(passed=False, error=str(exc))
                 write(
                     archive.parent / (archive.name + "-independent-check.json"), audit
@@ -349,6 +397,17 @@ def run(plan, binary, out):
                 and all(r["passed"] for r in entry["independent_audits"]),
                 f"native response/audit failure for {wind_id}",
             )
+            expected_archives = [
+                "flow",
+                *[c["archive"] for c in native["columns"]],
+                "truth",
+            ]
+            require(
+                [r["archive"] for r in entry["independent_audits"]]
+                == expected_archives,
+                f"missing independent audit of a native archive for {wind_id}",
+            )
+            entry["frozen_flow_identity"] = frozen_flow_identity(folder, native)
             names = [c["id"] for c in native["columns"]]
             rates = [c["integrated_reference_rate_kg_s"] for c in native["columns"]]
             if source_ids is None:

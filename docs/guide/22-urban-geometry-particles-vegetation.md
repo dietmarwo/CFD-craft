@@ -32,7 +32,9 @@ them. It uses the same wall faces and pressure operator as boxes. There
 are no cut cells, terrain or body-fitted native walls. `geometry.json.shapes`
 records exact and represented volume, signed volume error, contained cells,
 and the narrowest horizontal fluid run from each shape to another solid.
-Exterior clearances are excluded from that street-width measure. A vanished
+`validation/check_fields.py` recomputes every record and requires one per case
+shape; only box-only archives written before this evidence existed may omit
+`shapes`. Exterior clearances are excluded from that street-width measure. A vanished
 shape is still an error (`CFD-E028`), and an underresolved street is a warning
 (`CFD-W011`). Passing these checks does not establish geometric accuracy.
 
@@ -100,7 +102,9 @@ used for a single prism approximation; surfaces from different LoDs are not
 mixed. GeometryInstance/templates are refused. Footprint holes require external
 decomposition. Conservative lower-half projected surface elevations screen
 sloping bases; unknown or nonflat ground can be rejected. Supplied nonfinite
-coordinates, transforms, elevations and invalid indices are errors.
+coordinates, transforms, elevations, heights or level counts, invalid indices,
+features without a geometry object, a GeoJSON `crs` member naming geographic
+coordinates and an overflowing domain extent are errors.
 
 `map-provenance.json` contains the exact consumed source-file SHA-256, declared
 license/credit, crop, rotation, coordinate system, translation, height and

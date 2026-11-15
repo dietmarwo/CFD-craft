@@ -4,6 +4,7 @@
 import hashlib
 import json
 from pathlib import Path
+import struct
 import sys
 import math
 
@@ -19,6 +20,18 @@ def sha(p):
 
 def finite(values, name):
     require(all(math.isfinite(v) for v in values), f"nonfinite values in {name}")
+
+
+def flow_state_fingerprint(fields):
+    """SHA-256 of the stored flow arrays: per array a little-endian u64 length,
+    then its little-endian f64 values (velocity, pressure, k, epsilon)."""
+    fingerprint = hashlib.sha256()
+    for name in ("velocity", "pressure", "k", "epsilon"):
+        values = fields[name]
+        fingerprint.update(struct.pack("<Q", len(values)))
+        for value in values:
+            fingerprint.update(struct.pack("<d", value))
+    return fingerprint.hexdigest()
 
 
 def path_samples(receptor):
@@ -333,10 +346,21 @@ def check(path):
         == geometry["mask_sha256"],
         "geometry mask differs from the case shapes",
     )
-    for shape in c["geometry"]:
-        if shape["id"] not in geometry.get("shapes", {}):
-            continue  # compatible with archives predating urban geometry evidence
-        record = geometry["shapes"][shape["id"]]
+    shape_records = geometry.get("shapes")
+    # Archives predating per-shape evidence hold boxes only; a polygon prism
+    # always has evidence, and present evidence must cover exactly the case.
+    require(
+        shape_records is not None
+        or not any("footprint_m" in shape for shape in c["geometry"]),
+        "per-shape evidence missing for polygon prisms",
+    )
+    require(
+        shape_records is None
+        or set(shape_records) == {shape["id"] for shape in c["geometry"]},
+        "per-shape evidence ID set differs from the case",
+    )
+    for shape in c["geometry"] if shape_records is not None else []:
+        record = shape_records[shape["id"]]
         vertices = shape.get("footprint_m")
         area = (
             abs(
@@ -403,22 +427,14 @@ def check(path):
             "per-shape volume error",
         )
     if summary.get("frozen_flow") is not None:
-        import struct
-
         evidence = summary["frozen_flow"]
         require(
             evidence["assessment"] == "steady_discrete_solution"
             and evidence["response_flow_updates"] == 0,
             "frozen flow preparation/update evidence",
         )
-        fingerprint = hashlib.sha256()
-        for name in ("velocity", "pressure", "k", "epsilon"):
-            values = s[name]
-            fingerprint.update(struct.pack("<Q", len(values)))
-            for value in values:
-                fingerprint.update(struct.pack("<d", value))
         require(
-            fingerprint.hexdigest() == evidence["flow_state_sha256"],
+            flow_state_fingerprint(s) == evidence["flow_state_sha256"],
             "frozen flow state fingerprint",
         )
     finite(s["velocity"], "velocity")
@@ -792,6 +808,10 @@ def check(path):
             if leaf_rate:
                 deposition_rates["vegetation"] = leaf_rate
             reported = record.get("deposition_rate_kg_s", {})
+            require(
+                set(reported) <= {"ground", "roof", "vegetation"},
+                "unknown deposition surface",
+            )
             for surface in {"ground", "roof", "vegetation"}:
                 expected = deposition_rates.get(surface, 0)
                 require(
@@ -800,7 +820,10 @@ def check(path):
                     f"{surface} deposition rate differs from field flux",
                 )
         else:
-            require(not deposited, "passive gas has cumulative particle deposition")
+            require(
+                not deposited and not record.get("deposition_rate_kg_s"),
+                "passive gas has particle deposition",
+            )
         flux_scale = max(rate + outgoing + incoming, 1e-30)
         require(
             abs(record["source_rate_kg_s"] - rate) < 1e-9 * flux_scale,

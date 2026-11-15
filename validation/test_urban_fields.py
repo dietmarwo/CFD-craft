@@ -118,6 +118,24 @@ class UrbanFields(unittest.TestCase):
         self.alter(out, "summary.json", alter)
         self.assert_rejected(out, "vegetation deposition rate")
 
+    def test_forged_extra_deposition_surface_is_rejected(self):
+        out = self.run_case("vegetation-leaf-decay")
+
+        def alter(record):
+            record["constituents"][0]["deposition_rate_kg_s"]["walls"] = 1e-6
+
+        self.alter(out, "summary.json", alter)
+        self.assert_rejected(out, "unknown deposition surface")
+
+    def test_forged_deposition_of_a_passive_gas_is_rejected(self):
+        out = self.run_case("periodic-tracer")
+
+        def alter(record):
+            record["constituents"][0]["deposition_rate_kg_s"] = {"ground": 1e-6}
+
+        self.alter(out, "summary.json", alter)
+        self.assert_rejected(out, "passive gas has particle deposition")
+
     def test_forged_drag_work_is_rejected_from_staggered_fields(self):
         out = self.run_case("vegetation-balance")
 

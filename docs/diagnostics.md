@@ -305,7 +305,7 @@ volume that misses all fluid-cell centers does not qualify. Passive gases keep
 the original outlet requirement. Admissibility does not establish convergence.
 
 `CFD-M002` covers the optional supplied-street emission converter. Paths identify
-`rates.columns`, `rates.rows[CSV line].<field>`, `streets.features[i].<field>`,
+`rates.columns`, `rates.rows[CSV line].<field>`, `streets.crs`, `streets.features[i].<field>`,
 `streets['ID'].segments[i]`, `map_provenance.<field>`, `height_m`, `case.sources`,
 `native_check` or `output`. It rejects missing/nonfinite/negative rates, missing
 or mismatched kg/s/m units, duplicate/unknown IDs, invalid coordinates or map

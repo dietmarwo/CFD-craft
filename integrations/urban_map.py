@@ -37,9 +37,31 @@ def _number(value):
     return x if math.isfinite(x) else None
 
 
+def _nonfinite_supplied(value):
+    """True for a supplied number or numeric text that is NaN or infinite."""
+    try:
+        return not math.isfinite(float(str(value).removesuffix(" m")))
+    except (ValueError, TypeError, OverflowError):
+        return False
+
+
+GEOGRAPHIC = ("4326", "4979", "crs84", "wgs84", "wgs 84", "longlat", "latlon")
+
+
 def _records(data):
+    if not isinstance(data, dict):
+        raise ValueError("Expected a FeatureCollection or CityJSON object")
     if data.get("type") == "FeatureCollection":
+        declared = json.dumps(data.get("crs", "")).lower()
+        if any(v in declared for v in GEOGRAPHIC):
+            raise ValueError(
+                "GeoJSON crs member declares geographic coordinates; reproject first"
+            )
         for i, feature in enumerate(data["features"]):
+            if not isinstance(feature, dict) or not isinstance(
+                feature.get("geometry"), dict
+            ):
+                raise ValueError(f"GeoJSON feature {i} needs a geometry object")
             properties = feature.get("properties") or {}
             geom = shape(feature["geometry"])
             if geom.geom_type not in ("Polygon", "MultiPolygon"):
@@ -198,10 +220,7 @@ def convert(
         raise ValueError(
             "License, attribution and projected metric coordinate-system declaration are required"
         )
-    if any(
-        v in coordinate_system.lower()
-        for v in ("4326", "wgs84", "wgs 84", "longlat", "latlon")
-    ):
+    if any(v in coordinate_system.lower() for v in GEOGRAPHIC):
         raise ValueError(
             "Use a projected metric coordinate system; reproject geographic data first"
         )
@@ -239,6 +258,9 @@ def convert(
         geom = geom.intersection(clip)
         if geom.is_empty:
             continue
+        for key in (height_attribute, levels_attribute):
+            if _nonfinite_supplied(props.get(key)):
+                raise ValueError(f"Building {identifier}: {key} must be finite")
         height = _number(props.get(height_attribute))
         method = "attribute"
         if height is None:
@@ -325,6 +347,8 @@ def convert(
         bounds[3] - bounds[1] + 2 * side,
         6 * h,
     ]
+    if not all(math.isfinite(v / cell_m) for v in extent):
+        raise ValueError("Converted domain extent overflows; check heights and units")
     case = json.loads(json.dumps(template))
     case["name"] = "converted-urban-district"
     case["grid"]["cells"] = [max(2, math.ceil(v / cell_m)) for v in extent]

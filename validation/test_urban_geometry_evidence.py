@@ -42,6 +42,51 @@ class GeometryEvidenceTests(unittest.TestCase):
                 geometry["shapes"]["concave"]["narrowest_fluid_passage_cells"], 1
             )
 
+    def reseal_geometry(self, out, callback):
+        path = out / "geometry.json"
+        value = json.loads(path.read_text())
+        callback(value)
+        path.write_text(json.dumps(value))
+        manifest = json.loads((out / "manifest.json").read_text())
+        manifest["files"]["geometry.json"] = hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest()
+        (out / "manifest.json").write_text(json.dumps(manifest))
+        (out / "complete.json").write_text(
+            json.dumps(
+                {
+                    "manifest_sha256": hashlib.sha256(
+                        (out / "manifest.json").read_bytes()
+                    ).hexdigest()
+                }
+            )
+        )
+
+    def test_resealed_deleted_or_extra_shape_evidence_is_rejected(self):
+        for fault, callback in [
+            ("delete-polygon", lambda g: g["shapes"].pop("concave")),
+            ("delete-box", lambda g: g["shapes"].pop("neighbor")),
+            ("delete-all", lambda g: g.pop("shapes")),
+            ("extra", lambda g: g["shapes"].update(ghost=g["shapes"]["neighbor"])),
+        ]:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                out = self.archive(Path(tmp))
+                self.reseal_geometry(out, callback)
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        "-O",
+                        str(ROOT / "validation/check_fields.py"),
+                        str(out),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn("per-shape evidence", result.stdout)
+
     def test_resealed_false_volume_or_passage_is_rejected(self):
         for field in ["exact_volume_m3", "narrowest_fluid_passage_cells"]:
             with tempfile.TemporaryDirectory() as tmp:

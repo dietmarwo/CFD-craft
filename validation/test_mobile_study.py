@@ -266,6 +266,112 @@ class MobileStudy(unittest.TestCase):
             sha((output / "frozen-study-plan.json").read_bytes()),
         )
 
+    def native_layout(self, folder, *, column_flow=0.0, frozen=True, rate=2e-8):
+        """Synthetic per-wind native layout: flow, one response column, truth."""
+
+        def fields(offset):
+            return dict(
+                velocity=[1.0 + offset, 0.0], pressure=[0.0], k=[1.0], epsilon=[1.0]
+            )
+
+        expected = study.flow_state_fingerprint(fields(0.0))
+        native = dict(
+            passed=True,
+            flow_state_sha256=expected,
+            columns=[
+                dict(
+                    id="street-a",
+                    archive="column-0",
+                    integrated_reference_rate_kg_s=2e-8,
+                )
+            ],
+            truth=dict(archive="truth", multipliers=[0.7]),
+        )
+        folder.mkdir()
+        (folder / "report.json").write_text(json.dumps(native))
+        for name, offset, source_rate in [
+            ("flow", 0.0, None),
+            ("column-0", column_flow, rate),
+            ("truth", 0.0, 0.7 * 2e-8),
+        ]:
+            archive = folder / name
+            archive.mkdir()
+            (archive / "complete.json").write_text("{}")
+            (archive / "fields.json").write_text(json.dumps(fields(offset)))
+            summary = dict(constituents=[dict(source_rate_kg_s=source_rate)])
+            if frozen and name != "flow":
+                summary["frozen_flow"] = dict(
+                    flow_state_sha256=expected, response_flow_updates=0
+                )
+            (archive / "summary.json").write_text(json.dumps(summary))
+        return native
+
+    def test_frozen_flow_identity_is_recomputed_from_every_archive(self):
+        folder = self.directory / "consistent"
+        native = self.native_layout(folder)
+        identity = study.frozen_flow_identity(folder, native)
+        self.assertEqual(identity["archives"], ["flow", "column-0", "truth"])
+        for name, options, message in [
+            ("other-flow", dict(column_flow=1e-9), "column-0 flow differs"),
+            ("no-evidence", dict(frozen=False), "lacks frozen flow"),
+            ("other-rate", dict(rate=3e-8), "source rate differs"),
+        ]:
+            folder = self.directory / name
+            native = self.native_layout(folder, **options)
+            with self.subTest(fault=name), self.assertRaisesRegex(ValueError, message):
+                study.frozen_flow_identity(folder, native)
+        native["columns"][0]["archive"] = "../escape"
+        with self.assertRaisesRegex(ValueError, "safe filename"):
+            study.frozen_flow_identity(folder, native)
+
+    def test_study_refuses_responses_on_another_or_unaudited_flow(self):
+        for name, options, remove, message in [
+            ("other-flow", dict(column_flow=1e-9), None, "frozen flow"),
+            ("unaudited", {}, "flow", "missing independent audit"),
+        ]:
+            plan = study.configuration("source-response")
+            plan["winds"] = plan["winds"][:1]
+            output = self.directory / name
+
+            def native_run(command, **kwargs):
+                folder = Path(command[2])
+                self.native_layout(folder, **options)
+                if remove:
+                    (folder / remove / "complete.json").unlink()
+                return subprocess.CompletedProcess(command, 0)
+
+            with (
+                self.subTest(fault=name),
+                mock.patch.object(study.subprocess, "run", side_effect=native_run),
+                mock.patch.object(
+                    study, "check", return_value={"passed": True, "scope": "synthetic"}
+                ),
+            ):
+                report = study.run(plan, self.directory / "unused-native", output)
+                self.assertFalse(report["passed"])
+                self.assertIn(message, report["error"])
+
+    def test_malformed_archive_is_a_retained_failed_audit(self):
+        plan = study.configuration("source-response")
+        plan["winds"] = plan["winds"][:1]
+        output = self.directory / "malformed"
+
+        def native_run(command, **kwargs):
+            self.native_layout(Path(command[2]))
+            return subprocess.CompletedProcess(command, 0)
+
+        with (
+            mock.patch.object(study.subprocess, "run", side_effect=native_run),
+            mock.patch.object(study, "check", side_effect=TypeError("malformed")),
+        ):
+            report = study.run(plan, self.directory / "unused-native", output)
+        self.assertFalse(report["passed"])
+        self.assertIn("audit failure", report["error"])
+        audits = report["native_runs"][0]["independent_audits"]
+        self.assertEqual(len(audits), 3)
+        self.assertFalse(any(audit["passed"] for audit in audits))
+        self.assertEqual(json.loads((output / "report.json").read_text()), report)
+
     def test_unsafe_ids_overlap_and_affine_sensor_initialization_are_rejected(self):
         original = study.configuration("source-response")
         study.controlled_winds(original)

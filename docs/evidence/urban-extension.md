@@ -72,7 +72,7 @@ checked out). An isolated clean build independently confirmed the original
 IC0 producer source fingerprint
 `ce85729bc3564d2658ce6894e232e69da981a07ac36fde4512c5468ba05866fc`.
 The archived runs record four source fingerprints, because the source tree
-grew while the stages ran: the IC0 rows the one above, the multigrid rows
+grew while the stages ran: the IC0 rows record the one above, the multigrid rows
 `a64798247531f1b67e0ef264bd6b87440fd4b2cb9585f9aaed3f87ba9fb8776b`, the
 rotation study and the district ensemble
 `5067dfcb11cd8b0dbc7e322cc8ed8b22d418986d6029dab5a8623aa275ca9e33`, and the

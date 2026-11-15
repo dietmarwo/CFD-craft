@@ -383,8 +383,10 @@ campaign budget, and 2 otherwise. A direction is accepted when its run is a
 steady discrete solution and its stored fields pass
 `validation/check_fields.py`. Directions are in the rotated model frame; with
 `--map-provenance` each row also gives the map direction. For the small
-district converted above, all twelve directions were accepted, in 134 s on a
-host with two CPUs. Twelve equal
+district converted above (24,192 cells of 4 m, two cells per building height),
+all twelve directions were accepted, in 134 s on a host with two CPUs; that
+is a statement about the numerical checks on a coarse grid, not about a
+district ([below](#what-these-results-are-not)). Twelve equal
 directions are not a wind climate: weight them with measured frequencies in
 your own analysis. `--runner` sends the directions through `optimization-run`
 ([chapter 14](14-optimization-jobs.md#wind-direction-jobs-for-a-city-block)).

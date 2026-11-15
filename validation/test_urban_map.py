@@ -4,6 +4,8 @@ import importlib.util
 import json
 import math
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -265,6 +267,34 @@ class UrbanMapTests(unittest.TestCase):
             p.write_text(json.dumps(data))
             with self.assertRaisesRegex(ValueError, "vertex index"):
                 self.convert(p)
+
+    def test_command_defaults_do_not_depend_on_the_working_directory(self):
+        # The default template and the default binary belong to the checkout,
+        # as in the other tools, not to the directory the command starts in.
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "district"
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "integrations/urban_map.py"),
+                    str(ROOT / "integrations/fixtures/urban-synthetic.geojson"),
+                    *("--crop", "90", "190", "145", "245", "--cell-m", "4"),
+                    *("--coordinate-system", "local metric synthetic"),
+                    *("--license", "CC0-1.0 synthetic fixture"),
+                    *("--attribution", "CFD-craft synthetic fixture"),
+                    *("--output", str(output)),
+                ],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            self.assertEqual(process.returncode, 0, process.stderr)
+            check = json.loads((output / "check.json").read_text())
+            self.assertTrue(check["check"]["valid"])
+            evidence = json.loads((output / "map-provenance.json").read_text())
+            self.assertEqual(evidence["check_exit_code"], 0)
 
     def test_twelve_direction_padding(self):
         _, p = self.convert(ensemble_clearance=True)

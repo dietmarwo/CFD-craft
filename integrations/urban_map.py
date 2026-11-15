@@ -18,6 +18,8 @@ from shapely import affinity
 from shapely.geometry import Polygon, box, shape
 from shapely.ops import unary_union
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _polygons(geometry):
     if geometry.is_empty:
@@ -407,7 +409,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument(
-        "--template", type=Path, default=Path("cases/canyon/wh1-wind270.json")
+        "--template", type=Path, default=ROOT / "cases/canyon/wh1-wind270.json"
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--crop", type=float, nargs=4, required=True)
@@ -423,7 +425,9 @@ def main():
     parser.add_argument("--height-attribute", default="height")
     parser.add_argument("--max-ground-range-m", type=float, default=0.5)
     parser.add_argument("--ensemble-clearance", action="store_true")
-    parser.add_argument("--binary", type=Path, default=Path("target/release/cfd-craft"))
+    parser.add_argument(
+        "--binary", type=Path, default=ROOT / "target/release/cfd-craft"
+    )
     args = parser.parse_args()
     kwargs = vars(args).copy()
     source, template, output, binary = [

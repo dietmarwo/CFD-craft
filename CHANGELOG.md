@@ -41,6 +41,7 @@ Found by the code review of the features above, before any release contained the
 - `validation/check_fields.py` accepted an archive whose per-shape geometry records had been deleted, extra deposition surfaces and deposition of a passive gas; all are rejected now.
 - `validation/summarize_urban.py` stopped with an exception on an interrupted run or a missing pair member; such rows are retained.
 - The map converter replaced a nonfinite height or level count by the default height, accepted a GeoJSON `crs` member naming geographic coordinates, and answered malformed input with a traceback; all are `CFD-M001` now. The street converter rejects a geographic `crs` member and deeply nested input with `CFD-M002`.
+- The map converter looked for its default `--template` and `--binary` in the current directory and failed with `CFD-M001` when started elsewhere; like the other tools it now takes them from the checkout that holds the script.
 - Tests that did not test what they said (polygon self-intersection, building roughness in the wall functions, PM sums by aerodynamic diameter, rotation of map geometry with the wind, refusal of prescribed wind in the campaign) now fail without the code they cover.
 
 ### Known limitations

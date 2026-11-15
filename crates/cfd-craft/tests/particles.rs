@@ -88,7 +88,7 @@ fn settling_layer_centroid_and_ground_arrival_close_mass() {
         with_field(&c, |z| if (0.7..0.8).contains(&z) { 1.0 } else { 0.0 }),
     );
     let e = &r.summary.constituents[0];
-    assert!(e.deposited_kg["ground"] > 0.0999, "{:?}", e);
+    assert!(e.deposited_kg["ground"] > 0.0999, "{e:?}");
     eprintln!(
         "deposited after 6 s = {:.16e} kg; airborne = {:.16e}; relative budget = {:.3e}",
         e.deposited_kg["ground"], e.mass_kg, e.relative_budget_defect

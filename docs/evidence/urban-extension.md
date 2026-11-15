@@ -39,14 +39,24 @@ The work followed a plan whose stage and gate names appear below.
 
 ## Where the run archives are
 
-The run archives behind this record are not in the repository, because field
-files are large. They are attached to the GitHub release
+The run records behind this page are not in the repository. They are attached
+to the GitHub release
 [v0.2.0](https://github.com/dietmarwo/CFD-craft/releases/tag/v0.2.0) as the
 asset `cfd-craft-0.2.0-evidence.zip` (3.5 MB): folder `urban/` for this record
 and `mobile/` for the [mobile record](mobile-measurements.md), with a README,
 `SHA256SUMS.json` and `DATA-LICENSE.txt`, which holds the CC BY 4.0
 attribution of the inputs derived from 3DBAG for the Delft district. The raw
 map is not included.
+
+**The urban field files are not in the asset and were not kept.** For each
+urban run the asset has the consumed case, `summary.json`, the profile, the
+manifest, the record of the independent field check and the logs, but not
+`fields.json` and `checkpoint.json` (38 field files, 711 MB). The manifests
+and `urban/evidence-summary.json` record their SHA-256 hashes. So the pass or
+fail of each independent field check and the field differences of the
+multigrid pairs below are values recorded by the runs that had the fields;
+they cannot be recomputed from the asset, only by running the cases again.
+The mobile archives are complete, with fields.
 
 The archives were produced before the code review of this release, on the
 source tree that each archive records. They are records of past runs. A run
@@ -57,8 +67,10 @@ To reproduce a run of the pressure or rotation comparisons, take its consumed
 case `urban/NAME.json` from the asset, run
 `cfd-craft profile urban/NAME.json --output NEW_DIR` and audit the result with
 `python validation/check_fields.py NEW_DIR/run`.
-`python validation/summarize_urban.py urban --output FILE` rebuilds the
-summary of all pairs. For the district, download the 3DBAG tile named below,
+`python validation/summarize_urban.py DIR --output FILE` builds the summary
+of the pairs from run directories that contain their fields; run on the
+`urban/` folder of the asset it marks every row as not accepted, because the
+fields are missing. For the district, download the 3DBAG tile named below,
 convert it with `integrations/urban_map.py` and run
 `validation/urban_campaign.py run` with the budgets stated below
 ([chapter 22](../guide/22-urban-geometry-particles-vegetation.md#one-case-twelve-wind-directions)).

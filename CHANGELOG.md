@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-City blocks and mobile measurements: buildings from a map, particle size classes, vegetation, concentrations along a route, virtual sensor rides and street emissions inferred from rides. Every feature is opt-in. A case that uses none of the new fields gives byte-identical numerical state and fields; the code review compared 20 runs of the committed cases with the 0.1.1 binary. The new models are numerically verified and not experimentally validated; the open gates are listed under Known limitations.
+## [0.2.0] - 2026-11-15
+
+City blocks and mobile measurements: buildings from a map, particle size classes, vegetation, concentrations along a route, virtual sensor rides and street emissions inferred from rides. Every feature is opt-in. A case that uses none of the new fields gives byte-identical numerical state and fields; the code review compared 20 runs of the committed cases with the 0.1.1 binary. The new models are numerically verified and not experimentally validated; the open gates are listed under Known limitations. The version is 0.2.0 because the Rust library API changed (see Changed). The run records behind the two new evidence pages are attached to the GitHub release as `cfd-craft-0.2.0-evidence.zip`.
 
 ### Added
 
@@ -124,6 +126,7 @@ First version, 0.1.0, a research prototype, released on crates.io (`cfd-craft`, 
 - Analytic and reference verification (periodic shear, Gaussian transport, Poiseuille, Couette, lid cavity, a SciPy sparse reference, an empty-ABL consistency check), source inversion and finite-canyon tutorials.
 - A command launcher for optimization-jobs and an optional native fcmaes simulation worker.
 
-[Unreleased]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/dietmarwo/CFD-craft/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/dietmarwo/CFD-craft/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dietmarwo/CFD-craft/releases/tag/v0.1.0

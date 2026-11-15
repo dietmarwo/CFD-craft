@@ -170,6 +170,7 @@ OpenStreetMap, export the footprints to GeoJSON and keep the ODbL attribution.
 
 ```bash
 python integrations/urban_map.py integrations/fixtures/urban-synthetic.geojson \
+  --template runs/block.json \
   --crop 90 190 145 245 --cell-m 4 --coordinate-system 'local metric synthetic' \
   --license 'CC0-1.0 synthetic fixture' --attribution 'CFD-craft synthetic fixture' \
   --output runs/district
@@ -213,10 +214,20 @@ for a study of several wind directions. It writes `case.json`, `check.json`
   so are holes in footprints and CityJSON geometry templates.
 - **Wind.** The wind direction is rotated with the buildings; the provenance
   keeps the map direction and the model direction.
-- **Budgets and numerics** are copied from `--template` (default: the canyon
-  case of chapter 10 with 64 MiB of output). A finer grid needs a template
-  with larger budgets: with `--cell-m 2` this example fails `check` with
-  `CFD-E007`.
+- **Budgets and numerics** are copied from `--template`: here `runs/block.json`
+  with the implicit recipe, so the converted case was accepted after 400
+  steps in 21 s. Without `--template` the converter takes the canyon case of
+  chapter 10 with its default numerics, which are slow for a district: the
+  same conversion then stopped at its wall-time limit of 240 s after 1545
+  steps (`incomplete`). A finer grid needs a template with larger budgets:
+  with `--cell-m 2` this example fails `check` with `CFD-E007` (64 MiB of
+  output).
+- **Sources and receptors.** The converted case has buildings and wind only:
+  its `sources` and `receptors` are empty. Add your own, or line sources from
+  street data ([chapter 24](24-mobile-source-inference.md#street-emissions-from-map-data)).
+- **Where it runs.** The defaults of `--template` and of `--binary` (the
+  `cfd-craft` command used for the check) are files of the checkout, with the
+  command built in `target/release`.
 
 ## Particle size classes
 
@@ -371,7 +382,9 @@ The script exits 0 only when all twelve directions are accepted within the
 campaign budget, and 2 otherwise. A direction is accepted when its run is a
 steady discrete solution and its stored fields pass
 `validation/check_fields.py`. Directions are in the rotated model frame; with
-`--map-provenance` each row also gives the map direction. Twelve equal
+`--map-provenance` each row also gives the map direction. For the small
+district converted above, all twelve directions were accepted, in 134 s on a
+host with two CPUs. Twelve equal
 directions are not a wind climate: weight them with measured frequencies in
 your own analysis. `--runner` sends the directions through `optimization-run`
 ([chapter 14](14-optimization-jobs.md#wind-direction-jobs-for-a-city-block)).

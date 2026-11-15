@@ -71,8 +71,14 @@ Base: `7d8d70a864383e92f431d8afdacd15864e6c1c54` (0.1.1, latest main when
 checked out). An isolated clean build independently confirmed the original
 IC0 producer source fingerprint
 `ce85729bc3564d2658ce6894e232e69da981a07ac36fde4512c5468ba05866fc`.
-The command that produced the U0–U7 evidence has the source fingerprint
+The archived runs record four source fingerprints, because the source tree
+grew while the stages ran: the IC0 rows the one above, the multigrid rows
+`a64798247531f1b67e0ef264bd6b87440fd4b2cb9585f9aaed3f87ba9fb8776b`, the
+rotation study and the district ensemble
+`5067dfcb11cd8b0dbc7e322cc8ed8b22d418986d6029dab5a8623aa275ca9e33`, and the
+refined district run
 `786eb87c9f81b86fd1f8aa8aa947d090524abeedd5d6de3ef0eb2daceba30a72`.
+An IC0 row and its multigrid row therefore come from different builds.
 The later R1–R3 producer and its separate synthetic gate are recorded in
 [mobile evidence](mobile-measurements.md); these earlier experiments were not
 silently relabeled as runs of that implementation.

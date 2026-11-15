@@ -216,9 +216,6 @@ for a study of several wind directions. It writes `case.json`, `check.json`
   case of chapter 10 with 64 MiB of output). A finer grid needs a template
   with larger budgets: with `--cell-m 2` this example fails `check` with
   `CFD-E007`.
-- **Many buildings cost setup time.** `check` of 400 boxes on one million
-  cells takes 3.8 s; version 0.1.1, which recorded no evidence per shape,
-  took 0.8 s.
 
 ## Particle size classes
 

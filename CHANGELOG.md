@@ -5,6 +5,7 @@
 ### Changed
 
 - The documentation site's description, which search engines show under its pages, describes the solver for its readers; it said "Open-source CFD in Rust for agents".
+- The optional `fcmaes-cfd-worker` pins fcmaes-rust `64e11b3` (release 0.3.0: a cancel or deadline now stops running retries, also between populations, instead of letting them spend their budget) and optimization-jobs `78970a2` (tag `v0.4.1`). The `runner-integration` CI job builds `optimization-run` 0.4.1 at the same revision. `integrations/run_jobs.py` reproduces the recorded objectives (baseline 1.8682465, BiteOpt 1.8657713, GP 1.6799143).
 
 ## [0.2.0] - 2026-11-15
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/cfd-craft.jpg" alt="CFD-craft: CFD experiments and validation with native Rust and OpenFOAM workflows">
+</p>
+
 # CFD-craft
 <!-- check: rel=1e-4 -->
 
@@ -56,10 +60,6 @@ numbers with a relative tolerance of 1e-4; everything else must match exactly.
 - [Reference](docs/reference/README.md): case and result schemas, command line, Python API, units, diagnostics, model cards.
 - [Evidence](docs/evidence/README.md): verification and comparison records, failed rows included.
 - [For AI agents](docs/ai-context.md): the run loop, the rules and the machine-readable entry points.
-
-<p align="center">
-  <img src="docs/images/cfd-craft.jpg" alt="CFD-craft: CFD experiments and validation with native Rust and OpenFOAM workflows">
-</p>
 
 ## What CFD-craft contains
 

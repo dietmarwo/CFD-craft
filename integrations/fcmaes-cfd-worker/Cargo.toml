@@ -10,6 +10,6 @@ publish = false
 
 [dependencies]
 cfd-craft = { path = "../../crates/cfd-craft" }
-fcmaes-job-worker = { git = "https://github.com/dietmarwo/fcmaes-rust", rev = "f764a7516f41bf2d88009b156daa70bf0a5445c1" }
-optimization-job-api = { git = "https://github.com/dietmarwo/optimization-jobs", rev = "12f9d573ade24f57c282dcf9eb7ad7025cfe51bf" }
+fcmaes-job-worker = { git = "https://github.com/dietmarwo/fcmaes-rust", rev = "64e11b3d853c36833859eb51232dde6890059bc7" }
+optimization-job-api = { git = "https://github.com/dietmarwo/optimization-jobs", rev = "78970a290f63f90a3f3d6ecbfe23f5e1ef24a235" }
 serde_json = "1"

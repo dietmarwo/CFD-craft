@@ -4,7 +4,7 @@
 
 [book]
 title = "CFD-craft"
-description = "Open-source CFD in Rust for agents: documentation"
+description = "CFD-craft documentation: a Rust research solver for flow and the dispersion of gases and particles around buildings, used from Python, a JSON command line or Rust."
 language = "en"
 src = "docs"
 

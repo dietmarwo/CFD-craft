@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation site's description, which search engines show under its pages, describes the solver for its readers; it said "Open-source CFD in Rust for agents".
+
 ## [0.2.0] - 2026-11-15
 
 City blocks and mobile measurements: buildings from a map, particle size classes, vegetation, concentrations along a route, virtual sensor rides and street emissions inferred from rides. Every feature is opt-in. A case that uses none of the new fields gives byte-identical numerical state and fields; the code review compared 20 runs of the committed cases with the 0.1.1 binary. The new models are numerically verified and not experimentally validated; the open gates are listed under Known limitations. The version is 0.2.0 because the Rust library API changed (see Changed). The run records behind the two new evidence pages are attached to the GitHub release as `cfd-craft-0.2.0-evidence.zip`.

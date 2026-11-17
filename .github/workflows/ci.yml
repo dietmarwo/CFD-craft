@@ -708,9 +708,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: dietmarwo/optimization-jobs
-          # optimization-run 0.4.1 (tag v0.4.1): the revision the adapter's job
-          # API pin names, tested here.
-          ref: 78970a290f63f90a3f3d6ecbfe23f5e1ef24a235
+          # optimization-run after 0.4.1 (command progress files): the revision
+          # the adapter's job API pin names, tested here.
+          ref: 41d5f000f0f69525cbbb3ecf2bfb97b91f1be388
           path: optimization-jobs
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v7

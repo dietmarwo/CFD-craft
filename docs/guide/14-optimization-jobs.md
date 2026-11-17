@@ -17,11 +17,11 @@ cargo build --release --locked --manifest-path integrations/fcmaes-cfd-worker/Ca
 python -m pip install -r requirements-validation.txt
 ```
 
-The worker pins its two dependencies to exact revisions: fcmaes-rust `64e11b3d853c36833859eb51232dde6890059bc7` (release 0.3.0) and the optimization-jobs job API `78970a290f63f90a3f3d6ecbfe23f5e1ef24a235` (release 0.4.1). Build `optimization-run` from that same optimization-jobs revision, next to the checkout, as the CI job `runner-integration` does:
+The worker pins its two dependencies to exact revisions: fcmaes-rust `e996062904c117f910c76c85c4c3274d81cd164c` (main after release 0.3.0; its job crates are still 0.3.0) and the optimization-jobs job API `41d5f000f0f69525cbbb3ecf2bfb97b91f1be388` (main after release 0.4.1, with command progress files; its crates are still 0.4.1). Build `optimization-run` from that same optimization-jobs revision, next to the checkout, as the CI job `runner-integration` does:
 
 ```sh
 git clone https://github.com/dietmarwo/optimization-jobs ../optimization-jobs
-git -C ../optimization-jobs checkout 78970a290f63f90a3f3d6ecbfe23f5e1ef24a235
+git -C ../optimization-jobs checkout 41d5f000f0f69525cbbb3ecf2bfb97b91f1be388
 cargo build --release --locked --manifest-path ../optimization-jobs/Cargo.toml -p optimization-runner
 ```
 

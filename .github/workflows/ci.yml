@@ -664,7 +664,7 @@ jobs:
       - run: python -m pip install dist/*.whl
       - run: python -m pip install -r requirements-validation.txt
       # The versions of guide chapter 13.
-      - run: python -m pip install fcmaes-rust==0.2.1 lp-ip-craft==0.29.0
+      - run: python -m pip install fcmaes-rust==0.4.0 lp-ip-craft==0.29.0
       # The map converter of guide chapter 22 (Shapely).
       - run: python -m pip install -r integrations/requirements-mobile.txt
       - run: python scripts/generate_reference.py --check
@@ -708,9 +708,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: dietmarwo/optimization-jobs
-          # optimization-run after 0.4.1 (command progress files): the revision
+          # optimization-run 0.5.0 (the release merge): the revision
           # the adapter's job API pin names, tested here.
-          ref: 41d5f000f0f69525cbbb3ecf2bfb97b91f1be388
+          ref: 2bfa8e4ca66be65f33d5b5b0bbbd0a89799c7e2d
           path: optimization-jobs
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v7

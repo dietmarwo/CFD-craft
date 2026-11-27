@@ -13,10 +13,10 @@ Run all commands from the root of a checkout. Build the command line, install th
 ```sh
 cargo build --release --locked
 python -m pip install -r requirements-validation.txt
-python -m pip install fcmaes-rust==0.4.0 lp-ip-craft==0.29.0
+python -m pip install fcmaes-rust==0.5.0 lp-ip-craft==0.33.0
 ```
 
-`fcmaes-rust` provides BiteOpt; `lp-ip-craft` provides the native LP and MIP solvers. The outputs below were made with fcmaes-rust 0.2.1 and lp-ip-craft 0.29.0; the documentation check reproduces them with fcmaes-rust 0.4.0, whose BiteOpt evaluates the same points. The lesson scripts find `target/release/cfd-craft` in the checkout by default (`--binary` changes it).
+`fcmaes-rust` provides BiteOpt; `lp-ip-craft` provides the native LP and MIP solvers. The outputs below were made with fcmaes-rust 0.2.1 and lp-ip-craft 0.29.0; the documentation check reproduces them with fcmaes-rust 0.5.0, whose BiteOpt evaluates the same points, and lp-ip-craft 0.33.0. The lesson scripts find `target/release/cfd-craft` in the checkout by default (`--binary` changes it).
 
 ```bash
 mkdir -p runs

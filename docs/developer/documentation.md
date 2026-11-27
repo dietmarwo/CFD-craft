@@ -16,7 +16,7 @@ From the root of a checkout, with the Python binding of the checkout installed
 cargo build --release --workspace --locked
 cargo build --release --workspace --examples --locked
 python -m pip install -r requirements-validation.txt
-python -m pip install fcmaes-rust==0.4.0 lp-ip-craft==0.29.0
+python -m pip install fcmaes-rust==0.5.0 lp-ip-craft==0.33.0
 python -m pip install -r integrations/requirements-mobile.txt
 python scripts/check_docs.py --smoke > runs/docs-check.json
 python scripts/check_docs.py docs/guide/03-cli-and-archive.md
